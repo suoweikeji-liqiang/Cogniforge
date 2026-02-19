@@ -1,17 +1,17 @@
 <template>
   <div class="problem-detail">
-    <div v-if="loading" class="loading">Loading...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <template v-else-if="problem">
       <div class="problem-header">
-        <router-link to="/problems" class="back-link">&larr; Back to Problems</router-link>
+        <router-link to="/problems" class="back-link">&larr; {{ t('common.back') }}</router-link>
         <h1>{{ problem.title }}</h1>
         <p>{{ problem.description }}</p>
       </div>
       
       <div class="problem-content">
         <div class="learning-path-section card">
-          <h2>Learning Path</h2>
+          <h2>{{ t('problemDetail.learningPath') }}</h2>
           <div v-if="learningPath?.path_data?.length" class="path-steps">
             <div 
               v-for="(step, index) in learningPath.path_data" 
@@ -31,35 +31,35 @@
               </div>
             </div>
           </div>
-          <p v-else class="empty">No learning path generated yet.</p>
+          <p v-else class="empty">{{ t('problemDetail.noResponses') }}</p>
         </div>
         
         <div class="responses-section card">
-          <h2>Your Responses</h2>
+          <h2>{{ t('problemDetail.responses') }}</h2>
           
           <form @submit.prevent="submitResponse" class="response-form">
             <div class="form-group">
-              <label>Your Answer / Understanding</label>
+              <label>{{ t('problemDetail.yourResponse') }}</label>
               <textarea 
                 v-model="responseText" 
                 rows="4" 
-                placeholder="Write your understanding or answer..."
+                :placeholder="t('problemDetail.yourResponse')"
                 required
               ></textarea>
             </div>
             <button type="submit" class="btn btn-primary" :disabled="submitting">
-              {{ submitting ? 'Submitting...' : 'Get Feedback' }}
+              {{ submitting ? t('common.loading') : t('problemDetail.submitResponse') }}
             </button>
           </form>
           
           <div v-if="responses.length" class="responses-list">
             <div v-for="response in responses" :key="response.id" class="response-item">
               <div class="user-response">
-                <strong>Your response:</strong>
+                <strong>{{ t('problemDetail.yourResponse') }}:</strong>
                 <p>{{ response.user_response }}</p>
               </div>
               <div v-if="response.system_feedback" class="system-feedback">
-                <strong>Feedback:</strong>
+                <strong>{{ t('problemDetail.systemFeedback') }}:</strong>
                 <p>{{ response.system_feedback }}</p>
               </div>
             </div>
@@ -74,6 +74,9 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 

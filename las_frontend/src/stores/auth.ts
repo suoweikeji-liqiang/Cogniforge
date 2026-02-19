@@ -7,6 +7,8 @@ interface User {
   email: string
   username: string
   full_name: string | null
+  role: string
+  is_active: boolean
 }
 
 export const useAuthStore = defineStore('auth', () => {

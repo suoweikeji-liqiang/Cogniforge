@@ -1,9 +1,9 @@
 <template>
   <div class="reviews-page">
     <div class="page-header">
-      <h1>Review & Reflection</h1>
+      <h1>{{ t('reviews.title') }}</h1>
       <button class="btn btn-primary" @click="showCreateModal = true">
-        New Review
+        {{ t('reviews.title') }}
       </button>
     </div>
     
@@ -14,9 +14,9 @@
           <span class="period">{{ review.period }}</span>
         </div>
         <div class="review-content">
-          <p v-if="review.content?.summary"><strong>Summary:</strong> {{ review.content.summary }}</p>
-          <p v-if="review.content?.insights"><strong>Insights:</strong> {{ review.content.insights }}</p>
-          <p v-if="review.content?.next_steps"><strong>Next Steps:</strong> {{ review.content.next_steps }}</p>
+          <p v-if="review.content?.summary"><strong>{{ t('reviews.content') }}:</strong> {{ review.content.summary }}</p>
+          <p v-if="review.content?.insights"><strong>{{ t('reviews.title') }}:</strong> {{ review.content.insights }}</p>
+          <p v-if="review.content?.next_steps"><strong>{{ t('reviews.title') }}:</strong> {{ review.content.next_steps }}</p>
         </div>
         <div class="review-date">
           {{ new Date(review.created_at).toLocaleDateString() }}
@@ -24,14 +24,14 @@
       </div>
     </div>
     
-    <p v-else class="empty">No reviews yet. Create your first review!</p>
+    <p v-else class="empty">{{ t('reviews.noReviews') }}</p>
     
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
-        <h2>Create Review</h2>
+        <h2>{{ t('reviews.title') }}</h2>
         <form @submit.prevent="createReview">
           <div class="form-group">
-            <label>Review Type</label>
+            <label>{{ t('reviews.title') }}</label>
             <select v-model="newReview.review_type" required>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
@@ -39,28 +39,28 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Period</label>
+            <label>{{ t('reviews.period') }}</label>
             <input v-model="newReview.period" type="text" placeholder="e.g., Week 1, January 2024" required />
           </div>
           <div class="form-group">
-            <label>Summary</label>
+            <label>{{ t('reviews.content') }}</label>
             <textarea v-model="newReview.summary" rows="2"></textarea>
           </div>
           <div class="form-group">
-            <label>Key Insights</label>
+            <label>{{ t('reviews.title') }}</label>
             <textarea v-model="newReview.insights" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label>Next Steps</label>
+            <label>{{ t('reviews.title') }}</label>
             <textarea v-model="newReview.next_steps" rows="2"></textarea>
           </div>
           <p v-if="error" class="error">{{ error }}</p>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" @click="showCreateModal = false">
-              Cancel
+              {{ t('common.cancel') }}
             </button>
             <button type="submit" class="btn btn-primary" :disabled="creating">
-              {{ creating ? 'Creating...' : 'Create' }}
+              {{ creating ? t('common.loading') : t('common.add') }}
             </button>
           </div>
         </form>
@@ -72,6 +72,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '@/api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const reviews = ref<any[]>([])
 const showCreateModal = ref(false)

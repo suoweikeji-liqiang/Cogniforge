@@ -1,14 +1,18 @@
 <template>
   <div id="app">
+    <div class="global-lang-switch">
+      <LangSwitch />
+    </div>
     <nav v-if="authStore.isAuthenticated" class="navbar">
       <div class="nav-brand">LAS</div>
       <div class="nav-links">
-        <router-link to="/dashboard">Dashboard</router-link>
-        <router-link to="/problems">Problems</router-link>
-        <router-link to="/model-cards">Model Cards</router-link>
-        <router-link to="/practice">Practice</router-link>
-        <router-link to="/reviews">Reviews</router-link>
-        <button @click="logout">Logout</button>
+        <router-link to="/dashboard">{{ t('nav.dashboard') }}</router-link>
+        <router-link to="/problems">{{ t('nav.problems') }}</router-link>
+        <router-link to="/model-cards">{{ t('nav.modelCards') }}</router-link>
+        <router-link to="/practice">{{ t('nav.practice') }}</router-link>
+        <router-link to="/reviews">{{ t('nav.reviews') }}</router-link>
+        <router-link v-if="authStore.user?.role === 'admin'" to="/admin">{{ t('nav.admin') }}</router-link>
+        <button @click="logout">{{ t('nav.logout') }}</button>
       </div>
     </nav>
     <main class="main-content">
@@ -20,7 +24,10 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import LangSwitch from '@/components/LangSwitch.vue'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 
@@ -31,6 +38,18 @@ const logout = () => {
 </script>
 
 <style scoped>
+#app {
+  position: relative;
+  min-height: 100vh;
+}
+
+.global-lang-switch {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+}
+
 .navbar {
   display: flex;
   justify-content: space-between;

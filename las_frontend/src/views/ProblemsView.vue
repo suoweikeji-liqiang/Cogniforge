@@ -1,13 +1,13 @@
 <template>
   <div class="problems-page">
     <div class="page-header">
-      <h1>Learning Problems</h1>
+      <h1>{{ t('problems.title') }}</h1>
       <button class="btn btn-primary" @click="showCreateModal = true">
-        New Problem
+        {{ t('problems.newProblem') }}
       </button>
     </div>
     
-    <div v-if="loading" class="loading">Loading...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <div v-else-if="problems.length" class="problems-grid">
       <router-link 
@@ -17,41 +17,41 @@
         class="problem-card"
       >
         <h3>{{ problem.title }}</h3>
-        <p>{{ problem.description || 'No description' }}</p>
+        <p>{{ problem.description || t('problems.noProblems') }}</p>
         <div class="problem-meta">
           <span class="status" :class="problem.status">{{ problem.status }}</span>
           <span class="concepts" v-if="problem.associated_concepts?.length">
-            {{ problem.associated_concepts.length }} concepts
+            {{ problem.associated_concepts.length }} {{ t('problems.concepts') }}
           </span>
         </div>
       </router-link>
     </div>
     
-    <p v-else class="empty">No problems yet. Create your first one!</p>
+    <p v-else class="empty">{{ t('problems.createFirst') }}</p>
     
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
-        <h2>Create New Problem</h2>
+        <h2>{{ t('problems.newProblem') }}</h2>
         <form @submit.prevent="createProblem">
           <div class="form-group">
-            <label>Title</label>
+            <label>{{ t('problemDetail.title') }}</label>
             <input v-model="newProblem.title" type="text" required />
           </div>
           <div class="form-group">
-            <label>Description</label>
+            <label>{{ t('problems.description') }}</label>
             <textarea v-model="newProblem.description" rows="4"></textarea>
           </div>
           <div class="form-group">
-            <label>Associated Concepts (comma separated)</label>
+            <label>{{ t('problems.concepts') }}</label>
             <input v-model="newProblem.concepts" type="text" placeholder="e.g., control theory, PID, systems" />
           </div>
           <p v-if="error" class="error">{{ error }}</p>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" @click="showCreateModal = false">
-              Cancel
+              {{ t('common.cancel') }}
             </button>
             <button type="submit" class="btn btn-primary" :disabled="creating">
-              {{ creating ? 'Creating...' : 'Create' }}
+              {{ creating ? t('common.loading') : t('common.add') }}
             </button>
           </div>
         </form>
@@ -64,7 +64,9 @@
 import { ref, onMounted } from 'vue'
 import api from '@/api'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const router = useRouter()
 
 const problems = ref<any[]>([])

@@ -1,50 +1,50 @@
 <template>
   <div class="dashboard">
-    <h1>Welcome, {{ authStore.user?.username }}</h1>
+    <h1>{{ t('dashboard.welcome') }}, {{ authStore.user?.username }}</h1>
     
     <div class="stats-grid">
       <div class="stat-card">
-        <h3>Problems</h3>
+        <h3>{{ t('dashboard.problems') }}</h3>
         <p class="stat-number">{{ stats.problems }}</p>
       </div>
       <div class="stat-card">
-        <h3>Model Cards</h3>
+        <h3>{{ t('dashboard.modelCards') }}</h3>
         <p class="stat-number">{{ stats.modelCards }}</p>
       </div>
       <div class="stat-card">
-        <h3>Conversations</h3>
+        <h3>{{ t('dashboard.conversations') }}</h3>
         <p class="stat-number">{{ stats.conversations }}</p>
       </div>
       <div class="stat-card">
-        <h3>Practice Tasks</h3>
+        <h3>{{ t('dashboard.practiceTasks') }}</h3>
         <p class="stat-number">{{ stats.practice }}</p>
       </div>
     </div>
     
     <div class="actions-section">
-      <h2>Quick Actions</h2>
+      <h2>{{ t('dashboard.quickActions') }}</h2>
       <div class="actions-grid">
         <router-link to="/problems" class="action-card">
-          <h3>New Problem</h3>
-          <p>Start a new learning journey</p>
+          <h3>{{ t('dashboard.newProblem') }}</h3>
+          <p>{{ t('dashboard.startLearning') }}</p>
         </router-link>
         <router-link to="/model-cards" class="action-card">
-          <h3>Model Library</h3>
-          <p>Browse your knowledge models</p>
+          <h3>{{ t('dashboard.modelLibrary') }}</h3>
+          <p>{{ t('dashboard.browseModels') }}</p>
         </router-link>
         <router-link to="/chat" class="action-card">
-          <h3>AI Chat</h3>
-          <p>Interact with learning assistant</p>
+          <h3>{{ t('dashboard.aiChat') }}</h3>
+          <p>{{ t('dashboard.chatAssistant') }}</p>
         </router-link>
         <router-link to="/practice" class="action-card">
-          <h3>Practice</h3>
-          <p>Test your understanding</p>
+          <h3>{{ t('dashboard.practiceTest') }}</h3>
+          <p>{{ t('dashboard.testUnderstanding') }}</p>
         </router-link>
       </div>
     </div>
     
     <div class="recent-section">
-      <h2>Recent Activity</h2>
+      <h2>{{ t('dashboard.recentActivity') }}</h2>
       <div v-if="recentProblems.length" class="recent-list">
         <router-link 
           v-for="problem in recentProblems" 
@@ -56,16 +56,18 @@
           <span class="status">{{ problem.status }}</span>
         </router-link>
       </div>
-      <p v-else class="empty">No recent problems. Start learning!</p>
+      <p v-else class="empty">{{ t('dashboard.noRecent') }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 
 const stats = ref({

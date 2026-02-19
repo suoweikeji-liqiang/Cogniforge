@@ -15,6 +15,16 @@ const router = createRouter({
       component: () => import('@/views/RegisterView.vue'),
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+    },
+    {
       path: '/',
       redirect: '/dashboard',
     },
@@ -60,14 +70,43 @@ const router = createRouter({
       component: () => import('@/views/ChatView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/admin',
+      component: () => import('@/views/admin/AdminLayout.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        {
+          path: '',
+          name: 'admin-dashboard',
+          component: () => import('@/views/admin/AdminDashboard.vue'),
+        },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('@/views/admin/UserManagement.vue'),
+        },
+        {
+          path: 'llm-config',
+          name: 'admin-llm',
+          component: () => import('@/views/admin/LLMConfig.vue'),
+        },
+        {
+          path: 'email-config',
+          name: 'admin-email',
+          component: () => import('@/views/admin/EmailConfig.vue'),
+        },
+      ],
+    },
   ],
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
   
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
+  } else if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
+    next('/dashboard')
   } else if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
     next('/dashboard')
   } else {

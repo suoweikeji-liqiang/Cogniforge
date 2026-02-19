@@ -1,9 +1,9 @@
 <template>
   <div class="chat-page">
     <div class="chat-sidebar">
-      <h3>Conversations</h3>
+      <h3>{{ t('chat.conversations') }}</h3>
       <button class="btn btn-primary new-chat" @click="newChat">
-        New Chat
+        {{ t('chat.newConversation') }}
       </button>
       <div class="conversations-list">
         <div 
@@ -13,7 +13,7 @@
           :class="{ active: conv.id === currentConversationId }"
           @click="loadConversation(conv.id)"
         >
-          {{ conv.title || 'New Chat' }}
+          {{ conv.title || t('chat.newConversation') }}
         </div>
       </div>
     </div>
@@ -30,7 +30,7 @@
         </div>
         
         <div v-if="loading" class="message assistant">
-          <div class="message-content">Thinking...</div>
+          <div class="message-content">{{ t('common.loading') }}</div>
         </div>
       </div>
       
@@ -38,22 +38,22 @@
         <div class="input-options">
           <label>
             <input type="checkbox" v-model="options.generateContradiction" />
-            Generate Counter Examples
+            {{ t('modelCards.counterExamples') }}
           </label>
           <label>
             <input type="checkbox" v-model="options.suggestMigration" />
-            Suggest Migration
+            {{ t('chat.newConversation') }}
           </label>
         </div>
         <form @submit.prevent="sendMessage">
           <input 
             v-model="userInput" 
             type="text" 
-            placeholder="Ask a question or share your thoughts..."
-            :disabled="loading <button type=""
+            :placeholder="t('chat.typeMessage')"
+            :disabled="loading"
           />
-         submit" class="btn btn-primary" :disabled="loading || !userInput.trim()">
-            Send
+          <button type="submit" class="btn btn-primary" :disabled="loading || !userInput.trim()">
+            {{ t('chat.send') }}
           </button>
         </form>
       </div>
@@ -62,9 +62,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 
@@ -86,8 +89,9 @@ const fetchConversations = async () => {
     conversations.value = response.data
     
     if (route.params.id) {
-      currentConversationId.value = route.params.id as string
-      await loadConversation(route.params.id)
+      const conversationId = route.params.id as string
+      currentConversationId.value = conversationId
+      await loadConversation(conversationId)
     } else if (conversations.value.length > 0) {
       await loadConversation(conversations.value[0].id)
     }

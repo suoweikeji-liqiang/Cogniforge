@@ -1,31 +1,31 @@
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>Register</h1>
+      <h1>{{ t('auth.register') }}</h1>
       <form @submit.prevent="handleRegister">
         <div class="form-group">
-          <label>Email</label>
+          <label>{{ t('users.email') }}</label>
           <input v-model="email" type="email" required />
         </div>
         <div class="form-group">
-          <label>Username</label>
+          <label>{{ t('auth.username') }}</label>
           <input v-model="username" type="text" required />
         </div>
         <div class="form-group">
-          <label>Full Name (optional)</label>
+          <label>{{ t('users.fullName') }} ({{ t('common.optional') }})</label>
           <input v-model="fullName" type="text" />
         </div>
         <div class="form-group">
-          <label>Password</label>
+          <label>{{ t('auth.password') }}</label>
           <input v-model="password" type="password" required />
         </div>
         <p v-if="error" class="error">{{ error }}</p>
         <button type="submit" class="btn btn-primary" :disabled="loading">
-          {{ loading ? 'Registering...' : 'Register' }}
+          {{ loading ? t('auth.registering') : t('auth.register') }}
         </button>
       </form>
       <p class="auth-switch">
-        Already have an account? <router-link to="/login">Login</router-link>
+        {{ t('auth.hasAccount') }} <router-link to="/login">{{ t('auth.login') }}</router-link>
       </p>
     </div>
   </div>
@@ -35,7 +35,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -54,7 +56,7 @@ const handleRegister = async () => {
     await authStore.register(email.value, username.value, password.value, fullName.value || undefined)
     router.push('/login')
   } catch (e: any) {
-    error.value = e.response?.data?.detail || 'Registration failed'
+    error.value = e.response?.data?.detail || t('auth.registerFailed')
   } finally {
     loading.value = false
   }

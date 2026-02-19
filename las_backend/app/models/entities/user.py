@@ -14,6 +14,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(200))
     is_active = Column(Boolean, default=True)
+    role = Column(String(20), default="user")  # "admin" or "user"
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -86,7 +87,7 @@ class ModelCard(Base):
     
     user = relationship("User", back_populates="model_cards")
     children = relationship("ModelCard", backref="parent", remote_side=[id])
-    evolution_logs = relationship("EvolutionLog", back_populates="model_card")
+    evolution_logs = relationship("EvolutionLog", back_populates="model_card", foreign_keys="EvolutionLog.model_id")
 
 
 class EvolutionLog(Base):
@@ -100,7 +101,7 @@ class EvolutionLog(Base):
     reason_for_change = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    model_card = relationship("ModelCard", back_populates="evolution_logs")
+    model_card = relationship("ModelCard", back_populates="evolution_logs", foreign_keys=[model_id])
     user = relationship("User", back_populates="evolution_logs")
 
 

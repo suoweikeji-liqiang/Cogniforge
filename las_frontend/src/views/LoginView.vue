@@ -1,23 +1,26 @@
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>Login</h1>
+      <h1>{{ t('auth.login') }}</h1>
       <form @submit.prevent="handleLogin">
         <div class="form-group">
-          <label>Username</label>
+          <label>{{ t('auth.username') }}</label>
           <input v-model="username" type="text" required />
         </div>
         <div class="form-group">
-          <label>Password</label>
+          <label>{{ t('auth.password') }}</label>
           <input v-model="password" type="password" required />
         </div>
         <p v-if="error" class="error">{{ error }}</p>
         <button type="submit" class="btn btn-primary" :disabled="loading">
-          {{ loading ? 'Logging in...' : 'Login' }}
+          {{ loading ? t('auth.loggingIn') : t('auth.login') }}
         </button>
       </form>
       <p class="auth-switch">
-        Don't have an account? <router-link to="/register">Register</router-link>
+        {{ t('auth.noAccount') }} <router-link to="/register">{{ t('auth.register') }}</router-link>
+      </p>
+      <p class="auth-switch">
+        <router-link to="/forgot-password">{{ t('auth.forgotPassword') }}</router-link>
       </p>
     </div>
   </div>
@@ -27,7 +30,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -44,7 +49,7 @@ const handleLogin = async () => {
     await authStore.login(username.value, password.value)
     router.push('/dashboard')
   } catch (e: any) {
-    error.value = e.response?.data?.detail || 'Login failed'
+    error.value = e.response?.data?.detail || t('auth.loginFailed')
   } finally {
     loading.value = false
   }

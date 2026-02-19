@@ -24,6 +24,7 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     id: UUID
     is_active: bool
+    role: str
     created_at: datetime
     
     class Config:
@@ -35,5 +36,23 @@ class Token(BaseModel):
     token_type: str
 
 
+class UserAdminUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    username: Optional[str] = Field(None, min_length=3, max_length=100)
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=6)
+
+
 class TokenData(BaseModel):
     user_id: Optional[UUID] = None
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordReset(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=6)

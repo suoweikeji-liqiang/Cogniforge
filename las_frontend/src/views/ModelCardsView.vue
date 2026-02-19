@@ -1,13 +1,13 @@
 <template>
   <div class="model-cards-page">
     <div class="page-header">
-      <h1>Model Cards Library</h1>
+      <h1>{{ t('modelCards.title') }}</h1>
       <button class="btn btn-primary" @click="showCreateModal = true">
-        New Model Card
+        {{ t('modelCards.newCard') }}
       </button>
     </div>
     
-    <div v-if="loading" class="loading">Loading...</div>
+    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <div v-else-if="modelCards.length" class="cards-grid">
       <div v-for="card in modelCards" :key="card.id" class="model-card">
@@ -16,29 +16,29 @@
         
         <div class="card-stats">
           <span>v{{ card.version }}</span>
-          <span v-if="card.examples?.length">{{ card.examples.length }} examples</span>
-          <span v-if="card.counter_examples?.length">{{ card.counter_examples.length }} counter-examples</span>
+          <span v-if="card.examples?.length">{{ card.examples.length }} {{ t('modelCards.examples') }}</span>
+          <span v-if="card.counter_examples?.length">{{ card.counter_examples.length }} {{ t('modelCards.counterExamples') }}</span>
         </div>
         
         <div class="card-actions">
-          <button @click="viewCard(card)" class="btn btn-secondary">View</button>
+          <button @click="viewCard(card)" class="btn btn-secondary">{{ t('modelCards.viewCard') }}</button>
           <button @click="generateCounterExamples(card)" class="btn btn-secondary">
-            Counter Examples
+            {{ t('modelCards.counterExamples') }}
           </button>
           <button @click="suggestMigration(card)" class="btn btn-secondary">
-            Migration
+            {{ t('chat.newConversation') }}
           </button>
         </div>
         
         <div v-if="card.showCounterExamples" class="generated-content">
-          <h4>Counter Examples:</h4>
+          <h4>{{ t('modelCards.counterExamples') }}:</h4>
           <ul>
             <li v-for="(ex, i) in card.counter_examples" :key="i">{{ ex }}</li>
           </ul>
         </div>
         
         <div v-if="card.showMigrations" class="generated-content">
-          <h4>Migration Suggestions:</h4>
+          <h4>{{ t('chat.newConversation') }}:</h4>
           <ul>
             <li v-for="(m, i) in card.migration_attempts" :key="i">
               {{ m.target_domain }}
@@ -48,31 +48,31 @@
       </div>
     </div>
     
-    <p v-else class="empty">No model cards yet. Create your first one!</p>
+    <p v-else class="empty">{{ t('modelCards.createFirst') }}</p>
     
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
-        <h2>Create New Model Card</h2>
+        <h2>{{ t('modelCards.newCard') }}</h2>
         <form @submit.prevent="createCard">
           <div class="form-group">
-            <label>Title</label>
+            <label>{{ t('problemDetail.title') }}</label>
             <input v-model="newCard.title" type="text" required />
           </div>
           <div class="form-group">
-            <label>Notes</label>
+            <label>{{ t('modelCards.notes') }}</label>
             <textarea v-model="newCard.user_notes" rows="4"></textarea>
           </div>
           <div class="form-group">
-            <label>Examples (comma separated)</label>
+            <label>{{ t('modelCards.examples') }}</label>
             <input v-model="newCard.examples" type="text" placeholder="e.g., example1, example2" />
           </div>
           <p v-if="error" class="error">{{ error }}</p>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" @click="showCreateModal = false">
-              Cancel
+              {{ t('common.cancel') }}
             </button>
             <button type="submit" class="btn btn-primary" :disabled="creating">
-              {{ creating ? 'Creating...' : 'Create' }}
+              {{ creating ? t('common.loading') : t('common.add') }}
             </button>
           </div>
         </form>
@@ -84,6 +84,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '@/api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const modelCards = ref<any[]>([])
 const loading = ref(true)

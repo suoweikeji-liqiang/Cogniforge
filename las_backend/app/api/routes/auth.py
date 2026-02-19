@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from datetime import timedelta
 
 from app.core.database import get_db
@@ -48,6 +48,12 @@ async def get_current_user(
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    # Check if this is the first user (admin)
+    result = await db.execute(select(func.count(User.id)))
+    user_count = result.scalar()
+    role = "admin" if user_count == 0 else "user"
+    
+    # Check for duplicate
     result = await db.execute(
         select(User).where(
             (User.email == user_data.email) | (User.username == user_data.username)
@@ -66,6 +72,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         username=user_data.username,
         full_name=user_data.full_name,
         hashed_password=get_password_hash(user_data.password),
+        role=role,
     )
     
     db.add(db_user)

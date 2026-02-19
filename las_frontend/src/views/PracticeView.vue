@@ -1,31 +1,31 @@
 <template>
   <div class="practice-page">
-    <h1>Practice & Case Analysis</h1>
+    <h1>{{ t('practice.title') }}</h1>
     
     <div class="practice-content">
       <div class="tasks-section">
-        <h2>Available Tasks</h2>
+        <h2>{{ t('practice.title') }}</h2>
         <div v-if="tasks.length" class="tasks-grid">
           <div v-for="task in tasks" :key="task.id" class="task-card card">
             <h3>{{ task.title }}</h3>
-            <p>{{ task.description || 'No description' }}</p>
+            <p>{{ task.description || t('problems.noProblems') }}</p>
             <button @click="startTask(task)" class="btn btn-primary">
-              Start Practice
+              {{ t('practice.submitSolution') }}
             </button>
           </div>
         </div>
-        <p v-else class="empty">No practice tasks available.</p>
+        <p v-else class="empty">{{ t('practice.noTasks') }}</p>
       </div>
       
       <div class="submissions-section">
-        <h2>Your Submissions</h2>
+        <h2>{{ t('practice.submitted') }}</h2>
         <div v-if="submissions.length" class="submissions-list">
           <div v-for="sub in submissions" :key="sub.id" class="submission-item card">
             <h4>{{ sub.solution.substring(0, 100) }}...</h4>
             <p v-if="sub.feedback" class="feedback">{{ sub.feedback.substring(0, 200) }}...</p>
           </div>
         </div>
-        <p v-else class="empty">No submissions yet.</p>
+        <p v-else class="empty">{{ t('practice.noTasks') }}</p>
       </div>
     </div>
     
@@ -36,18 +36,18 @@
         
         <form @submit.prevent="submitSolution">
           <div class="form-group">
-            <label>Your Solution</label>
+            <label>{{ t('practice.yourSolution') }}</label>
             <textarea v-model="solution" rows="6" required></textarea>
           </div>
           <p v-if="currentFeedback" class="feedback-result">
-            <strong>Feedback:</strong> {{ currentFeedback }}
+            <strong>{{ t('practice.feedback') }}:</strong> {{ currentFeedback }}
           </p>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" @click="activeTask = null">
-              Close
+              {{ t('common.close') }}
             </button>
             <button type="submit" class="btn btn-primary" :disabled="submitting">
-              {{ submitting ? 'Submitting...' : 'Submit' }}
+              {{ submitting ? t('common.loading') : t('practice.submitSolution') }}
             </button>
           </div>
         </form>
@@ -59,6 +59,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '@/api'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const tasks = ref<any[]>([])
 const submissions = ref<any[]>([])
