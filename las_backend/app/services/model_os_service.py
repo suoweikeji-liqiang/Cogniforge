@@ -166,18 +166,49 @@ Analyze the response and provide:
     
     async def log_evolution(
         self,
+        db,
         model_id: str,
+        user_id: str,
         action: str,
-        previous_version: Optional[str],
         reason: str,
+        snapshot: Optional[Dict[str, Any]] = None,
+        previous_version_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        from app.models.entities.user import EvolutionLog
+        log = EvolutionLog(
+            model_id=model_id,
+            user_id=user_id,
+            action_taken=action,
+            reason_for_change=reason,
+            snapshot=snapshot,
+            previous_version_id=previous_version_id,
+        )
+        db.add(log)
+        await db.commit()
+        await db.refresh(log)
         return {
+            "id": log.id,
             "model_id": model_id,
             "action": action,
-            "previous_version": previous_version,
             "reason": reason,
-            "timestamp": "current_timestamp"
         }
+
+    async def generate_evolution_summary(
+        self,
+        card_title: str,
+        old_snapshot: Optional[Dict],
+        new_snapshot: Dict,
+    ) -> str:
+        """AI-generated summary of how a model card evolved."""
+        old_desc = str(old_snapshot) if old_snapshot else "Initial creation"
+        prompt = f"""Compare two versions of a cognitive model card and summarize the evolution:
+
+Model: {card_title}
+Previous state: {old_desc}
+Current state: {str(new_snapshot)}
+
+Provide a concise summary (2-3 sentences) of what changed and why it matters for the learner's understanding."""
+        return await self.llm.generate(prompt)
 
 
 model_os_service = ModelOSService()

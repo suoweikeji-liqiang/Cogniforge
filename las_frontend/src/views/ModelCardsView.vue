@@ -85,8 +85,10 @@
 import { ref, onMounted } from 'vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const modelCards = ref<any[]>([])
 const loading = ref(true)
@@ -141,7 +143,7 @@ const createCard = async () => {
 }
 
 const viewCard = (card: any) => {
-  console.log('View card:', card.id)
+  router.push(`/model-cards/${card.id}`)
 }
 
 const generateCounterExamples = async (card: any) => {

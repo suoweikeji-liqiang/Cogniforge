@@ -19,6 +19,11 @@
         <h3>{{ t('dashboard.practiceTasks') }}</h3>
         <p class="stat-number">{{ stats.practice }}</p>
       </div>
+      <div class="stat-card stat-card-alert" v-if="stats.dueReviews > 0">
+        <h3>{{ t('dashboard.dueReviews') }}</h3>
+        <p class="stat-number due">{{ stats.dueReviews }}</p>
+        <router-link to="/srs-review" class="review-link">{{ t('dashboard.startReview') }}</router-link>
+      </div>
     </div>
     
     <div class="actions-section">
@@ -42,7 +47,21 @@
         </router-link>
       </div>
     </div>
-    
+
+    <!-- Learning Heatmap -->
+    <div class="heatmap-section">
+      <h2>{{ t('dashboard.heatmapTitle') }}</h2>
+      <div class="heatmap-grid">
+        <div
+          v-for="day in heatmapDays"
+          :key="day.date"
+          class="heatmap-cell"
+          :class="'level-' + day.level"
+          :title="day.date + ': ' + day.count + ' activities'"
+        ></div>
+      </div>
+    </div>
+
     <div class="recent-section">
       <h2>{{ t('dashboard.recentActivity') }}</h2>
       <div v-if="recentProblems.length" class="recent-list">
@@ -75,24 +94,54 @@ const stats = ref({
   modelCards: 0,
   conversations: 0,
   practice: 0,
+  dueReviews: 0,
 })
 
 const recentProblems = ref<any[]>([])
+const heatmapDays = ref<any[]>([])
+
+const buildHeatmap = (activity: Record<string, number>) => {
+  const days = []
+  const now = new Date()
+  for (let i = 89; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const count = activity[key] || 0
+    const level = count === 0 ? 0 : count <= 1 ? 1 : count <= 3 ? 2 : count <= 5 ? 3 : 4
+    days.push({ date: key, count, level })
+  }
+  return days
+}
 
 const fetchDashboardData = async () => {
   try {
+<<<<<<< HEAD
+    const [problemsRes, cardsRes, convsRes, statsRes, heatmapRes] = await Promise.all([
+      api.get('/problems/'),
+      api.get('/model-cards/'),
+      api.get('/conversations/'),
+      api.get('/statistics/overview'),
+      api.get('/statistics/heatmap'),
+=======
     const [problemsRes, cardsRes, convsRes, practiceRes] = await Promise.all([
       api.get('/problems/'),
       api.get('/model-cards/'),
       api.get('/conversations/'),
       api.get('/practice/tasks'),
+>>>>>>> main
     ])
 
     stats.value.problems = problemsRes.data.length
     stats.value.modelCards = cardsRes.data.length
     stats.value.conversations = convsRes.data.length
+<<<<<<< HEAD
+    stats.value.dueReviews = statsRes.data.due_reviews || 0
+=======
     stats.value.practice = practiceRes.data.length
+>>>>>>> main
     recentProblems.value = problemsRes.data.slice(0, 5)
+    heatmapDays.value = buildHeatmap(heatmapRes.data.activity || {})
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
   }
@@ -212,4 +261,46 @@ onMounted(() => {
   text-align: center;
   padding: 2rem;
 }
+
+.stat-card-alert {
+  border-color: #f97316;
+}
+
+.stat-number.due {
+  color: #f97316;
+}
+
+.review-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.heatmap-section {
+  margin-bottom: 2rem;
+}
+
+.heatmap-section h2 {
+  margin-bottom: 1rem;
+}
+
+.heatmap-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.heatmap-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.level-0 { background: var(--bg-card); border: 1px solid var(--border); }
+.level-1 { background: #0e4429; }
+.level-2 { background: #006d32; }
+.level-3 { background: #26a641; }
+.level-4 { background: #39d353; }
 </style>

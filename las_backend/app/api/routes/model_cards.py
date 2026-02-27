@@ -5,13 +5,14 @@ from uuid import UUID
 from typing import List
 
 from app.core.database import get_db
-from app.models.entities.user import User, ModelCard
+from app.models.entities.user import User, ModelCard, EvolutionLog
 from app.schemas.model_card import (
     ModelCardCreate,
     ModelCardUpdate,
     ModelCardResponse,
     CounterExampleInput,
     MigrationInput,
+    EvolutionLogResponse,
 )
 from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
@@ -100,6 +101,15 @@ async def update_model_card(
     if not card:
         raise HTTPException(status_code=404, detail="Model card not found")
     
+    # Capture snapshot before update
+    old_snapshot = {
+        "title": card.title,
+        "user_notes": card.user_notes,
+        "examples": card.examples,
+        "counter_examples": card.counter_examples,
+        "version": card.version,
+    }
+
     if card_data.title:
         card.title = card_data.title
     if card_data.concept_maps:
@@ -112,12 +122,29 @@ async def update_model_card(
         card.counter_examples = card_data.counter_examples
     if card_data.migration_attempts:
         card.migration_attempts = card_data.migration_attempts
-    
+
     card.version += 1
-    
+
+    # Log evolution
+    new_snapshot = {
+        "title": card.title,
+        "user_notes": card.user_notes,
+        "examples": card.examples,
+        "counter_examples": card.counter_examples,
+        "version": card.version,
+    }
+    await model_os_service.log_evolution(
+        db=db,
+        model_id=str(card.id),
+        user_id=str(current_user.id),
+        action="update",
+        reason="Model card updated",
+        snapshot=new_snapshot,
+    )
+
     await db.commit()
     await db.refresh(card)
-    
+
     return card
 
 
@@ -211,3 +238,27 @@ async def suggest_migration(
     await db.refresh(card)
     
     return {"migrations": migrations}
+
+
+@router.get("/{card_id}/evolution", response_model=List[EvolutionLogResponse])
+async def get_evolution_logs(
+    card_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get evolution timeline for a model card."""
+    result = await db.execute(
+        select(ModelCard).where(
+            ModelCard.id == card_id,
+            ModelCard.user_id == current_user.id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Model card not found")
+
+    logs = await db.execute(
+        select(EvolutionLog)
+        .where(EvolutionLog.model_id == card_id)
+        .order_by(EvolutionLog.created_at.asc())
+    )
+    return list(logs.scalars().all())

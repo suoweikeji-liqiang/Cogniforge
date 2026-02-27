@@ -26,7 +26,10 @@
     "admin": "Admin",
     "logout": "Logout",
     "login": "Login",
-    "register": "Register"
+    "register": "Register",
+    "graph": "Knowledge Graph",
+    "srsReview": "SRS Review",
+    "challenges": "Challenges"
   },
   "auth": {
     "login": "Login",
@@ -135,7 +138,10 @@
     "problems": "Problems",
     "modelCards": "Model Cards",
     "conversations": "Conversations",
-    "practiceTasks": "Practice Tasks"
+    "practiceTasks": "Practice Tasks",
+    "dueReviews": "Due Reviews",
+    "startReview": "Start Review →",
+    "heatmapTitle": "Learning Activity"
   },
   "problems": {
     "title": "Problems",
@@ -203,5 +209,32 @@
     "send": "Send",
     "noMessages": "No messages yet. Start chatting!",
     "conversations": "Conversations"
+  },
+  "evolution": {
+    "title": "Evolution Timeline",
+    "noLogs": "No evolution history yet"
+  },
+  "srs": {
+    "title": "Spaced Repetition Review",
+    "dueToday": "Due Today",
+    "totalScheduled": "Total Scheduled",
+    "recallPrompt": "Try to recall the key concepts of this model card",
+    "showAnswer": "Show Answer",
+    "rateRecall": "How well did you recall?",
+    "forgot": "Forgot",
+    "ok": "OK",
+    "perfect": "Perfect",
+    "allDone": "All reviews done for today!"
+  },
+  "graph": {
+    "title": "Knowledge Graph",
+    "noData": "No model cards to visualize yet"
+  },
+  "challenges": {
+    "title": "Cognitive Challenges",
+    "generate": "Generate Challenge",
+    "yourAnswer": "Type your answer...",
+    "feedback": "AI Feedback",
+    "noChallenges": "No challenges yet. Generate one to get started!"
   }
 }

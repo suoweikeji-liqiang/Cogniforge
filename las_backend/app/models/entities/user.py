@@ -92,15 +92,16 @@ class ModelCard(Base):
 
 class EvolutionLog(Base):
     __tablename__ = "evolution_logs"
-    
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     model_id = Column(String(36), ForeignKey("model_cards.id"), nullable=False)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     action_taken = Column(String(50))
     previous_version_id = Column(String(36), ForeignKey("model_cards.id"))
     reason_for_change = Column(Text)
+    snapshot = Column(JSON)  # Snapshot of model card state at this point
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     model_card = relationship("ModelCard", back_populates="evolution_logs", foreign_keys=[model_id])
     user = relationship("User", back_populates="evolution_logs")
 
@@ -175,6 +176,43 @@ class Review(Base):
     user = relationship("User", back_populates="reviews")
 
 
+<<<<<<< HEAD
+class ReviewSchedule(Base):
+    """Spaced repetition schedule for model cards (SM-2 algorithm)"""
+    __tablename__ = "review_schedules"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    model_card_id = Column(String(36), ForeignKey("model_cards.id"), nullable=False)
+    ease_factor = Column(Integer, default=2500)  # stored as int * 1000
+    interval_days = Column(Integer, default=1)
+    repetitions = Column(Integer, default=0)
+    next_review_at = Column(DateTime, nullable=False)
+    last_reviewed_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", backref="review_schedules")
+    model_card = relationship("ModelCard", backref="review_schedules")
+
+
+class CognitiveChallenge(Base):
+    """Proactive cognitive challenges pushed to users"""
+    __tablename__ = "cognitive_challenges"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    model_card_id = Column(String(36), ForeignKey("model_cards.id"))
+    challenge_type = Column(String(50))  # boundary_test, cross_card, socratic
+    question = Column(Text, nullable=False)
+    context = Column(JSON)
+    user_answer = Column(Text)
+    ai_feedback = Column(Text)
+    status = Column(String(20), default="pending")  # pending, answered, skipped
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", backref="cognitive_challenges")
+    model_card = relationship("ModelCard", backref="cognitive_challenges")
+=======
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
 
@@ -184,3 +222,4 @@ class PasswordResetToken(Base):
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+>>>>>>> main

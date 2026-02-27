@@ -63,3 +63,24 @@ class CounterExampleInput(BaseModel):
 class MigrationInput(BaseModel):
     model_id: UUID
     target_domain: str
+
+
+# Evolution Log schemas
+class EvolutionLogResponse(BaseModel):
+    id: UUID
+    model_id: UUID
+    user_id: UUID
+    action_taken: Optional[str] = None
+    previous_version_id: Optional[UUID] = None
+    reason_for_change: Optional[str] = None
+    snapshot: Optional[dict] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EvolutionCompare(BaseModel):
+    old_version: Optional[dict] = None
+    new_version: dict
+    changes_summary: str

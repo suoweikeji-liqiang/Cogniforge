@@ -53,6 +53,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/model-cards/:id',
+      name: 'model-card-detail',
+      component: () => import('@/views/ModelCardDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/practice',
       name: 'practice',
       component: () => import('@/views/PracticeView.vue'),
@@ -68,6 +74,24 @@ const router = createRouter({
       path: '/chat/:id?',
       name: 'chat',
       component: () => import('@/views/ChatView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/srs-review',
+      name: 'srs-review',
+      component: () => import('@/views/SRSReviewView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/knowledge-graph',
+      name: 'knowledge-graph',
+      component: () => import('@/views/KnowledgeGraphView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/challenges',
+      name: 'challenges',
+      component: () => import('@/views/ChallengesView.vue'),
       meta: { requiresAuth: true },
     },
     {

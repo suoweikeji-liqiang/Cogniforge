@@ -9,6 +9,9 @@
         <router-link to="/dashboard">{{ t('nav.dashboard') }}</router-link>
         <router-link to="/problems">{{ t('nav.problems') }}</router-link>
         <router-link to="/model-cards">{{ t('nav.modelCards') }}</router-link>
+        <router-link to="/knowledge-graph">{{ t('nav.graph') }}</router-link>
+        <router-link to="/srs-review">{{ t('nav.srsReview') }}</router-link>
+        <router-link to="/challenges">{{ t('nav.challenges') }}</router-link>
         <router-link to="/practice">{{ t('nav.practice') }}</router-link>
         <router-link to="/reviews">{{ t('nav.reviews') }}</router-link>
         <router-link v-if="authStore.user?.role === 'admin'" to="/admin">{{ t('nav.admin') }}</router-link>

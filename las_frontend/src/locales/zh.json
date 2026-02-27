@@ -26,7 +26,10 @@
     "admin": "管理",
     "logout": "退出登录",
     "login": "登录",
-    "register": "注册"
+    "register": "注册",
+    "graph": "知识图谱",
+    "srsReview": "间隔复习",
+    "challenges": "认知挑战"
   },
   "auth": {
     "login": "登录",
@@ -135,7 +138,10 @@
     "problems": "问题",
     "modelCards": "模型卡",
     "conversations": "对话",
-    "practiceTasks": "练习任务"
+    "practiceTasks": "练习任务",
+    "dueReviews": "待复习",
+    "startReview": "开始复习 →",
+    "heatmapTitle": "学习活动"
   },
   "problems": {
     "title": "问题",
@@ -203,5 +209,32 @@
     "send": "发送",
     "noMessages": "暂无消息。开始聊天吧！",
     "conversations": "对话列表"
+  },
+  "evolution": {
+    "title": "认知演化时间线",
+    "noLogs": "暂无演化记录"
+  },
+  "srs": {
+    "title": "间隔重复复习",
+    "dueToday": "今日待复习",
+    "totalScheduled": "总计划数",
+    "recallPrompt": "尝试回忆这张模型卡的核心概念",
+    "showAnswer": "显示答案",
+    "rateRecall": "你的回忆程度如何？",
+    "forgot": "忘记了",
+    "ok": "还行",
+    "perfect": "完美",
+    "allDone": "今日复习已全部完成！"
+  },
+  "graph": {
+    "title": "知识图谱",
+    "noData": "暂无模型卡可供可视化"
+  },
+  "challenges": {
+    "title": "认知挑战",
+    "generate": "生成挑战",
+    "yourAnswer": "输入你的答案...",
+    "feedback": "AI 反馈",
+    "noChallenges": "暂无挑战。生成一个开始吧！"
   }
 }

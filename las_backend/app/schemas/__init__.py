@@ -26,6 +26,8 @@ from app.schemas.model_card import (
     ModelCardResponse,
     CounterExampleInput,
     MigrationInput,
+    EvolutionLogResponse,
+    EvolutionCompare,
 )
 from app.schemas.conversation import (
     MessageBase,
