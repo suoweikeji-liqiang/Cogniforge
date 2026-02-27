@@ -135,14 +135,16 @@ class ConversationMessage(Base):
 
 class PracticeTask(Base):
     __tablename__ = "practice_tasks"
-    
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     title = Column(String(500), nullable=False)
     description = Column(Text)
     model_card_id = Column(String(36), ForeignKey("model_cards.id"))
     task_type = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
+    user = relationship("User", backref="practice_tasks")
     submissions = relationship("PracticeSubmission", back_populates="practice_task")
 
 
@@ -171,3 +173,14 @@ class Review(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="reviews")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    token = Column(String(100), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

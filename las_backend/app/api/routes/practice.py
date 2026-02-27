@@ -32,6 +32,7 @@ async def create_practice_task(
     db: AsyncSession = Depends(get_db)
 ):
     db_task = PracticeTask(
+        user_id=current_user.id,
         title=task_data.title,
         description=task_data.description,
         model_card_id=task_data.model_card_id,
@@ -52,6 +53,7 @@ async def list_practice_tasks(
 ):
     result = await db.execute(
         select(PracticeTask)
+        .where(PracticeTask.user_id == current_user.id)
         .order_by(PracticeTask.created_at.desc())
     )
     tasks = result.scalars().all()

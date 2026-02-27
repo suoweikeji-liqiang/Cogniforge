@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Default LLM Provider
     DEFAULT_LLM_PROVIDER: str = "openai"
     
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # CORS
     BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     

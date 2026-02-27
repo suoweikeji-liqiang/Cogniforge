@@ -43,13 +43,26 @@ class LLMService:
             provider = await self._get_active_provider(db, provider_type)
             if not provider:
                 return "Error: No active LLM provider configured"
-            
+
+            # Use caller-specified model, or DB-configured default, or hardcoded fallback
+            if not model_id:
+                default_model = await self._get_default_model(db, provider.id)
+                if default_model:
+                    model_id = default_model.model_id
+
+            fallbacks = {
+                "openai": "gpt-4o-mini",
+                "anthropic": "claude-3-5-sonnet-20241022",
+                "ollama": "llama2",
+            }
+            resolved_model = model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
+
             if provider.provider_type == "openai":
-                return await self._generate_openai(prompt, provider, model_id or "gpt-4o-mini")
+                return await self._generate_openai(prompt, provider, resolved_model)
             elif provider.provider_type == "anthropic":
-                return await self._generate_anthropic(prompt, provider, model_id or "claude-3-5-sonnet-20241022")
+                return await self._generate_anthropic(prompt, provider, resolved_model)
             elif provider.provider_type == "ollama":
-                return await self._generate_ollama(prompt, provider, model_id or "llama2")
+                return await self._generate_ollama(prompt, provider, resolved_model)
             else:
                 return f"Error: Unsupported provider type: {provider.provider_type}"
     

@@ -16,9 +16,10 @@ class PracticeTaskCreate(PracticeTaskBase):
 
 class PracticeTaskResponse(PracticeTaskBase):
     id: UUID
+    user_id: Optional[UUID]
     model_card_id: Optional[UUID]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 

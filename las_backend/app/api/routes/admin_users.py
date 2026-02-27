@@ -8,18 +8,9 @@ from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.models.entities.user import User
 from app.schemas.user import UserResponse, UserUpdate, UserAdminUpdate
-from app.api.routes.auth import get_current_user
+from app.api.deps import require_admin
 
 router = APIRouter(prefix="/admin/users", tags=["Admin"])
-
-
-def require_admin(current_user: User = Depends(get_current_user)):
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-    return current_user
 
 
 @router.get("", response_model=List[UserResponse])
@@ -110,11 +101,17 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
+    if str(user_id) == str(admin.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own admin account"
+        )
+
     result = await db.execute(select(User).where(User.id == str(user_id)))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     await db.delete(user)
     await db.commit()
     return None

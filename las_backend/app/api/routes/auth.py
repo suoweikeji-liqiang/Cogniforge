@@ -123,16 +123,28 @@ async def update_current_user(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    if user_data.email:
+    if user_data.email and user_data.email != current_user.email:
+        existing = await db.execute(
+            select(User).where(User.email == user_data.email, User.id != current_user.id)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already in use")
         current_user.email = user_data.email
-    if user_data.username:
+
+    if user_data.username and user_data.username != current_user.username:
+        existing = await db.execute(
+            select(User).where(User.username == user_data.username, User.id != current_user.id)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Username already in use")
         current_user.username = user_data.username
+
     if user_data.full_name:
         current_user.full_name = user_data.full_name
     if user_data.password:
         current_user.hashed_password = get_password_hash(user_data.password)
-    
+
     await db.commit()
     await db.refresh(current_user)
-    
+
     return current_user

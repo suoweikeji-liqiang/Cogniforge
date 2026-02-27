@@ -190,14 +190,25 @@ async def get_learning_path(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    # First verify the problem belongs to the current user
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == problem_id,
+            Problem.user_id == current_user.id
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
     result = await db.execute(
         select(LearningPath).where(
             LearningPath.problem_id == problem_id,
         )
     )
     learning_path = result.scalar_one_or_none()
-    
+
     if not learning_path:
         raise HTTPException(status_code=404, detail="Learning path not found")
-    
+
     return learning_path

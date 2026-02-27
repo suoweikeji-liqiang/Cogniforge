@@ -81,15 +81,17 @@ const recentProblems = ref<any[]>([])
 
 const fetchDashboardData = async () => {
   try {
-    const [problemsRes, cardsRes, convsRes] = await Promise.all([
+    const [problemsRes, cardsRes, convsRes, practiceRes] = await Promise.all([
       api.get('/problems/'),
       api.get('/model-cards/'),
       api.get('/conversations/'),
+      api.get('/practice/tasks'),
     ])
-    
+
     stats.value.problems = problemsRes.data.length
     stats.value.modelCards = cardsRes.data.length
     stats.value.conversations = convsRes.data.length
+    stats.value.practice = practiceRes.data.length
     recentProblems.value = problemsRes.data.slice(0, 5)
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
