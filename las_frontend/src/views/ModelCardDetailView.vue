@@ -83,7 +83,7 @@ const router = useRouter()
 const cogTestStore = useCogTestStore()
 
 const startCogTest = async () => {
-  await cogTestStore.startSession(card.value.title)
+  await cogTestStore.startSession(card.value.title, card.value.id)
   router.push('/cog-test/session')
 }
 

@@ -106,10 +106,11 @@ export const useCogTestStore = defineStore('cogTest', () => {
     }
   }
 
-  async function startSession(conceptName: string) {
+  async function startSession(conceptName: string, modelCardId?: string) {
     const response = await api.post('/cog-test/sessions', {
       concept: conceptName,
       max_rounds: 3,
+      model_card_id: modelCardId || null,
     })
     sessionId.value = response.data.session_id
     concept.value = conceptName
