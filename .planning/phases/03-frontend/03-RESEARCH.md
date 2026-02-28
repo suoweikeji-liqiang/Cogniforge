@@ -527,10 +527,9 @@ Guide and Challenger are visually distinct. Use the existing CSS variable system
    - What's unclear: Whether Phase 3 needs to handle resuming an in-progress session after reload.
    - Recommendation: Out of scope for Phase 3. On reload, the store is empty; the user can navigate to the history list and see the session as "active" but cannot resume the stream. This is acceptable for v1.
 
-3. **Score display in history list**
+3. **Score display in history list** (RESOLVED)
    - What we know: `GET /cog-test/sessions` returns `{id, concept, status, created_at}`. The understanding score is in `CogTestSnapshot`, not in the session row directly.
-   - What's unclear: Whether the backend list endpoint will include the final score, or whether a separate call is needed.
-   - Recommendation: SESS-05 says "concept name, date, and final score." The backend plan (02-03) only returns `{id, concept, status, created_at}`. The planner should either (a) add score to the list endpoint response in Phase 2 plan 03, or (b) accept that Phase 3 shows status instead of score for v1. Flag this for the planner.
+   - Decision: v1 shows status as the primary column. `SessionSummary` includes an optional `score?: number | null` field for forward-compatibility. The template renders score when present, falls back to status badge. ROADMAP.md success criterion 4 updated to say "status (score when available)" instead of "final score".
 
 ---
 

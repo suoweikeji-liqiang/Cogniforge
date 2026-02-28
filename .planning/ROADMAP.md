@@ -65,7 +65,7 @@ Plans:
   1. A "Start Cognitive Test" button on the model card detail page launches a new session with the concept pre-loaded — no manual concept entry required
   2. Agent tokens appear on screen as they stream, with Guide and Challenger turns visually distinct (different label or color)
   3. A "Stop and Diagnose" button is always visible during a session and produces an immediate summary when clicked
-  4. The "Cognitive Tests" nav entry lists all past sessions with concept name, date, and final score
+  4. The "Cognitive Tests" nav entry lists all past sessions with concept name, date, and status (score displayed when available from backend; v1 backend returns status only)
 **Plans**: 3 plans
 
 Plans:
