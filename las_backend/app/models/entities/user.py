@@ -249,3 +249,64 @@ class PasswordResetToken(Base):
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CogTestSession(Base):
+    __tablename__ = "cog_test_sessions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    model_card_id = Column(String(36), ForeignKey("model_cards.id"), nullable=True)
+    status = Column(String(20), default="active")  # active, completed, abandoned
+    agent_mode = Column(String(20), default="guide")  # guide, challenger
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", backref="cog_test_sessions")
+    model_card = relationship("ModelCard", backref="cog_test_sessions")
+    turns = relationship("CogTestTurn", back_populates="session", cascade="all, delete-orphan")
+    blind_spots = relationship("CogTestBlindSpot", back_populates="session", cascade="all, delete-orphan")
+    snapshots = relationship("CogTestSnapshot", back_populates="session", cascade="all, delete-orphan")
+
+
+class CogTestTurn(Base):
+    __tablename__ = "cog_test_turns"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), ForeignKey("cog_test_sessions.id"), nullable=False)
+    turn_index = Column(Integer, nullable=False)
+    role = Column(String(20), nullable=False)  # user, guide, challenger
+    dialogue_text = Column(Text, nullable=False)
+    analysis_json = Column(JSON, default=dict)  # parsed from <analysis> block
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("CogTestSession", back_populates="turns")
+
+
+class CogTestBlindSpot(Base):
+    __tablename__ = "cog_test_blind_spots"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), ForeignKey("cog_test_sessions.id"), nullable=False)
+    turn_id = Column(String(36), ForeignKey("cog_test_turns.id"), nullable=True)
+    blind_spot_type = Column(String(50), nullable=False)
+    # one of: factual_error, incomplete_reasoning, hidden_assumption, surface_understanding
+    description = Column(Text, nullable=False)
+    evidence = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("CogTestSession", back_populates="blind_spots")
+    turn = relationship("CogTestTurn", backref="blind_spots")
+
+
+class CogTestSnapshot(Base):
+    __tablename__ = "cog_test_snapshots"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(String(36), ForeignKey("cog_test_sessions.id"), nullable=False)
+    understanding_score = Column(String(10), nullable=False)  # low, medium, high
+    blind_spot_summary = Column(JSON, default=list)
+    turn_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("CogTestSession", back_populates="snapshots")
