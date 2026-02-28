@@ -285,6 +285,7 @@
     "round": "Round",
     "connecting": "Connecting...",
     "inputPlaceholder": "Type your response...",
-    "score": "Score"
+    "score": "Score",
+    "exportReport": "Export Report"
   }
 }

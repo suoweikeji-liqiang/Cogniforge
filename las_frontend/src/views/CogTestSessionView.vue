@@ -6,10 +6,17 @@
       <span class="round-badge">{{ t('cogTest.round') }} {{ store.currentRound }}/{{ store.maxRounds }}</span>
     </div>
 
-    <div v-if="store.status === 'connecting' || store.error || store.status === 'completed'" class="status-bar">
+    <div v-if="store.status === 'connecting' || store.error || store.status === 'completed' || store.status === 'stopped'" class="status-bar">
       <div v-if="store.status === 'connecting'" class="connecting">{{ t('cogTest.connecting') }}</div>
       <div v-if="store.error" class="error">{{ store.error }}</div>
       <div v-if="store.status === 'completed'" class="completed">{{ t('cogTest.sessionComplete') }}</div>
+      <button
+        v-if="store.status === 'completed' || store.status === 'stopped'"
+        class="btn btn-secondary"
+        @click="store.exportReport(store.sessionId!, store.concept)"
+      >
+        {{ t('cogTest.exportReport') }}
+      </button>
     </div>
 
     <div class="messages-container" ref="messagesContainer">

@@ -139,6 +139,22 @@ export const useCogTestStore = defineStore('cogTest', () => {
     sessions.value = response.data
   }
 
+  async function exportReport(sid: string, conceptName: string) {
+    const response = await api.get(`/cog-test/sessions/${sid}/report`, {
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(
+      new Blob([response.data], { type: 'text/markdown' })
+    )
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cog-report-${conceptName.slice(0, 30).replace(/\s+/g, '-')}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   function resetSession() {
     _closeEventSource()
     sessionId.value = null
@@ -163,6 +179,7 @@ export const useCogTestStore = defineStore('cogTest', () => {
     submitUserTurn,
     stopSession,
     fetchSessions,
+    exportReport,
     resetSession,
   }
 })

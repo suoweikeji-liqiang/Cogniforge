@@ -18,6 +18,13 @@
         </div>
         <span v-if="s.score != null" class="score">{{ s.score }}%</span>
         <span v-else class="status-badge" :class="s.status">{{ s.status }}</span>
+        <button
+          v-if="s.status === 'completed' || s.status === 'stopped'"
+          class="btn btn-secondary btn-sm"
+          @click.stop="store.exportReport(s.id, s.concept)"
+        >
+          {{ t('cogTest.exportReport') }}
+        </button>
       </div>
     </div>
   </div>
