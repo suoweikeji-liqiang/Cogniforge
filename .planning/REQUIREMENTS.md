@@ -31,7 +31,7 @@
 ### Report（报告与集成）
 
 - [ ] **REPT-01**: 用户可导出认知诊断报告（Markdown格式），包含概念、盲区、评分轨迹、建议
-- [ ] **REPT-02**: 测试中发现的盲区自动提升对应模型卡在间隔重复系统中的复习优先级
+- [x] **REPT-02**: 测试中发现的盲区自动提升对应模型卡在间隔重复系统中的复习优先级
 
 ### Infrastructure（基础设施）
 
@@ -85,7 +85,7 @@
 | ANLS-02 | Phase 2 | Pending |
 | ANLS-03 | Phase 2 | Pending |
 | REPT-01 | Phase 4 | Pending |
-| REPT-02 | Phase 4 | Pending |
+| REPT-02 | Phase 4 | Complete |
 | INFR-01 | Phase 1 | Pending |
 | INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Pending |
