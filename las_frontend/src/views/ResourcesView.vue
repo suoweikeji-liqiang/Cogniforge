@@ -38,7 +38,7 @@
             <option value="completed">{{ t('resources.completed') }}</option>
           </select>
         </div>
-        <h3><a :href="r.url" target="_blank" rel="noopener">{{ r.title || r.url }}</a></h3>
+        <h3><a href="#" @click.prevent="openLink(r.url)">{{ r.title || r.url }}</a></h3>
         <div v-if="r.ai_summary" class="ai-summary">
           <strong>{{ t('resources.aiSummary') }}</strong>
           <p>{{ r.ai_summary }}</p>
@@ -58,6 +58,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
 import api from '@/api'
 
 const { t } = useI18n()
@@ -69,6 +71,14 @@ const newTitle = ref('')
 const newType = ref('webpage')
 const filter = ref('all')
 const interpreting = ref<string | null>(null)
+
+const openLink = async (url: string) => {
+  if (Capacitor.isNativePlatform()) {
+    await Browser.open({ url })
+  } else {
+    window.open(url, '_blank', 'noopener')
+  }
+}
 
 const filtered = computed(() =>
   filter.value === 'all' ? resources.value : resources.value.filter(r => r.status === filter.value)
@@ -140,4 +150,12 @@ onMounted(fetchResources)
 .btn-small:disabled { opacity: 0.5; }
 .btn-danger { color: #ef4444; border-color: #ef4444; }
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
+@media (max-width: 768px) {
+  .header { flex-direction: column; gap: 0.75rem; align-items: stretch; }
+  .filter-bar { flex-wrap: wrap; }
+  .filter-btn { flex: 1; min-width: 0; text-align: center; font-size: 0.8rem; padding: 0.5rem 0.5rem; }
+  .resource-card h3 { font-size: 0.95rem; word-break: break-all; }
+  .form-actions { flex-direction: column; }
+  .resource-actions { flex-wrap: wrap; }
+}
 </style>

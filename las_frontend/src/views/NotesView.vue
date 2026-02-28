@@ -42,6 +42,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Capacitor } from '@capacitor/core'
+import { SpeechRecognition } from '@capacitor-community/speech-recognition'
 import api from '@/api'
 
 const { t } = useI18n()
@@ -81,36 +83,51 @@ const remove = async (id: string) => {
   notes.value = notes.value.filter(n => n.id !== id)
 }
 
-const toggleVoice = () => {
-  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-    alert(t('notes.voiceNotSupported'))
-    return
-  }
+const toggleVoice = async () => {
   if (recording.value) {
-    recognition?.stop()
+    if (Capacitor.isNativePlatform()) {
+      await SpeechRecognition.stop()
+    } else {
+      recognition?.stop()
+    }
     recording.value = false
     return
   }
-  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-  recognition = new SR()
-  recognition.continuous = true
-  recognition.interimResults = true
-  recognition.lang = navigator.language
-  recognition.onresult = (e: any) => {
-    let transcript = ''
-    for (let i = 0; i < e.results.length; i++) {
-      transcript += e.results[i][0].transcript
+
+  if (Capacitor.isNativePlatform()) {
+    const { available } = await SpeechRecognition.available()
+    if (!available) { alert(t('notes.voiceNotSupported')); return }
+    await SpeechRecognition.requestPermissions()
+    recording.value = true
+    const { matches } = await SpeechRecognition.start({ language: navigator.language, partialResults: false, popup: true })
+    if (matches?.length) newContent.value = matches[0]
+    recording.value = false
+  } else {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert(t('notes.voiceNotSupported')); return
     }
-    newContent.value = transcript
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    recognition = new SR()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = navigator.language
+    recognition.onresult = (e: any) => {
+      let transcript = ''
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript
+      newContent.value = transcript
+    }
+    recognition.onerror = () => { recording.value = false }
+    recognition.onend = () => { recording.value = false }
+    recognition.start()
+    recording.value = true
   }
-  recognition.onerror = () => { recording.value = false }
-  recognition.onend = () => { recording.value = false }
-  recognition.start()
-  recording.value = true
 }
 
 onMounted(fetchNotes)
-onUnmounted(() => { recognition?.stop() })
+onUnmounted(() => {
+  if (Capacitor.isNativePlatform()) SpeechRecognition.stop().catch(() => {})
+  else recognition?.stop()
+})
 </script>
 
 <style scoped>
@@ -137,4 +154,12 @@ onUnmounted(() => { recognition?.stop() })
 .note-content { color: var(--text); line-height: 1.6; white-space: pre-wrap; }
 .note-tags { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
+@media (max-width: 768px) {
+  .input-footer { flex-direction: column; }
+  .tags-input { width: 100%; }
+  .tag-field { width: 100%; flex: 1; }
+  .input-actions { width: 100%; justify-content: stretch; }
+  .input-actions button { flex: 1; }
+  .note-meta { flex-wrap: wrap; }
+}
 </style>
