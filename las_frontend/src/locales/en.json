@@ -236,5 +236,11 @@
     "yourAnswer": "Type your answer...",
     "feedback": "AI Feedback",
     "noChallenges": "No challenges yet. Generate one to get started!"
+  },
+  "settings": {
+    "serverConfig": "Server Configuration",
+    "serverUrl": "Server URL",
+    "save": "Save",
+    "saved": "Settings saved!"
   }
 }

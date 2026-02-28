@@ -60,6 +60,7 @@ const logout = () => {
   padding: 1rem 2rem;
   background: #1a1a2e;
   color: white;
+  flex-wrap: wrap;
 }
 
 .nav-brand {
@@ -71,6 +72,21 @@ const logout = () => {
   display: flex;
   gap: 1.5rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+  }
+  .nav-links {
+    gap: 0.75rem;
+    font-size: 0.85rem;
+  }
+  .main-content {
+    padding: 1rem;
+  }
 }
 
 .nav-links a {

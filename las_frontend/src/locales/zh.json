@@ -236,5 +236,11 @@
     "yourAnswer": "输入你的答案...",
     "feedback": "AI 反馈",
     "noChallenges": "暂无挑战。生成一个开始吧！"
+  },
+  "settings": {
+    "serverConfig": "服务器配置",
+    "serverUrl": "服务器地址",
+    "save": "保存",
+    "saved": "设置已保存！"
   }
 }

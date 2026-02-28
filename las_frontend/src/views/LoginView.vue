@@ -22,6 +22,9 @@
       <p class="auth-switch">
         <router-link to="/forgot-password">{{ t('auth.forgotPassword') }}</router-link>
       </p>
+      <p v-if="isNative" class="auth-switch">
+        <router-link to="/server-config">{{ t('settings.serverConfig') }}</router-link>
+      </p>
     </div>
   </div>
 </template>
@@ -31,8 +34,10 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import { Capacitor } from '@capacitor/core'
 
 const { t } = useI18n()
+const isNative = Capacitor.isNativePlatform()
 const router = useRouter()
 const authStore = useAuthStore()
 

@@ -116,30 +116,20 @@ const buildHeatmap = (activity: Record<string, number>) => {
 
 const fetchDashboardData = async () => {
   try {
-<<<<<<< HEAD
-    const [problemsRes, cardsRes, convsRes, statsRes, heatmapRes] = await Promise.all([
-      api.get('/problems/'),
-      api.get('/model-cards/'),
-      api.get('/conversations/'),
-      api.get('/statistics/overview'),
-      api.get('/statistics/heatmap'),
-=======
-    const [problemsRes, cardsRes, convsRes, practiceRes] = await Promise.all([
+    const [problemsRes, cardsRes, convsRes, practiceRes, statsRes, heatmapRes] = await Promise.all([
       api.get('/problems/'),
       api.get('/model-cards/'),
       api.get('/conversations/'),
       api.get('/practice/tasks'),
->>>>>>> main
+      api.get('/statistics/overview'),
+      api.get('/statistics/heatmap'),
     ])
 
     stats.value.problems = problemsRes.data.length
     stats.value.modelCards = cardsRes.data.length
     stats.value.conversations = convsRes.data.length
-<<<<<<< HEAD
-    stats.value.dueReviews = statsRes.data.due_reviews || 0
-=======
     stats.value.practice = practiceRes.data.length
->>>>>>> main
+    stats.value.dueReviews = statsRes.data.due_reviews || 0
     recentProblems.value = problemsRes.data.slice(0, 5)
     heatmapDays.value = buildHeatmap(heatmapRes.data.activity || {})
   } catch (error) {

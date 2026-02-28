@@ -38,6 +38,7 @@
     </div>
 
     <p v-else-if="!loading" class="empty">{{ t('srs.allDone') }}</p>
+  </div>
 </template>
 
 <script setup lang="ts">
