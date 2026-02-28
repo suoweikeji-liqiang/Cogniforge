@@ -9,6 +9,7 @@ from app.api.routes.statistics import router as statistics_router
 from app.api.routes.challenges import router as challenges_router
 from app.api.routes.resources import router as resources_router
 from app.api.routes.notes import router as notes_router
+from app.api.cog_test import router as cog_test_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -28,3 +29,4 @@ api_router.include_router(notes_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_llm_router)
 api_router.include_router(admin_email_router)
+api_router.include_router(cog_test_router)
