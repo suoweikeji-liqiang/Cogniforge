@@ -19,7 +19,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/? | Not started | - |
+| 1. Foundation | 2/? | In progress | - |
 | 2. Backend Engine | 0/? | Not started | - |
 | 3. Frontend | 0/? | Not started | - |
 | 4. Report and Integration | 0/? | Not started | - |
