@@ -36,7 +36,7 @@
 ### Infrastructure（基础设施）
 
 - [ ] **INFR-01**: 认知测试相关数据表合并到现有SQLAlchemy/SQLite数据库
-- [ ] **INFR-02**: AI调用复用现有agno + LLM service层，不引入新的AI SDK
+- [x] **INFR-02**: AI调用复用现有agno + LLM service层，不引入新的AI SDK
 - [ ] **INFR-03**: 后端新增sse-starlette依赖支持SSE事件流
 
 ## v2 Requirements
@@ -87,7 +87,7 @@
 | REPT-01 | Phase 4 | Pending |
 | REPT-02 | Phase 4 | Pending |
 | INFR-01 | Phase 1 | Pending |
-| INFR-02 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Pending |
 
 **Coverage:**
