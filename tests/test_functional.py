@@ -5,6 +5,7 @@ Uses DeepSeek API (OpenAI-compatible) to test core LLM functionalities.
 
 import asyncio
 import json
+import os
 import time
 import traceback
 from datetime import datetime
@@ -14,9 +15,9 @@ import openai
 
 
 # === Configuration ===
-DEEPSEEK_API_KEY = "sk-7a9fb402bd2d4af4999ca8c4a1446bb0"
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
 
 class TestResult:
