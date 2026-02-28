@@ -21,7 +21,7 @@
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-02-28 |
 | 2. Backend Engine | 1/3 | In progress | - |
-| 3. Frontend | 1/3 | In progress | - |
+| 3. Frontend | 3/3 | Complete | 2026-03-01 |
 | 4. Report and Integration | 0/? | Not started | - |
 
 ---
@@ -70,7 +70,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Pinia store (SSE lifecycle) + routes + i18n + nav link
-- [ ] 03-02-PLAN.md — CogTestSessionView streaming dialogue + model card launch button
+- [x] 03-02-PLAN.md — CogTestSessionView streaming dialogue + model card launch button
 - [ ] 03-03-PLAN.md — CogTestListView session history list
 
 ### Phase 4: Report and Integration

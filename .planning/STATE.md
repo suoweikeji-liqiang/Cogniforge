@@ -8,7 +8,7 @@ progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 3 of 4 (Frontend)
-Plan: 2 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-01 — Completed Plan 03-01: Cog-Test Store + Routing + i18n
+Last activity: 2026-03-01 — Completed Plan 03-03: CogTestListView Session History
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -72,6 +72,8 @@ Recent decisions affecting current work:
 - TurnScheduler: round increments after Challenger finishes (Challenger closes each round)
 - Frontend SSE: EventSource uses addEventListener for named events (not onmessage) — backend sends named SSE events
 - Frontend store: eventSource variable is module-level non-reactive to avoid Vue reactivity overhead on DOM object
+- CogTestSessionView: redirects to /cog-test on mount if status idle and no sessionId — prevents blank view on direct navigation
+- CogTestSessionView: watch on store.messages with deep:true drives auto-scroll via nextTick
 
 ### Pending Todos
 
@@ -85,5 +87,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-01-PLAN.md — Cog-Test Store + Routing + i18n
+Stopped at: Completed 03-03-PLAN.md — CogTestListView Session History
 Resume file: None
