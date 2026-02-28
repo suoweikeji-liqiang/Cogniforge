@@ -20,7 +20,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-02-28 |
-| 2. Backend Engine | 0/? | Not started | - |
+| 2. Backend Engine | 0/3 | Not started | - |
 | 3. Frontend | 0/? | Not started | - |
 | 4. Report and Integration | 0/? | Not started | - |
 
@@ -50,7 +50,12 @@
   3. Stopping a session mid-stream (client disconnect or explicit stop call) returns a diagnostic summary object with current blind spots and score — no orphaned LLM calls continue after disconnect
   4. Each completed round persists a CogTestTurn row with blind spot classifications (gap / understood / unclear) and an understanding score
   5. Agent responses never contain a direct answer to the concept question — the Socratic contract is enforced at the output validation layer
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — ORM models + CogTestEngine skeleton (TurnScheduler, registry)
+- [ ] 02-02-PLAN.md — Engine run() loop: agent turns, SSE events, persistence, scoring, Socratic validation
+- [ ] 02-03-PLAN.md — HTTP endpoints: session CRUD + SSE stream endpoint
 
 ### Phase 3: Frontend
 **Goal**: A learner can launch a cognitive test from a model card, have a real-time streamed dialogue with both agents, stop at any time, and find all past sessions in the nav
