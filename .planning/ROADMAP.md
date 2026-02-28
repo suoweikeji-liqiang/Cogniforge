@@ -21,7 +21,7 @@
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-02-28 |
 | 2. Backend Engine | 1/3 | In progress | - |
-| 3. Frontend | 0/? | Not started | - |
+| 3. Frontend | 0/3 | Not started | - |
 | 4. Report and Integration | 0/? | Not started | - |
 
 ---
@@ -66,7 +66,12 @@ Plans:
   2. Agent tokens appear on screen as they stream, with Guide and Challenger turns visually distinct (different label or color)
   3. A "Stop and Diagnose" button is always visible during a session and produces an immediate summary when clicked
   4. The "Cognitive Tests" nav entry lists all past sessions with concept name, date, and final score
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Pinia store (SSE lifecycle) + routes + i18n + nav link
+- [ ] 03-02-PLAN.md — CogTestSessionView streaming dialogue + model card launch button
+- [ ] 03-03-PLAN.md — CogTestListView session history list
 
 ### Phase 4: Report and Integration
 **Goal**: A learner can export a full diagnostic report from any completed session, and blind spots discovered during testing automatically raise the review priority of the corresponding model card
