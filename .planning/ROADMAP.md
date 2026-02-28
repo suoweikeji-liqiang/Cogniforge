@@ -20,7 +20,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-02-28 |
-| 2. Backend Engine | 0/3 | Not started | - |
+| 2. Backend Engine | 1/3 | In progress | - |
 | 3. Frontend | 0/? | Not started | - |
 | 4. Report and Integration | 0/? | Not started | - |
 
@@ -53,7 +53,7 @@
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — ORM models + CogTestEngine skeleton (TurnScheduler, registry)
+- [x] 02-01-PLAN.md — ORM models + CogTestEngine skeleton (TurnScheduler, registry)
 - [ ] 02-02-PLAN.md — Engine run() loop: agent turns, SSE events, persistence, scoring, Socratic validation
 - [ ] 02-03-PLAN.md — HTTP endpoints: session CRUD + SSE stream endpoint
 

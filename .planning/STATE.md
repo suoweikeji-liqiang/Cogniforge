@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T14:58:24.143Z"
+last_updated: "2026-02-28T15:42:29Z"
 progress:
-  total_phases: 1
+  total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 10
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** 帮助学习者通过结构化的苏格拉底式对话，发现自己对概念的认知盲区和薄弱点
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Phase 2 — Backend Engine
 
 ## Current Position
 
-Phase: 1 of 4 (Foundation)
-Plan: 3 of ? in current phase
+Phase: 2 of 4 (Backend Engine)
+Plan: 1 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-28 — Completed Plan 03: Agent Prompts + Output Schema
+Last activity: 2026-02-28 — Completed Plan 02-01: ORM Models + CogTestEngine Skeleton
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - Agent output format: <analysis> delimiter tag (not pure JSON-mode) — allows natural dialogue text + structured JSON in one response
 - Agent temperatures: Guide=0.4 (consistent/warm), Challenger=0.6 (varied/creative)
 - Parser design: parse_agent_output never raises — returns AgentOutput with parse_success flag for safe caller handling
+- ORM schema: CogTestTurn.analysis_json stored as Text (not JSON column) — raw string before parsing
+- TurnScheduler: round increments after Challenger finishes (Challenger closes each round)
 
 ### Pending Todos
 
@@ -81,5 +83,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 01-03-PLAN.md — Agent Prompts + Output Schema
+Stopped at: Completed 02-01-PLAN.md — ORM Models + CogTestEngine Skeleton
 Resume file: None
