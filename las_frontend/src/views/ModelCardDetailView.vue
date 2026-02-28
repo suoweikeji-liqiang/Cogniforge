@@ -35,6 +35,11 @@
           <span>{{ t('modelCards.version') }}: v{{ card.version }}</span>
           <span>{{ t('problems.createdAt') }}: {{ formatDate(card.created_at) }}</span>
         </div>
+        <div class="cog-test-action">
+          <button class="btn btn-primary" @click="startCogTest">
+            {{ t('cogTest.startTest') }}
+          </button>
+        </div>
       </div>
 
       <!-- Evolution Timeline -->
@@ -67,12 +72,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import { useCogTestStore } from '@/stores/cogTest'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
+const cogTestStore = useCogTestStore()
+
+const startCogTest = async () => {
+  await cogTestStore.startSession(card.value.title)
+  router.push('/cog-test/session')
+}
 
 const card = ref<any>(null)
 const evolutionLogs = ref<any[]>([])
@@ -205,5 +218,11 @@ onMounted(fetchCard)
   text-align: center;
   padding: 2rem;
   color: var(--text-muted);
+}
+
+.cog-test-action {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 </style>
