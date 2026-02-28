@@ -29,7 +29,9 @@
     "register": "Register",
     "graph": "Knowledge Graph",
     "srsReview": "SRS Review",
-    "challenges": "Challenges"
+    "challenges": "Challenges",
+    "resources": "Resources",
+    "notes": "Notes"
   },
   "auth": {
     "login": "Login",
@@ -236,6 +238,29 @@
     "yourAnswer": "Type your answer...",
     "feedback": "AI Feedback",
     "noChallenges": "No challenges yet. Generate one to get started!"
+  },
+  "resources": {
+    "title": "Learning Resources",
+    "urlPlaceholder": "Enter a web or video link...",
+    "titlePlaceholder": "Title (optional)",
+    "webpage": "Webpage",
+    "video": "Video",
+    "all": "All",
+    "unread": "Unread",
+    "reading": "Reading",
+    "completed": "Completed",
+    "aiSummary": "AI Summary",
+    "interpret": "AI Interpret",
+    "noResources": "No resources yet. Add one to get started!"
+  },
+  "notes": {
+    "title": "Quick Notes",
+    "placeholder": "Write down your thoughts...",
+    "tagPlaceholder": "Add tag, press Enter",
+    "startRecording": "Voice Input",
+    "stopRecording": "Stop Recording",
+    "voiceNotSupported": "Your browser does not support speech recognition",
+    "noNotes": "No notes yet. Write your first thought!"
   },
   "settings": {
     "serverConfig": "Server Configuration",

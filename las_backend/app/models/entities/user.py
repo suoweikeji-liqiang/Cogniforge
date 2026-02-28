@@ -176,15 +176,13 @@ class Review(Base):
     user = relationship("User", back_populates="reviews")
 
 
-<<<<<<< HEAD
 class ReviewSchedule(Base):
-    """Spaced repetition schedule for model cards (SM-2 algorithm)"""
     __tablename__ = "review_schedules"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     model_card_id = Column(String(36), ForeignKey("model_cards.id"), nullable=False)
-    ease_factor = Column(Integer, default=2500)  # stored as int * 1000
+    ease_factor = Column(Integer, default=2500)
     interval_days = Column(Integer, default=1)
     repetitions = Column(Integer, default=0)
     next_review_at = Column(DateTime, nullable=False)
@@ -196,23 +194,52 @@ class ReviewSchedule(Base):
 
 
 class CognitiveChallenge(Base):
-    """Proactive cognitive challenges pushed to users"""
     __tablename__ = "cognitive_challenges"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     model_card_id = Column(String(36), ForeignKey("model_cards.id"))
-    challenge_type = Column(String(50))  # boundary_test, cross_card, socratic
+    challenge_type = Column(String(50))
     question = Column(Text, nullable=False)
     context = Column(JSON)
     user_answer = Column(Text)
     ai_feedback = Column(Text)
-    status = Column(String(20), default="pending")  # pending, answered, skipped
+    status = Column(String(20), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", backref="cognitive_challenges")
     model_card = relationship("ModelCard", backref="cognitive_challenges")
-=======
+
+
+class ResourceLink(Base):
+    __tablename__ = "resource_links"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    url = Column(Text, nullable=False)
+    title = Column(String(500))
+    link_type = Column(String(20), default="webpage")  # webpage, video
+    ai_summary = Column(Text)
+    status = Column(String(20), default="unread")  # unread, reading, completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", backref="resource_links")
+
+
+class QuickNote(Base):
+    __tablename__ = "quick_notes"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    source = Column(String(20), default="text")  # text, voice
+    tags = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", backref="quick_notes")
+
+
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
 
@@ -222,4 +249,3 @@ class PasswordResetToken(Base):
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
->>>>>>> main

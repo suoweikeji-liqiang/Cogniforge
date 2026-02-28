@@ -29,7 +29,9 @@
     "register": "注册",
     "graph": "知识图谱",
     "srsReview": "间隔复习",
-    "challenges": "认知挑战"
+    "challenges": "认知挑战",
+    "resources": "学习资源",
+    "notes": "随手记"
   },
   "auth": {
     "login": "登录",
@@ -236,6 +238,29 @@
     "yourAnswer": "输入你的答案...",
     "feedback": "AI 反馈",
     "noChallenges": "暂无挑战。生成一个开始吧！"
+  },
+  "resources": {
+    "title": "学习资源",
+    "urlPlaceholder": "输入网页或视频链接...",
+    "titlePlaceholder": "标题（可选）",
+    "webpage": "网页",
+    "video": "视频",
+    "all": "全部",
+    "unread": "未读",
+    "reading": "学习中",
+    "completed": "已完成",
+    "aiSummary": "AI 解读",
+    "interpret": "AI 解读",
+    "noResources": "暂无学习资源，添加一个开始吧！"
+  },
+  "notes": {
+    "title": "随手记",
+    "placeholder": "记录你的想法...",
+    "tagPlaceholder": "添加标签后回车",
+    "startRecording": "语音录入",
+    "stopRecording": "停止录音",
+    "voiceNotSupported": "您的浏览器不支持语音识别",
+    "noNotes": "暂无记录，写下你的第一个想法吧！"
   },
   "settings": {
     "serverConfig": "服务器配置",

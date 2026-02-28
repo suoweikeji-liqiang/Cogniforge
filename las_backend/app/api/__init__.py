@@ -7,6 +7,8 @@ from app.api.routes.password_reset import router as password_reset_router
 from app.api.routes.srs import router as srs_router
 from app.api.routes.statistics import router as statistics_router
 from app.api.routes.challenges import router as challenges_router
+from app.api.routes.resources import router as resources_router
+from app.api.routes.notes import router as notes_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -20,6 +22,8 @@ api_router.include_router(practice.router_reviews)
 api_router.include_router(srs_router)
 api_router.include_router(statistics_router)
 api_router.include_router(challenges_router)
+api_router.include_router(resources_router)
+api_router.include_router(notes_router)
 
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_llm_router)

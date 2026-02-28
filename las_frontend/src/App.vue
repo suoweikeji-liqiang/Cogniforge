@@ -12,6 +12,8 @@
         <router-link to="/knowledge-graph">{{ t('nav.graph') }}</router-link>
         <router-link to="/srs-review">{{ t('nav.srsReview') }}</router-link>
         <router-link to="/challenges">{{ t('nav.challenges') }}</router-link>
+        <router-link to="/resources">{{ t('nav.resources') }}</router-link>
+        <router-link to="/notes">{{ t('nav.notes') }}</router-link>
         <router-link to="/practice">{{ t('nav.practice') }}</router-link>
         <router-link to="/reviews">{{ t('nav.reviews') }}</router-link>
         <router-link v-if="authStore.user?.role === 'admin'" to="/admin">{{ t('nav.admin') }}</router-link>

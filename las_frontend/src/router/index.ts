@@ -95,6 +95,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/resources',
+      name: 'resources',
+      component: () => import('@/views/ResourcesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/notes',
+      name: 'notes',
+      component: () => import('@/views/NotesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/server-config',
       name: 'server-config',
       component: () => import('@/views/ServerConfigView.vue'),
