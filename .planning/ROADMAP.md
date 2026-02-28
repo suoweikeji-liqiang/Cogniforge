@@ -80,11 +80,12 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Clicking "Export Report" on a completed session downloads a Markdown file containing concept name, blind spot list, score trajectory, and improvement suggestions
   2. After a session ends, the model card's spaced repetition priority is visibly elevated in the review queue if blind spots were found
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
 - [x] 04-01-PLAN.md — Diagnostic report export (GET /sessions/{id}/report + frontend download buttons)
-- [ ] 04-02-PLAN.md — SRS priority elevation on blind spot discovery
+- [x] 04-02-PLAN.md — SRS priority elevation on blind spot discovery
+- [ ] 04-03-PLAN.md — Gap closure: wire SRS elevation into SSE stream completion path
 
 ---
 
