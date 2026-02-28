@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncGenerator
 import openai
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,6 +112,101 @@ class LLMService:
         except Exception as e:
             return f"Error generating response: {str(e)}"
     
+    async def stream_generate(
+        self,
+        messages: list[dict],
+        system_prompt: str = "",
+        provider_type: str | None = None,
+        model_id: str | None = None,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        async with AsyncSessionLocal() as db:
+            provider = await self._get_active_provider(db, provider_type)
+            if not provider:
+                yield "Error: No active LLM provider configured"
+                return
+
+            if not model_id:
+                default_model = await self._get_default_model(db, provider.id)
+                if default_model:
+                    model_id = default_model.model_id
+
+            fallbacks = {
+                "openai": "gpt-4o-mini",
+                "anthropic": "claude-3-5-sonnet-20241022",
+                "ollama": "llama2",
+            }
+            resolved_model = model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
+
+            if provider.provider_type == "openai":
+                async for token in self._stream_openai(messages, system_prompt, provider, resolved_model, temperature):
+                    yield token
+            elif provider.provider_type == "anthropic":
+                async for token in self._stream_anthropic(messages, system_prompt, provider, resolved_model, temperature):
+                    yield token
+            else:
+                yield f"Error: Streaming not supported for provider: {provider.provider_type}"
+
+    async def _stream_openai(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        provider,
+        model: str,
+        temperature: float,
+    ) -> AsyncGenerator[str, None]:
+        try:
+            client = openai.AsyncOpenAI(
+                api_key=provider.api_key,
+                base_url=provider.base_url or None,
+            )
+            all_messages = []
+            if system_prompt:
+                all_messages.append({"role": "system", "content": system_prompt})
+            all_messages.extend(messages)
+
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=all_messages,
+                temperature=temperature,
+                stream=True,
+            )
+            async for chunk in stream:
+                content = chunk.choices[0].delta.content if chunk.choices else None
+                if content is not None:
+                    yield content
+        except Exception as e:
+            yield f"Error: {str(e)}"
+
+    async def _stream_anthropic(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        provider,
+        model: str,
+        temperature: float,
+    ) -> AsyncGenerator[str, None]:
+        try:
+            from anthropic import AsyncAnthropic
+            client = AsyncAnthropic(
+                api_key=provider.api_key,
+                base_url=provider.base_url or None,
+            )
+            kwargs: dict = {
+                "model": model,
+                "max_tokens": 2048,
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if system_prompt:
+                kwargs["system"] = system_prompt
+
+            async with client.messages.stream(**kwargs) as stream:
+                async for text in stream.text_stream:
+                    yield text
+        except Exception as e:
+            yield f"Error: {str(e)}"
+
     async def generate_with_context(
         self,
         prompt: str,
