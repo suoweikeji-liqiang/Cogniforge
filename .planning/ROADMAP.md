@@ -71,7 +71,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Pinia store (SSE lifecycle) + routes + i18n + nav link
 - [x] 03-02-PLAN.md — CogTestSessionView streaming dialogue + model card launch button
-- [ ] 03-03-PLAN.md — CogTestListView session history list
+- [x] 03-03-PLAN.md — CogTestListView session history list
 
 ### Phase 4: Report and Integration
 **Goal**: A learner can export a full diagnostic report from any completed session, and blind spots discovered during testing automatically raise the review priority of the corresponding model card

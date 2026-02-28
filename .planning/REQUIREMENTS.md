@@ -11,7 +11,7 @@
 - [ ] **SESS-02**: Agent回复通过SSE实时流式输出到前端，逐token显示
 - [ ] **SESS-03**: 每轮对话基于完整历史上下文构建，Agent能引用前文内容
 - [ ] **SESS-04**: 用户可随时停止测试，立即获得当前状态的认知诊断摘要
-- [ ] **SESS-05**: 对话记录持久化到数据库，用户可查看历史会话列表
+- [x] **SESS-05**: 对话记录持久化到数据库，用户可查看历史会话列表
 - [ ] **SESS-06**: 学习助手导航栏新增"认知测试"入口，可查看所有测试会话
 
 ### Agent（引擎）
@@ -74,7 +74,7 @@
 | SESS-02 | Phase 2 | Pending |
 | SESS-03 | Phase 2 | Pending |
 | SESS-04 | Phase 2 | Pending |
-| SESS-05 | Phase 3 | Pending |
+| SESS-05 | Phase 3 | Complete |
 | SESS-06 | Phase 3 | Pending |
 | AGNT-01 | Phase 2 | Pending |
 | AGNT-02 | Phase 2 | Pending |
