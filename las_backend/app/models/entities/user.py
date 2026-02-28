@@ -257,12 +257,14 @@ class CogTestSession(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     concept = Column(String, nullable=False)
+    model_card_id = Column(String(36), ForeignKey("model_cards.id"), nullable=True)
     status = Column(String(20), default="active")   # active | stopped | completed
     agent_mode = Column(String(20), default="guide_challenger")
     max_rounds = Column(Integer, default=3)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    model_card = relationship("ModelCard", backref="cog_test_sessions")
     turns = relationship("CogTestTurn", back_populates="session", cascade="all, delete-orphan")
     blind_spots = relationship("CogTestBlindSpot", back_populates="session", cascade="all, delete-orphan")
     snapshots = relationship("CogTestSnapshot", back_populates="session", cascade="all, delete-orphan")
