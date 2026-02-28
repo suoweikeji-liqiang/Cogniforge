@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T16:35:29.109Z"
+last_updated: "2026-03-01T17:09:27.000Z"
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 9
-  completed_plans: 7
+  total_phases: 4
+  completed_phases: 3
+  total_plans: 10
+  completed_plans: 8
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** 帮助学习者通过结构化的苏格拉底式对话，发现自己对概念的认知盲区和薄弱点
-**Current focus:** Phase 3 — Frontend
+**Current focus:** Phase 4 — Report and Integration
 
 ## Current Position
 
-Phase: 3 of 4 (Frontend)
-Plan: 3 of 3 in current phase
+Phase: 4 of 4 (Report and Integration)
+Plan: 1 of 2 in current phase
 Status: In progress
-Last activity: 2026-03-01 — Completed Plan 03-03: CogTestListView Session History
+Last activity: 2026-03-01 — Completed Plan 04-01: Diagnostic Report Export
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -73,7 +73,9 @@ Recent decisions affecting current work:
 - Frontend SSE: EventSource uses addEventListener for named events (not onmessage) — backend sends named SSE events
 - Frontend store: eventSource variable is module-level non-reactive to avoid Vue reactivity overhead on DOM object
 - CogTestSessionView: redirects to /cog-test on mount if status idle and no sessionId — prevents blank view on direct navigation
-- CogTestSessionView: watch on store.messages with deep:true drives auto-scroll via nextTick
+- Report endpoint: in-memory Response(content=md_string) not FileResponse — no disk write needed for small text reports
+- Filename sanitized with re.sub([^\w\-]) to handle non-ASCII concept names in Content-Disposition header
+- Export button shown for both completed and stopped sessions (not just completed) — consistent with plan success criteria
 
 ### Pending Todos
 
@@ -81,11 +83,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- **Phase 4 flag:** Spaced repetition integration surface not yet inspected — may need a brief research spike before REPT-02 implementation.
-- **Phase 4 flag:** Spaced repetition integration surface not yet inspected — may need a brief research spike before REPT-02 implementation.
+None.
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-03-PLAN.md — CogTestListView Session History
+Stopped at: Completed 04-01-PLAN.md — Diagnostic Report Export
 Resume file: None

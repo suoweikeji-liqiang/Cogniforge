@@ -22,7 +22,7 @@
 | 1. Foundation | 3/3 | Complete   | 2026-02-28 |
 | 2. Backend Engine | 1/3 | In progress | - |
 | 3. Frontend | 3/3 | Complete | 2026-03-01 |
-| 4. Report and Integration | 0/? | Not started | - |
+| 4. Report and Integration | 1/2 | In progress | - |
 
 ---
 
@@ -80,7 +80,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Clicking "Export Report" on a completed session downloads a Markdown file containing concept name, blind spot list, score trajectory, and improvement suggestions
   2. After a session ends, the model card's spaced repetition priority is visibly elevated in the review queue if blind spots were found
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 04-01-PLAN.md — Diagnostic report export (GET /sessions/{id}/report + frontend download buttons)
+- [ ] 04-02-PLAN.md — SRS priority elevation on blind spot discovery
 
 ---
 
