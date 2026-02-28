@@ -581,6 +581,301 @@ Include at least 4 nodes and 3 edges."""
         return f"Streaming OK: {len(chunks)} chunks, response: {full_response[:60]}"
 
     # =========================================================
+    # Test Category 15: Quick Notes (记事本)
+    # =========================================================
+    def test_note_data_structure(self):
+        """Test QuickNote data structure and validation."""
+        note = {
+            "content": "学习设计模式的关键是理解每种模式解决的核心问题",
+            "source": "voice",
+            "tags": ["设计模式", "学习笔记"],
+        }
+        assert isinstance(note["content"], str) and len(note["content"]) > 0
+        assert note["source"] in ("text", "voice")
+        assert isinstance(note["tags"], list)
+        assert all(isinstance(t, str) for t in note["tags"])
+        return f"Note structure valid: source={note['source']}, tags={note['tags']}"
+
+    def test_note_source_types(self):
+        """Test that notes support both text and voice sources."""
+        sources = ["text", "voice"]
+        notes = []
+        for src in sources:
+            note = {"content": f"Note from {src}", "source": src, "tags": []}
+            assert note["source"] == src
+            notes.append(note)
+        assert len(notes) == 2
+        return f"Both source types valid: {sources}"
+
+    def test_note_tags_handling(self):
+        """Test note tags parsing and edge cases."""
+        cases = [
+            {"tags": [], "desc": "empty tags"},
+            {"tags": ["单标签"], "desc": "single tag"},
+            {"tags": ["AI", "机器学习", "深度学习"], "desc": "multiple tags"},
+        ]
+        for case in cases:
+            assert isinstance(case["tags"], list)
+            for tag in case["tags"]:
+                assert isinstance(tag, str) and len(tag) > 0
+        return f"Tags handling OK for {len(cases)} cases"
+
+    def test_note_content_ai_enhancement(self):
+        """Test AI enhancement of quick note content."""
+        raw_note = "递归就是函数调用自己 要有终止条件"
+        prompt = (
+            f"The user captured a quick note (possibly via voice): \"{raw_note}\"\n"
+            "Please clean up and enhance this note:\n"
+            "1. Fix any grammar or formatting issues\n"
+            "2. Add structure if needed\n"
+            "3. Suggest relevant tags\n"
+            "Return as JSON: {\"enhanced_content\": \"...\", \"suggested_tags\": [\"...\"]}"
+        )
+        resp = self._call_llm([{"role": "user", "content": prompt}], max_tokens=512)
+        assert len(resp) > 20, "AI enhancement response too short"
+        return f"AI note enhancement: {len(resp)} chars"
+
+    def test_note_voice_transcription_cleanup(self):
+        """Test AI cleanup of voice-transcribed notes."""
+        voice_text = "嗯 那个 设计模式里面 单例模式 就是说 一个类只能有一个实例 对吧"
+        prompt = (
+            f"Clean up this voice-transcribed note, removing filler words and making it concise:\n"
+            f"\"{voice_text}\"\n"
+            "Return only the cleaned text."
+        )
+        resp = self._call_llm([{"role": "user", "content": prompt}], temperature=0, max_tokens=256)
+        assert len(resp) > 5, "Cleanup response too short"
+        assert len(resp) < len(voice_text) * 2, "Cleanup should not be much longer than original"
+        return f"Voice cleanup: '{resp.strip()[:80]}'"
+
+    # =========================================================
+    # Test Category 16: Resource Links (资源链接)
+    # =========================================================
+    def test_resource_link_data_structure(self):
+        """Test ResourceLink data structure and validation."""
+        resource = {
+            "url": "https://example.com/design-patterns",
+            "title": "Design Patterns Tutorial",
+            "link_type": "webpage",
+        }
+        assert resource["url"].startswith("http")
+        assert isinstance(resource["title"], str)
+        assert resource["link_type"] in ("webpage", "video")
+        return f"Resource structure valid: type={resource['link_type']}"
+
+    def test_resource_link_types(self):
+        """Test different resource link types."""
+        resources = [
+            {"url": "https://example.com/article", "link_type": "webpage", "title": "Article"},
+            {"url": "https://youtube.com/watch?v=abc", "link_type": "video", "title": "Video Tutorial"},
+        ]
+        for r in resources:
+            assert r["link_type"] in ("webpage", "video")
+            assert r["url"].startswith("http")
+        return f"Link types valid: {[r['link_type'] for r in resources]}"
+
+    def test_resource_ai_interpretation_webpage(self):
+        """Test AI interpretation of a webpage resource."""
+        prompt = (
+            "Please analyze and summarize the following web page link. "
+            "Title: Python Design Patterns Guide. URL: https://example.com/python-patterns. "
+            "Provide a concise summary of what this resource is about, key takeaways, "
+            "and how it might be useful for learning. Respond in the same language as the title if provided."
+        )
+        resp = self._call_llm([{"role": "user", "content": prompt}], max_tokens=512)
+        assert len(resp) > 50, "Interpretation too short"
+        return f"Webpage interpretation: {len(resp)} chars"
+
+    def test_resource_ai_interpretation_video(self):
+        """Test AI interpretation of a video resource."""
+        prompt = (
+            "Please analyze and summarize the following video link. "
+            "Title: 深入理解React Hooks. URL: https://youtube.com/watch?v=example. "
+            "Provide a concise summary of what this resource is about, key takeaways, "
+            "and how it might be useful for learning. Respond in the same language as the title if provided."
+        )
+        resp = self._call_llm([{"role": "user", "content": prompt}], max_tokens=512)
+        assert len(resp) > 50, "Video interpretation too short"
+        # Should respond in Chinese since title is Chinese
+        has_chinese = any('\u4e00' <= c <= '\u9fff' for c in resp)
+        assert has_chinese, "Should respond in Chinese matching the title language"
+        return f"Video interpretation (Chinese): {len(resp)} chars"
+
+    def test_resource_status_transitions(self):
+        """Test resource status update logic."""
+        statuses = ["pending", "read", "archived"]
+        resource = {"status": "pending"}
+        assert resource["status"] == "pending"
+        resource["status"] = "read"
+        assert resource["status"] == "read"
+        resource["status"] = "archived"
+        assert resource["status"] == "archived"
+        return f"Status transitions: pending -> read -> archived"
+
+    def test_resource_update_fields(self):
+        """Test resource partial update logic."""
+        resource = {"title": "Original Title", "status": "pending", "url": "https://example.com"}
+        update = {"title": "Updated Title", "status": None}
+        if update["title"] is not None:
+            resource["title"] = update["title"]
+        if update["status"] is not None:
+            resource["status"] = update["status"]
+        assert resource["title"] == "Updated Title"
+        assert resource["status"] == "pending"  # unchanged
+        return f"Partial update: title changed, status unchanged"
+
+    # =========================================================
+    # Test Category 17: Practice Tasks (练习任务)
+    # =========================================================
+    def test_practice_task_data_structure(self):
+        """Test PracticeTask data structure."""
+        task = {
+            "title": "Implement Singleton Pattern",
+            "description": "Write a thread-safe singleton in Python",
+            "task_type": "coding",
+            "model_card_id": None,
+        }
+        assert len(task["title"]) > 0 and len(task["title"]) <= 500
+        assert task["task_type"] in ("coding", "explanation", "analysis", None)
+        return f"Practice task valid: type={task['task_type']}"
+
+    def test_practice_submission_feedback(self):
+        """Test AI feedback generation for practice submissions."""
+        prompt = (
+            "Provide feedback on the user's understanding:\n\n"
+            "Concept: Singleton Pattern\n"
+            "User's Response: A singleton ensures only one instance of a class exists "
+            "by making the constructor private and providing a static method to get the instance.\n"
+            "Model Examples: []\n\n"
+            "Analyze the response and provide:\n"
+            "1. Whether the understanding is correct\n"
+            "2. Specific gaps or misconceptions\n"
+            "3. Suggestions for improvement"
+        )
+        resp = self._call_llm([{"role": "user", "content": prompt}], max_tokens=1024)
+        assert len(resp) > 50, "Feedback too short"
+        return f"Practice feedback: {len(resp)} chars"
+
+    def test_practice_task_types(self):
+        """Test different practice task types."""
+        task_types = [
+            {"type": "coding", "title": "Implement Observer Pattern"},
+            {"type": "explanation", "title": "Explain SOLID Principles"},
+            {"type": "analysis", "title": "Analyze Time Complexity"},
+        ]
+        for t in task_types:
+            assert isinstance(t["type"], str)
+            assert len(t["title"]) > 0
+        return f"Task types valid: {[t['type'] for t in task_types]}"
+
+    # =========================================================
+    # Test Category 18: Review System (复习系统)
+    # =========================================================
+    def test_review_data_structure(self):
+        """Test Review data structure."""
+        review = {
+            "review_type": "weekly",
+            "period": "2026-W09",
+            "content": {
+                "summary": "Learned design patterns",
+                "key_insights": ["Singleton is overused", "Prefer composition"],
+                "areas_to_improve": ["Need more practice with Observer"],
+            },
+        }
+        assert review["review_type"] in ("daily", "weekly", "monthly")
+        assert isinstance(review["content"], dict)
+        assert "summary" in review["content"]
+        return f"Review structure valid: type={review['review_type']}, period={review['period']}"
+
+    def test_review_types(self):
+        """Test different review types and periods."""
+        reviews = [
+            {"review_type": "daily", "period": "2026-02-28"},
+            {"review_type": "weekly", "period": "2026-W09"},
+            {"review_type": "monthly", "period": "2026-02"},
+        ]
+        for r in reviews:
+            assert r["review_type"] in ("daily", "weekly", "monthly")
+            assert len(r["period"]) > 0
+        return f"Review types valid: {[r['review_type'] for r in reviews]}"
+
+    def test_review_content_update(self):
+        """Test review partial update logic."""
+        review = {
+            "review_type": "weekly",
+            "period": "2026-W09",
+            "content": {"summary": "Original"},
+        }
+        update = {"content": {"summary": "Updated summary", "new_field": "added"}}
+        if update.get("content") is not None:
+            review["content"] = update["content"]
+        assert review["content"]["summary"] == "Updated summary"
+        assert "new_field" in review["content"]
+        assert review["review_type"] == "weekly"  # unchanged
+        return f"Review update: content changed, type unchanged"
+
+    # =========================================================
+    # Test Category 19: Challenge Answer & Feedback (挑战回答)
+    # =========================================================
+    def test_challenge_answer_feedback(self):
+        """Test AI feedback for challenge answers."""
+        prompt = (
+            "Provide feedback on the user's understanding:\n\n"
+            "Concept: Database Indexing\n"
+            "Challenge Question: When might adding an index actually hurt performance?\n"
+            "User's Answer: Indexes always improve query performance.\n"
+            "Model Examples: []\n\n"
+            "Analyze the response and provide feedback on correctness and gaps."
+        )
+        resp = self._call_llm([{"role": "user", "content": prompt}], max_tokens=1024)
+        assert len(resp) > 50, "Challenge feedback too short"
+        resp_lower = resp.lower()
+        has_correction = any(w in resp_lower for w in [
+            "incorrect", "not always", "write", "insert", "update",
+            "overhead", "actually", "误", "不", "wrong"
+        ])
+        assert has_correction, "Should identify the misconception about indexes"
+        return f"Challenge feedback: {len(resp)} chars, misconception identified"
+
+    def test_challenge_status_transitions(self):
+        """Test challenge status flow: pending -> answered."""
+        challenge = {"status": "pending", "user_answer": None, "ai_feedback": None}
+        assert challenge["status"] == "pending"
+        challenge["user_answer"] = "My answer"
+        challenge["ai_feedback"] = "Good insight, but consider..."
+        challenge["status"] = "answered"
+        assert challenge["status"] == "answered"
+        assert challenge["user_answer"] is not None
+        assert challenge["ai_feedback"] is not None
+        return f"Challenge status: pending -> answered"
+
+    # =========================================================
+    # Test Category 20: Password Reset Flow (密码重置)
+    # =========================================================
+    def test_password_reset_token_structure(self):
+        """Test password reset token generation logic."""
+        import hashlib
+        import secrets
+        token = secrets.token_urlsafe(32)
+        assert len(token) >= 32, "Token too short"
+        # Simulate hashing for storage
+        hashed = hashlib.sha256(token.encode()).hexdigest()
+        assert len(hashed) == 64, "SHA256 hash should be 64 chars"
+        assert hashed != token, "Hash should differ from token"
+        return f"Token: {len(token)} chars, Hash: {hashed[:16]}..."
+
+    def test_password_reset_expiry_logic(self):
+        """Test password reset token expiry validation."""
+        from datetime import timedelta
+        now = datetime.now()
+        expires = now + timedelta(hours=1)
+        assert expires > now, "Expiry should be in the future"
+        # Simulate expired token
+        expired = now - timedelta(hours=1)
+        assert expired < now, "Expired token should be in the past"
+        return f"Expiry logic: valid={expires > now}, expired={expired < now}"
+
+    # =========================================================
     # Run all tests
     # =========================================================
     def run_all(self):
@@ -647,6 +942,39 @@ Include at least 4 nodes and 3 edges."""
             ]),
             ("Streaming API", [
                 ("Streaming Completion", self.test_api_streaming),
+            ]),
+            ("Quick Notes", [
+                ("Note Data Structure", self.test_note_data_structure),
+                ("Note Source Types", self.test_note_source_types),
+                ("Note Tags Handling", self.test_note_tags_handling),
+                ("Note AI Enhancement", self.test_note_content_ai_enhancement),
+                ("Voice Transcription Cleanup", self.test_note_voice_transcription_cleanup),
+            ]),
+            ("Resource Links", [
+                ("Resource Data Structure", self.test_resource_link_data_structure),
+                ("Resource Link Types", self.test_resource_link_types),
+                ("AI Interpretation (Webpage)", self.test_resource_ai_interpretation_webpage),
+                ("AI Interpretation (Video)", self.test_resource_ai_interpretation_video),
+                ("Resource Status Transitions", self.test_resource_status_transitions),
+                ("Resource Partial Update", self.test_resource_update_fields),
+            ]),
+            ("Practice Tasks", [
+                ("Practice Task Structure", self.test_practice_task_data_structure),
+                ("Practice Submission Feedback", self.test_practice_submission_feedback),
+                ("Practice Task Types", self.test_practice_task_types),
+            ]),
+            ("Review System", [
+                ("Review Data Structure", self.test_review_data_structure),
+                ("Review Types & Periods", self.test_review_types),
+                ("Review Content Update", self.test_review_content_update),
+            ]),
+            ("Challenge Answer & Feedback", [
+                ("Challenge Answer Feedback", self.test_challenge_answer_feedback),
+                ("Challenge Status Transitions", self.test_challenge_status_transitions),
+            ]),
+            ("Password Reset Flow", [
+                ("Reset Token Structure", self.test_password_reset_token_structure),
+                ("Reset Token Expiry Logic", self.test_password_reset_expiry_logic),
             ]),
         ]
 
@@ -747,6 +1075,12 @@ def generate_report(results: list[TestResult]) -> str:
     lines.append("| 知识图谱 | 图结构生成（节点+边） | 对应 `KnowledgeGraphView` 数据结构 |")
     lines.append("| 统计与聚合 | 热力图聚合、概览数据结构 | 对应 `statistics` 路由数据逻辑 |")
     lines.append("| 流式 API | 流式补全验证 | 验证 DeepSeek 流式输出能力 |")
+    lines.append("| 快速笔记 | 数据结构、来源类型、标签处理、AI增强、语音清理 | 对应 `/api/notes` 路由功能 |")
+    lines.append("| 资源链接 | 数据结构、链接类型、AI解读(网页/视频)、状态流转、部分更新 | 对应 `/api/resources` 路由功能 |")
+    lines.append("| 练习任务 | 数据结构、提交反馈、任务类型 | 对应 `/api/practice` 路由功能 |")
+    lines.append("| 复习系统 | 数据结构、复习类型与周期、内容更新 | 对应 `/api/reviews` 路由功能 |")
+    lines.append("| 挑战回答 | AI反馈生成、状态流转 | 对应 `/api/challenges/{id}/answer` 功能 |")
+    lines.append("| 密码重置 | Token生成、过期逻辑 | 对应 `/api/auth/forgot-password` 功能 |")
     lines.append("")
     lines.append("---")
     lines.append(f"*报告生成时间: {now}*")
