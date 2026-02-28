@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-28T15:42:29Z"
+last_updated: "2026-03-01T00:00:00Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 10
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** 帮助学习者通过结构化的苏格拉底式对话，发现自己对概念的认知盲区和薄弱点
-**Current focus:** Phase 2 — Backend Engine
+**Current focus:** Phase 3 — Frontend
 
 ## Current Position
 
-Phase: 2 of 4 (Backend Engine)
-Plan: 1 of 3 in current phase
+Phase: 3 of 4 (Frontend)
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-28 — Completed Plan 02-01: ORM Models + CogTestEngine Skeleton
+Last activity: 2026-03-01 — Completed Plan 03-01: Cog-Test Store + Routing + i18n
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -70,6 +70,8 @@ Recent decisions affecting current work:
 - Parser design: parse_agent_output never raises — returns AgentOutput with parse_success flag for safe caller handling
 - ORM schema: CogTestTurn.analysis_json stored as Text (not JSON column) — raw string before parsing
 - TurnScheduler: round increments after Challenger finishes (Challenger closes each round)
+- Frontend SSE: EventSource uses addEventListener for named events (not onmessage) — backend sends named SSE events
+- Frontend store: eventSource variable is module-level non-reactive to avoid Vue reactivity overhead on DOM object
 
 ### Pending Todos
 
@@ -82,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Completed 02-01-PLAN.md — ORM Models + CogTestEngine Skeleton
+Last session: 2026-03-01
+Stopped at: Completed 03-01-PLAN.md — Cog-Test Store + Routing + i18n
 Resume file: None
