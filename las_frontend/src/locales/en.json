@@ -31,7 +31,8 @@
     "srsReview": "SRS Review",
     "challenges": "Challenges",
     "resources": "Resources",
-    "notes": "Notes"
+    "notes": "Notes",
+    "cogTest": "Cognitive Tests"
   },
   "auth": {
     "login": "Login",
@@ -267,5 +268,23 @@
     "serverUrl": "Server URL",
     "save": "Save",
     "saved": "Settings saved!"
+  },
+  "cogTest": {
+    "startTest": "Start Cognitive Test",
+    "stopAndDiagnose": "Stop and Diagnose",
+    "send": "Send",
+    "guide": "Guide",
+    "challenger": "Challenger",
+    "you": "You",
+    "sessionComplete": "Session complete",
+    "history": "Test History",
+    "concept": "Concept",
+    "date": "Date",
+    "status": "Status",
+    "noSessions": "No cognitive tests yet",
+    "round": "Round",
+    "connecting": "Connecting...",
+    "inputPlaceholder": "Type your response...",
+    "score": "Score"
   }
 }

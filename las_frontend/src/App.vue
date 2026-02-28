@@ -16,6 +16,7 @@
         <router-link to="/notes">{{ t('nav.notes') }}</router-link>
         <router-link to="/practice">{{ t('nav.practice') }}</router-link>
         <router-link to="/reviews">{{ t('nav.reviews') }}</router-link>
+        <router-link to="/cog-test">{{ t('nav.cogTest') }}</router-link>
         <router-link v-if="authStore.user?.role === 'admin'" to="/admin">{{ t('nav.admin') }}</router-link>
         <button @click="logout">{{ t('nav.logout') }}</button>
       </div>

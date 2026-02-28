@@ -31,7 +31,8 @@
     "srsReview": "间隔复习",
     "challenges": "认知挑战",
     "resources": "学习资源",
-    "notes": "随手记"
+    "notes": "随手记",
+    "cogTest": "认知测试"
   },
   "auth": {
     "login": "登录",
@@ -267,5 +268,23 @@
     "serverUrl": "服务器地址",
     "save": "保存",
     "saved": "设置已保存！"
+  },
+  "cogTest": {
+    "startTest": "发起认知测试",
+    "stopAndDiagnose": "停止并诊断",
+    "send": "发送",
+    "guide": "引导者",
+    "challenger": "质疑者",
+    "you": "你",
+    "sessionComplete": "会话已完成",
+    "history": "测试历史",
+    "concept": "概念",
+    "date": "日期",
+    "status": "状态",
+    "noSessions": "暂无认知测试记录",
+    "round": "轮次",
+    "connecting": "连接中...",
+    "inputPlaceholder": "输入你的回答...",
+    "score": "分数"
   }
 }

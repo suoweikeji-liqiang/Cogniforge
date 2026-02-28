@@ -107,6 +107,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/cog-test',
+      name: 'cog-test-list',
+      component: () => import('@/views/CogTestListView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/cog-test/session',
+      name: 'cog-test-session',
+      component: () => import('@/views/CogTestSessionView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/server-config',
       name: 'server-config',
       component: () => import('@/views/ServerConfigView.vue'),
