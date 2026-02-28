@@ -58,6 +58,10 @@ class LearningPathStep(BaseModel):
     resources: List[str] = []
 
 
+class LearningPathProgressUpdate(BaseModel):
+    current_step: int
+
+
 class LearningPathResponse(BaseModel):
     id: UUID
     problem_id: UUID

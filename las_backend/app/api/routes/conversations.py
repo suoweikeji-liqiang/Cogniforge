@@ -74,6 +74,31 @@ async def get_conversation(
     return conv
 
 
+@router.put("/{conv_id}", response_model=ConversationResponse)
+async def update_conversation(
+    conv_id: UUID,
+    conv_data: ConversationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conv_id,
+            Conversation.user_id == current_user.id
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conv_data.title is not None:
+        conv.title = conv_data.title
+
+    await db.commit()
+    await db.refresh(conv)
+    return conv
+
+
 @router.delete("/{conv_id}", status_code=204)
 async def delete_conversation(
     conv_id: UUID,
@@ -136,14 +161,21 @@ async def chat(
     
     messages = conv.messages or []
     messages.append({"role": "user", "content": chat_data.message})
-    
+
     response_content = await model_os_service.generate_with_context(
         prompt=chat_data.message,
         context=messages,
     )
-    
+
     messages.append({"role": "assistant", "content": response_content})
     conv.messages = messages
+
+    db.add(ConversationMessage(
+        conversation_id=str(conv.id), role="user", content=chat_data.message,
+    ))
+    db.add(ConversationMessage(
+        conversation_id=str(conv.id), role="assistant", content=response_content,
+    ))
     
     metadata = {}
     

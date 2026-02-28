@@ -50,6 +50,12 @@ class ReviewCreate(ReviewBase):
     content: dict
 
 
+class ReviewUpdate(BaseModel):
+    review_type: Optional[str] = None
+    period: Optional[str] = None
+    content: Optional[dict] = None
+
+
 class ReviewResponse(ReviewBase):
     id: UUID
     user_id: UUID

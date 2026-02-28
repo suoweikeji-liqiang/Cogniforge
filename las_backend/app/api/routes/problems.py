@@ -13,6 +13,7 @@ from app.schemas.problem import (
     ProblemResponseCreate,
     ProblemResponseResponse,
     LearningPathResponse,
+    LearningPathProgressUpdate,
 )
 from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
@@ -211,4 +212,37 @@ async def get_learning_path(
     if not learning_path:
         raise HTTPException(status_code=404, detail="Learning path not found")
 
+    return learning_path
+
+
+@router.put("/{problem_id}/learning-path", response_model=LearningPathResponse)
+async def update_learning_path_progress(
+    problem_id: UUID,
+    data: LearningPathProgressUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == problem_id,
+            Problem.user_id == current_user.id
+        )
+    )
+    if not problem_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    result = await db.execute(
+        select(LearningPath).where(LearningPath.problem_id == problem_id)
+    )
+    learning_path = result.scalar_one_or_none()
+    if not learning_path:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    total_steps = len(learning_path.path_data) if learning_path.path_data else 0
+    if data.current_step < 0 or data.current_step > total_steps:
+        raise HTTPException(status_code=400, detail="Invalid step number")
+
+    learning_path.current_step = data.current_step
+    await db.commit()
+    await db.refresh(learning_path)
     return learning_path

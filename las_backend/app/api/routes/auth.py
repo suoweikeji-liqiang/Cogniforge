@@ -18,6 +18,9 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+# In-memory token blacklist for logout
+_token_blacklist: set = set()
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -30,7 +33,7 @@ async def get_current_user(
     )
     
     payload = decode_access_token(token)
-    if payload is None:
+    if payload is None or token in _token_blacklist:
         raise credentials_exception
     
     user_id: str = payload.get("sub")
@@ -148,3 +151,25 @@ async def update_current_user(
     await db.refresh(current_user)
 
     return current_user
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(
+    current_user: User = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
+):
+    _token_blacklist.add(token)
+    new_token = create_access_token(
+        data={"sub": str(current_user.id)},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"access_token": new_token, "token_type": "bearer"}
+
+
+@router.post("/logout")
+async def logout(
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
+):
+    _token_blacklist.add(token)
+    return {"message": "Logged out successfully"}

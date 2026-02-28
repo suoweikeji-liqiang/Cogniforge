@@ -17,6 +17,7 @@ from app.schemas.practice import (
     PracticeSubmissionCreate,
     PracticeSubmissionResponse,
     ReviewCreate,
+    ReviewUpdate,
     ReviewResponse,
 )
 from app.api.routes.auth import get_current_user
@@ -58,6 +59,26 @@ async def list_practice_tasks(
     )
     tasks = result.scalars().all()
     return tasks
+
+
+@router.delete("/tasks/{task_id}", status_code=204)
+async def delete_practice_task(
+    task_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(PracticeTask).where(
+            PracticeTask.id == task_id,
+            PracticeTask.user_id == current_user.id
+        )
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Practice task not found")
+    await db.delete(task)
+    await db.commit()
+    return None
 
 
 @router.post("/submissions", response_model=PracticeSubmissionResponse, status_code=201)
@@ -106,6 +127,24 @@ async def list_submissions(
     )
     submissions = result.scalars().all()
     return submissions
+
+
+@router.get("/submissions/{submission_id}", response_model=PracticeSubmissionResponse)
+async def get_submission(
+    submission_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(PracticeSubmission).where(
+            PracticeSubmission.id == submission_id,
+            PracticeSubmission.user_id == current_user.id
+        )
+    )
+    submission = result.scalar_one_or_none()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return submission
 
 
 router_reviews = APIRouter(prefix="/reviews", tags=["Reviews"])
@@ -161,5 +200,48 @@ async def get_review(
     
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    
+
     return review
+
+
+@router_reviews.put("/{review_id}", response_model=ReviewResponse)
+async def update_review(
+    review_id: UUID,
+    review_data: ReviewUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Review).where(Review.id == review_id, Review.user_id == current_user.id)
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    if review_data.review_type is not None:
+        review.review_type = review_data.review_type
+    if review_data.period is not None:
+        review.period = review_data.period
+    if review_data.content is not None:
+        review.content = review_data.content
+
+    await db.commit()
+    await db.refresh(review)
+    return review
+
+
+@router_reviews.delete("/{review_id}", status_code=204)
+async def delete_review(
+    review_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Review).where(Review.id == review_id, Review.user_id == current_user.id)
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    await db.delete(review)
+    await db.commit()
+    return None

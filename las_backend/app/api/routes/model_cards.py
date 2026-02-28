@@ -45,7 +45,16 @@ async def create_model_card(
     db.add(db_card)
     await db.commit()
     await db.refresh(db_card)
-    
+
+    await model_os_service.log_evolution(
+        db=db,
+        model_id=str(db_card.id),
+        user_id=str(current_user.id),
+        action="create",
+        reason="Model card created",
+        snapshot={"title": db_card.title, "examples": db_card.examples, "version": 1},
+    )
+
     return db_card
 
 
@@ -196,10 +205,19 @@ async def generate_counter_examples(
     
     card.counter_examples = counter_examples
     card.version += 1
-    
+
+    await model_os_service.log_evolution(
+        db=db,
+        model_id=str(card.id),
+        user_id=str(current_user.id),
+        action="counter_examples",
+        reason="Counter examples generated",
+        snapshot={"counter_examples": counter_examples, "version": card.version},
+    )
+
     await db.commit()
     await db.refresh(card)
-    
+
     return {"counter_examples": counter_examples}
 
 
@@ -233,10 +251,19 @@ async def suggest_migration(
     if not card.migration_attempts:
         card.migration_attempts = []
     card.migration_attempts.append(migration_record)
-    
+
+    await model_os_service.log_evolution(
+        db=db,
+        model_id=str(card.id),
+        user_id=str(current_user.id),
+        action="migration",
+        reason=f"Cross-domain migration to {input_data.target_domain}",
+        snapshot={"migration": migration_record},
+    )
+
     await db.commit()
     await db.refresh(card)
-    
+
     return {"migrations": migrations}
 
 
