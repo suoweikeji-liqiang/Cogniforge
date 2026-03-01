@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 4 of 4 (Report and Integration)
-Plan: 2 of 2 in current phase — COMPLETE
+Plan: 3 of 3 in current phase — COMPLETE
 Status: All plans complete
-Last activity: 2026-03-01 — Completed Plan 04-02: SRS Priority Elevation on Blind Spots
+Last activity: 2026-03-01 — Completed Plan 04-03: SSE Stream Elevation Gap Closure
 
 Progress: [██████████] 100%
 
@@ -79,6 +79,7 @@ Recent decisions affecting current work:
 - SRS elevation: stop endpoint is the guaranteed trigger point (SSE stream endpoint skipped — EventSourceResponse lifecycle unreliable for post-stream DB)
 - SRS auto-create: ReviewSchedule auto-created with quality=0 if none exists on first blind-spot session
 - Frontend model_card_id: sent as null (not omitted) for sessions without card link — explicit API contract
+- _stream_with_elevation: async generator wrapper added to cog_test.py; wires SRS elevation into SSE stream completion path via try/finally inside EventSourceResponse lifecycle
 
 ### Pending Todos
 
@@ -91,5 +92,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-02-PLAN.md — SRS Priority Elevation on Blind Spots
+Stopped at: Completed 04-03-PLAN.md — SSE Stream Elevation Gap Closure
 Resume file: None
