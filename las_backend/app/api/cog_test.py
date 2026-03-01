@@ -7,6 +7,7 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from app.services.llm_service import llm_service
 from app.services.srs_service import srs_service
+from app.services.cog_test_engine import CogTestEngine, get_engine, unregister_engine
 from app.api.routes.auth import get_current_user
 from app.core.database import get_db
 from app.models.entities.user import (
@@ -60,6 +61,34 @@ async def _elevate_srs_priority_if_blind_spots(
     # 5. Apply quality=0 — resets interval to 1 day, pushes card to front
     srs_service.process_review(schedule, quality=0)
     # Caller owns the transaction — do NOT commit here
+
+
+# Used by GET /sessions/{id}/stream — see Phase 2 Plan 02-03
+async def _stream_with_elevation(
+    engine: CogTestEngine,
+    session_id: str,
+    db: AsyncSession,
+):
+    """Wrap engine.run() to trigger SRS elevation after natural session completion.
+
+    Yields all SSE events from the engine, then — inside the generator's finally
+    block — checks whether the session completed naturally and elevates SRS priority
+    if blind spots exist.  Running inside the generator keeps the DB session alive
+    within the EventSourceResponse lifecycle.
+    """
+    try:
+        async for event in engine.run(db):
+            yield event
+    finally:
+        # Post-stream: check if session completed naturally and elevate SRS
+        try:
+            session = await db.get(CogTestSession, session_id)
+            if session and session.status == "completed":
+                await _elevate_srs_priority_if_blind_spots(session, db)
+                await db.commit()
+        except Exception:
+            pass  # best-effort — stop endpoint is the guaranteed fallback
+        unregister_engine(session_id)
 
 
 @router.post("/sessions")
