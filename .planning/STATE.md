@@ -81,9 +81,8 @@ Recent decisions affecting current work:
 - Frontend model_card_id: sent as null (not omitted) for sessions without card link — explicit API contract
 - _stream_with_elevation: async generator wrapper added to cog_test.py; wires SRS elevation into SSE stream completion path via try/finally inside EventSourceResponse lifecycle
 
-### Pending Todos
-
-None yet.
+- _run_agent_turn as plain coroutine returning (AgentOutput, token_events, llm_failed) — avoids Python async generator return value limitation
+- get_current_user_from_query uses decode_access_token from app.core.security directly — avoids circular import with get_current_user in routes/auth.py
 
 ### Blockers/Concerns
 
@@ -92,5 +91,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-03-PLAN.md — SSE Stream Elevation Gap Closure
+Stopped at: Completed 02-02-PLAN.md — Engine run() Loop + SSE Auth
 Resume file: None
