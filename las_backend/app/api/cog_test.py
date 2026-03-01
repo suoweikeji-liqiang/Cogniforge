@@ -7,8 +7,9 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from app.services.llm_service import llm_service
 from app.services.srs_service import srs_service
-from app.services.cog_test_engine import CogTestEngine, get_engine, unregister_engine
+from app.services.cog_test_engine import CogTestEngine, get_engine, register_engine, unregister_engine
 from app.api.routes.auth import get_current_user
+from app.api.deps import get_current_user_from_query
 from app.core.database import get_db
 from app.models.entities.user import (
     User, CogTestSession, CogTestBlindSpot, CogTestSnapshot, ReviewSchedule
@@ -97,10 +98,30 @@ async def create_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new cognitive test session."""
+    """Create a new cognitive test session, stopping any existing active session first."""
     import uuid
+
+    # Stop any existing active session for this user
+    existing_result = await db.execute(
+        select(CogTestSession)
+        .where(
+            CogTestSession.user_id == str(current_user.id),
+            CogTestSession.status == "active",
+        )
+        .limit(1)
+    )
+    existing = existing_result.scalars().first()
+    if existing is not None:
+        existing_engine = get_engine(existing.id)
+        if existing_engine is not None:
+            await existing_engine.stop()
+        existing.status = "stopped"
+        await db.commit()
+
+    # Create new session
+    new_id = str(uuid.uuid4())
     session = CogTestSession(
-        id=str(uuid.uuid4()),
+        id=new_id,
         user_id=str(current_user.id),
         concept=body.concept,
         model_card_id=body.model_card_id,
@@ -110,7 +131,16 @@ async def create_session(
     db.add(session)
     await db.commit()
     await db.refresh(session)
-    return {"session_id": session.id, "concept": session.concept, "status": session.status}
+
+    # Instantiate and register engine
+    engine = CogTestEngine(
+        session_id=session.id,
+        concept=session.concept,
+        max_rounds=session.max_rounds,
+    )
+    register_engine(session.id, engine)
+
+    return {"session_id": session.id, "concept": session.concept}
 
 
 @router.post("/sessions/{session_id}/stop")
@@ -123,13 +153,19 @@ async def stop_session(
     session = await db.get(CogTestSession, session_id)
     if not session or session.user_id != str(current_user.id):
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.status not in ("active",):
-        raise HTTPException(status_code=400, detail="Session is not active")
 
-    session.status = "stopped"
-    await _elevate_srs_priority_if_blind_spots(session, db)
-    await db.commit()
-    return {"session_id": session_id, "status": "stopped"}
+    # Stop engine if running (engine may not exist if stream was never opened)
+    engine = get_engine(session_id)
+    if engine is not None:
+        await engine.stop()
+
+    # Update DB status regardless of engine state
+    if session.status == "active":
+        session.status = "stopped"
+        await _elevate_srs_priority_if_blind_spots(session, db)
+        await db.commit()
+
+    return {"status": "stopped"}
 
 
 @router.get("/sessions")
@@ -153,6 +189,50 @@ async def list_sessions(
         }
         for s in sessions
     ]
+
+
+class SubmitTurnBody(BaseModel):
+    text: str
+
+
+@router.get("/sessions/{session_id}/stream")
+async def stream_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user_from_query),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE stream for a cognitive test session. Auth via ?token= query param."""
+    session = await db.get(CogTestSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    engine = get_engine(session_id)
+    if engine is None:
+        raise HTTPException(status_code=404, detail="Session not active or engine not registered")
+
+    return EventSourceResponse(_stream_with_elevation(engine, session_id, db))
+
+
+@router.post("/sessions/{session_id}/turns")
+async def submit_turn(
+    session_id: str,
+    body: SubmitTurnBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit user reply to unblock the engine for the next agent turn."""
+    session = await db.get(CogTestSession, session_id)
+    if not session or session.user_id != str(current_user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    engine = get_engine(session_id)
+    if engine is None:
+        raise HTTPException(status_code=404, detail="Session not active or streaming")
+
+    await engine.submit_user_turn(body.text)
+    return {"status": "ok"}
 
 
 @router.get("/stream-test")
