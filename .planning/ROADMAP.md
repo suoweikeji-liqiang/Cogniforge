@@ -9,7 +9,7 @@
 ## Phases
 
 - [x] **Phase 1: Foundation** - DB schema, SSE dependency, LLM streaming extension, agent prompt design (completed 2026-02-28)
-- [ ] **Phase 2: Backend Engine** - Turn scheduler, agent orchestration, SSE endpoint, analysis pipeline
+- [x] **Phase 2: Backend Engine** - Turn scheduler, agent orchestration, SSE endpoint, analysis pipeline (completed 2026-03-01)
 - [ ] **Phase 3: Frontend** - Dialogue UI, SSE consumer composable, session history, nav entry
 - [x] **Phase 4: Report and Integration** - Diagnostic report export, spaced repetition hook (completed 2026-02-28)
 
@@ -20,7 +20,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-02-28 |
-| 2. Backend Engine | 2/3 | In progress | - |
+| 2. Backend Engine | 3/3 | Complete   | 2026-03-01 |
 | 3. Frontend | 3/3 | Complete | 2026-03-01 |
 | 4. Report and Integration | 3/3 | Complete   | 2026-03-01 |
 

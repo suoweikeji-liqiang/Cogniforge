@@ -8,9 +8,9 @@
 ### Session（会话基础）
 
 - [ ] **SESS-01**: 用户可从模型卡详情页发起认知对抗测试会话，概念内容自动预加载
-- [ ] **SESS-02**: Agent回复通过SSE实时流式输出到前端，逐token显示
+- [x] **SESS-02**: Agent回复通过SSE实时流式输出到前端，逐token显示
 - [ ] **SESS-03**: 每轮对话基于完整历史上下文构建，Agent能引用前文内容
-- [ ] **SESS-04**: 用户可随时停止测试，立即获得当前状态的认知诊断摘要
+- [x] **SESS-04**: 用户可随时停止测试，立即获得当前状态的认知诊断摘要
 - [x] **SESS-05**: 对话记录持久化到数据库，用户可查看历史会话列表
 - [ ] **SESS-06**: 学习助手导航栏新增"认知测试"入口，可查看所有测试会话
 
@@ -71,9 +71,9 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SESS-01 | Phase 3 | Pending |
-| SESS-02 | Phase 2 | Pending |
+| SESS-02 | Phase 2 | Complete |
 | SESS-03 | Phase 2 | Pending |
-| SESS-04 | Phase 2 | Pending |
+| SESS-04 | Phase 2 | Complete |
 | SESS-05 | Phase 3 | Complete |
 | SESS-06 | Phase 3 | Pending |
 | AGNT-01 | Phase 2 | Pending |

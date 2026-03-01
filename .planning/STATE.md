@@ -83,6 +83,9 @@ Recent decisions affecting current work:
 
 - _run_agent_turn as plain coroutine returning (AgentOutput, token_events, llm_failed) — avoids Python async generator return value limitation
 - get_current_user_from_query uses decode_access_token from app.core.security directly — avoids circular import with get_current_user in routes/auth.py
+- stream_session declares two independent db parameters: auth dep uses its own internal session, engine.run() gets explicit db: AsyncSession = Depends(get_db) — prevents session sharing across async boundaries
+- create_session stops existing active session before creating new one — idempotent create pattern
+- stop endpoint does not 400 on non-active sessions — idempotent stop design
 
 ### Blockers/Concerns
 
@@ -91,5 +94,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-02-PLAN.md — Engine run() Loop + SSE Auth
+Stopped at: Completed 02-03-PLAN.md — Cog Test HTTP Surface (SSE stream, turns, session CRUD)
 Resume file: None
