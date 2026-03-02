@@ -1,6 +1,11 @@
 <template>
   <div class="cog-test-list">
-    <h1>{{ t('cogTest.history') }}</h1>
+    <div class="header-actions">
+      <h1>{{ t('cogTest.history') }}</h1>
+      <router-link to="/cog-test/session" class="btn btn-primary">
+        {{ t('cogTest.startNew') || 'Start New Session' }}
+      </router-link>
+    </div>
 
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
 
@@ -51,8 +56,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.cog-test-list h1 {
+.header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1.5rem;
+}
+
+.cog-test-list h1 {
+  margin-bottom: 0;
 }
 
 .sessions-list {

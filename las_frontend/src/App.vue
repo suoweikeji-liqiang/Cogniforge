@@ -60,7 +60,7 @@ const logout = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem;
+  padding: 1rem 120px 1rem 2rem;
   background: #1a1a2e;
   color: white;
   flex-wrap: wrap;

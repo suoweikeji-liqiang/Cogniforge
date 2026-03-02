@@ -34,10 +34,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
-import { Capacitor } from '@capacitor/core'
-
 const { t } = useI18n()
-const isNative = Capacitor.isNativePlatform()
+const isNative = !!localStorage.getItem('api_server_url')
 const router = useRouter()
 const authStore = useAuthStore()
 

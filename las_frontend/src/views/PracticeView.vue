@@ -73,8 +73,8 @@ const submitting = ref(false)
 const fetchData = async () => {
   try {
     const [tasksRes, subsRes] = await Promise.all([
-      api.get('/practice/tasks/'),
-      api.get('/practice/submissions/'),
+      api.get('/practice/tasks'),
+      api.get('/practice/submissions'),
     ])
     tasks.value = tasksRes.data
     submissions.value = subsRes.data

@@ -42,8 +42,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Capacitor } from '@capacitor/core'
-import { SpeechRecognition } from '@capacitor-community/speech-recognition'
 import api from '@/api'
 
 const { t } = useI18n()
@@ -85,48 +83,33 @@ const remove = async (id: string) => {
 
 const toggleVoice = async () => {
   if (recording.value) {
-    if (Capacitor.isNativePlatform()) {
-      await SpeechRecognition.stop()
-    } else {
-      recognition?.stop()
-    }
+    recognition?.stop()
     recording.value = false
     return
   }
 
-  if (Capacitor.isNativePlatform()) {
-    const { available } = await SpeechRecognition.available()
-    if (!available) { alert(t('notes.voiceNotSupported')); return }
-    await SpeechRecognition.requestPermissions()
-    recording.value = true
-    const { matches } = await SpeechRecognition.start({ language: navigator.language, partialResults: false, popup: true })
-    if (matches?.length) newContent.value = matches[0]
-    recording.value = false
-  } else {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert(t('notes.voiceNotSupported')); return
-    }
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    recognition = new SR()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = navigator.language
-    recognition.onresult = (e: any) => {
-      let transcript = ''
-      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript
-      newContent.value = transcript
-    }
-    recognition.onerror = () => { recording.value = false }
-    recognition.onend = () => { recording.value = false }
-    recognition.start()
-    recording.value = true
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    alert(t('notes.voiceNotSupported')); return
   }
+  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  recognition = new SR()
+  recognition.continuous = true
+  recognition.interimResults = true
+  recognition.lang = navigator.language
+  recognition.onresult = (e: any) => {
+    let transcript = ''
+    for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript
+    newContent.value = transcript
+  }
+  recognition.onerror = () => { recording.value = false }
+  recognition.onend = () => { recording.value = false }
+  recognition.start()
+  recording.value = true
 }
 
 onMounted(fetchNotes)
 onUnmounted(() => {
-  if (Capacitor.isNativePlatform()) SpeechRecognition.stop().catch(() => {})
-  else recognition?.stop()
+  recognition?.stop()
 })
 </script>
 

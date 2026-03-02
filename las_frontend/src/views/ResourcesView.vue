@@ -58,8 +58,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Capacitor } from '@capacitor/core'
-import { Browser } from '@capacitor/browser'
 import api from '@/api'
 
 const { t } = useI18n()
@@ -73,11 +71,7 @@ const filter = ref('all')
 const interpreting = ref<string | null>(null)
 
 const openLink = async (url: string) => {
-  if (Capacitor.isNativePlatform()) {
-    await Browser.open({ url })
-  } else {
-    window.open(url, '_blank', 'noopener')
-  }
+  window.open(url, '_blank', 'noopener')
 }
 
 const filtered = computed(() =>

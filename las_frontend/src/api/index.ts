@@ -1,12 +1,10 @@
 import axios from 'axios'
-import { Capacitor } from '@capacitor/core'
 import { useAuthStore } from '@/stores/auth'
 
 const getBaseURL = () => {
-  if (Capacitor.isNativePlatform()) {
-    // On native mobile, use the configured server URL
-    return localStorage.getItem('api_server_url') || 'http://10.0.2.2:8002/api'
-  }
+  // Native mobile: check localStorage override (set by Capacitor build)
+  const nativeUrl = localStorage.getItem('api_server_url')
+  if (nativeUrl) return nativeUrl
   return '/api'
 }
 

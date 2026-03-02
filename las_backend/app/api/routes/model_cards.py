@@ -80,8 +80,8 @@ async def get_model_card(
 ):
     result = await db.execute(
         select(ModelCard).where(
-            ModelCard.id == card_id,
-            ModelCard.user_id == current_user.id
+            ModelCard.id == str(card_id),
+            ModelCard.user_id == str(current_user.id)
         )
     )
     card = result.scalar_one_or_none()
@@ -101,8 +101,8 @@ async def update_model_card(
 ):
     result = await db.execute(
         select(ModelCard).where(
-            ModelCard.id == card_id,
-            ModelCard.user_id == current_user.id
+            ModelCard.id == str(card_id),
+            ModelCard.user_id == str(current_user.id)
         )
     )
     card = result.scalar_one_or_none()
@@ -165,8 +165,8 @@ async def delete_model_card(
 ):
     result = await db.execute(
         select(ModelCard).where(
-            ModelCard.id == card_id,
-            ModelCard.user_id == current_user.id
+            ModelCard.id == str(card_id),
+            ModelCard.user_id == str(current_user.id)
         )
     )
     card = result.scalar_one_or_none()
@@ -188,8 +188,8 @@ async def generate_counter_examples(
 ):
     result = await db.execute(
         select(ModelCard).where(
-            ModelCard.id == input_data.model_id,
-            ModelCard.user_id == current_user.id
+            ModelCard.id == str(input_data.model_id),
+            ModelCard.user_id == str(current_user.id)
         )
     )
     card = result.scalar_one_or_none()
@@ -276,8 +276,8 @@ async def get_evolution_logs(
     """Get evolution timeline for a model card."""
     result = await db.execute(
         select(ModelCard).where(
-            ModelCard.id == card_id,
-            ModelCard.user_id == current_user.id,
+            ModelCard.id == str(card_id),
+            ModelCard.user_id == str(current_user.id),
         )
     )
     if not result.scalar_one_or_none():
@@ -285,7 +285,7 @@ async def get_evolution_logs(
 
     logs = await db.execute(
         select(EvolutionLog)
-        .where(EvolutionLog.model_id == card_id)
+        .where(EvolutionLog.model_id == str(card_id))
         .order_by(EvolutionLog.created_at.asc())
     )
     return list(logs.scalars().all())

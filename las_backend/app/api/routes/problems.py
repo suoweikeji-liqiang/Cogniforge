@@ -79,8 +79,8 @@ async def get_problem(
 ):
     result = await db.execute(
         select(Problem).where(
-            Problem.id == problem_id,
-            Problem.user_id == current_user.id
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
         )
     )
     problem = result.scalar_one_or_none()
@@ -100,8 +100,8 @@ async def update_problem(
 ):
     result = await db.execute(
         select(Problem).where(
-            Problem.id == problem_id,
-            Problem.user_id == current_user.id
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
         )
     )
     problem = result.scalar_one_or_none()
@@ -132,8 +132,8 @@ async def delete_problem(
 ):
     result = await db.execute(
         select(Problem).where(
-            Problem.id == problem_id,
-            Problem.user_id == current_user.id
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
         )
     )
     problem = result.scalar_one_or_none()
@@ -156,8 +156,8 @@ async def create_response(
 ):
     result = await db.execute(
         select(Problem).where(
-            Problem.id == problem_id,
-            Problem.user_id == current_user.id
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
         )
     )
     problem = result.scalar_one_or_none()
@@ -173,7 +173,7 @@ async def create_response(
     
     from app.models.entities.user import ProblemResponse as ProblemResponseModel
     db_response = ProblemResponseModel(
-        problem_id=problem_id,
+        problem_id=str(problem_id),
         user_response=response_data.user_response,
         system_feedback=feedback,
     )
@@ -194,8 +194,8 @@ async def get_learning_path(
     # First verify the problem belongs to the current user
     problem_result = await db.execute(
         select(Problem).where(
-            Problem.id == problem_id,
-            Problem.user_id == current_user.id
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
         )
     )
     problem = problem_result.scalar_one_or_none()
@@ -204,7 +204,7 @@ async def get_learning_path(
 
     result = await db.execute(
         select(LearningPath).where(
-            LearningPath.problem_id == problem_id,
+            LearningPath.problem_id == str(problem_id),
         )
     )
     learning_path = result.scalar_one_or_none()
@@ -224,15 +224,15 @@ async def update_learning_path_progress(
 ):
     problem_result = await db.execute(
         select(Problem).where(
-            Problem.id == problem_id,
-            Problem.user_id == current_user.id
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
         )
     )
     if not problem_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Problem not found")
 
     result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == problem_id)
+        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
     )
     learning_path = result.scalar_one_or_none()
     if not learning_path:

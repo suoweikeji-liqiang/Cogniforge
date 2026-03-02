@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { Capacitor } from '@capacitor/core'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -21,9 +20,8 @@ export interface SessionSummary {
 }
 
 const getSSEBaseUrl = () => {
-  if (Capacitor.isNativePlatform()) {
-    return localStorage.getItem('api_server_url') || 'http://10.0.2.2:8002/api'
-  }
+  const nativeUrl = localStorage.getItem('api_server_url')
+  if (nativeUrl) return nativeUrl
   return '/api'
 }
 

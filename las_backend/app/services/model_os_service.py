@@ -1,5 +1,32 @@
 from typing import List, Dict, Any, Optional
 from app.services.llm_service import llm_service
+import json
+import re
+
+def _clean_json_str(text: str) -> str:
+    # First try to find a markdown block
+    match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    
+    text = text.strip()
+    # Strip any text before the first [ or {
+    if not text.startswith('[') and not text.startswith('{'):
+        start_idx = -1
+        for i, c in enumerate(text):
+            if c in ('[', '{'):
+                start_idx = i
+                break
+        if start_idx != -1:
+            closing = ']' if text[start_idx] == '[' else '}'
+            end_idx = -1
+            for i in range(len(text)-1, -1, -1):
+                if text[i] == closing:
+                    end_idx = i
+                    break
+            if end_idx != -1 and end_idx >= start_idx:
+                return text[start_idx:end_idx+1].strip()
+    return text
 
 
 class ModelOSService:
@@ -38,9 +65,8 @@ Return the response as a JSON object with the following structure:
         
         result = await self.llm.generate(prompt)
         
-        import json
         try:
-            model_data = json.loads(result)
+            model_data = json.loads(_clean_json_str(result))
         except json.JSONDecodeError:
             model_data = {
                 "concept_maps": {"nodes": [], "edges": []},
@@ -72,9 +98,8 @@ Format as a JSON array of strings, each being a counter-example or challenging q
         
         result = await self.llm.generate(prompt)
         
-        import json
         try:
-            counter_examples = json.loads(result)
+            counter_examples = json.loads(_clean_json_str(result))
         except json.JSONDecodeError:
             counter_examples = []
         
@@ -99,9 +124,8 @@ Return as JSON array:
         
         result = await self.llm.generate(prompt)
         
-        import json
         try:
-            migrations = json.loads(result)
+            migrations = json.loads(_clean_json_str(result))
         except json.JSONDecodeError:
             migrations = []
         
@@ -136,10 +160,10 @@ Return as JSON array of steps:
         
         result = await self.llm.generate(prompt)
         
-        import json
         try:
-            path = json.loads(result)
-        except json.JSONDecodeError:
+            path = json.loads(_clean_json_str(result))
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse path json. Error: {e}")
             path = []
         
         return path
