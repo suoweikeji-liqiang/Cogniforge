@@ -16,7 +16,7 @@
           class="graph-edge"
         />
         <g
-          v-for="(node, i) in positionedNodes"
+          v-for="node in positionedNodes"
           :key="node.id"
           :transform="`translate(${node.x}, ${node.y})`"
           class="graph-node"
