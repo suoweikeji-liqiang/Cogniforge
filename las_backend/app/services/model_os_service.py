@@ -146,14 +146,14 @@ User's Existing Knowledge: {', '.join(existing_knowledge)}
 Create a step-by-step learning path that:
 1. Builds on existing knowledge
 2. Introduces new concepts in logical order
-3. Includes opportunities for model collision (testing understanding with counter-examples)
+3. Includes opportunities for model collision (testing understanding with counter-examples). These MUST be placed directly inside the "description" field, NEVER as a standalone string.
 
-Return as JSON array of steps:
+Return ONLY a valid JSON array of steps exactly matching this format (with NO extra keys or standalone strings):
 [
     {{
         "step": 1,
         "concept": "concept name",
-        "description": "what to learn",
+        "description": "what to learn, including model collisions if applicable",
         "resources": ["resource 1", "resource 2"]
     }}
 ]"""
@@ -163,6 +163,8 @@ Return as JSON array of steps:
         try:
             path = json.loads(_clean_json_str(result))
         except json.JSONDecodeError as e:
+            with open("llm_debug_zh.log", "w", encoding="utf-8") as f:
+                f.write(f"JSON ERROR: {e}\\nRAW:\\n{result}\\n---\\n")
             print(f"Failed to parse path json. Error: {e}")
             path = []
         
