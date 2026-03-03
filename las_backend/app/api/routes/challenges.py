@@ -87,6 +87,7 @@ async def list_challenges(
             "status": c.status,
             "user_answer": c.user_answer,
             "ai_feedback": c.ai_feedback,
+            "structured_feedback": model_os_service.parse_feedback_text(c.ai_feedback),
             "created_at": c.created_at.isoformat(),
         }
         for c in challenges
@@ -105,11 +106,18 @@ async def answer_challenge(
     if not challenge or challenge.user_id != str(current_user.id):
         raise HTTPException(status_code=404, detail="Challenge not found")
 
-    feedback = await model_os_service.generate_feedback(
+    retrieval_context = await model_os_service.build_retrieval_context(
+        db=db,
+        user_id=str(current_user.id),
+        query=f"{(challenge.context or {}).get('card_title', '')}\n{answer}",
+    )
+    structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=answer,
         concept=(challenge.context or {}).get("card_title", ""),
         model_examples=[],
+        retrieval_context=retrieval_context,
     )
+    feedback = model_os_service.format_feedback_text(structured_feedback)
 
     challenge.user_answer = answer
     challenge.ai_feedback = feedback
@@ -119,5 +127,6 @@ async def answer_challenge(
     return {
         "id": challenge.id,
         "ai_feedback": feedback,
+        "structured_feedback": structured_feedback,
         "status": "answered",
     }

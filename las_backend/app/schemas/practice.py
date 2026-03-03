@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -11,17 +11,18 @@ class PracticeTaskBase(BaseModel):
 
 
 class PracticeTaskCreate(PracticeTaskBase):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_card_id: Optional[UUID] = None
 
 
 class PracticeTaskResponse(PracticeTaskBase):
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: UUID
     user_id: Optional[UUID]
     model_card_id: Optional[UUID]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class PracticeSubmissionCreate(BaseModel):
@@ -30,15 +31,15 @@ class PracticeSubmissionCreate(BaseModel):
 
 
 class PracticeSubmissionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: UUID
     practice_task_id: UUID
     solution: str
     feedback: Optional[str]
+    structured_feedback: Optional[dict] = None
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class ReviewBase(BaseModel):
@@ -50,6 +51,14 @@ class ReviewCreate(ReviewBase):
     content: dict
 
 
+class ReviewGenerateRequest(ReviewBase):
+    pass
+
+
+class ReviewGenerateResponse(ReviewBase):
+    content: dict
+
+
 class ReviewUpdate(BaseModel):
     review_type: Optional[str] = None
     period: Optional[str] = None
@@ -57,10 +66,9 @@ class ReviewUpdate(BaseModel):
 
 
 class ReviewResponse(ReviewBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: UUID
     content: dict
     created_at: datetime
-    
-    class Config:
-        from_attributes = True

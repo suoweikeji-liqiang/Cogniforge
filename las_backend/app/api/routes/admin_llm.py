@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.models.entities.llm_provider import LLMProvider, LLMModel
 from app.models.entities.user import User
 from app.api.deps import require_admin
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 
 router = APIRouter(prefix="/admin/llm-config", tags=["Admin"])
@@ -32,6 +32,8 @@ class ProviderUpdate(BaseModel):
 
 
 class ModelCreate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     provider_id: int
     model_id: str
     model_name: str
@@ -40,6 +42,8 @@ class ModelCreate(BaseModel):
 
 
 class ModelUpdate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_id: Optional[str] = None
     model_name: Optional[str] = None
     enabled: Optional[bool] = None
@@ -60,7 +64,7 @@ async def get_providers(
             "id": p.id,
             "name": p.name,
             "provider_type": p.provider_type,
-            "api_key": p.api_key[:10] + "..." if p.api_key else None,
+            "api_key": "Configured" if p.api_key else None,
             "base_url": p.base_url,
             "enabled": p.enabled,
             "priority": p.priority,

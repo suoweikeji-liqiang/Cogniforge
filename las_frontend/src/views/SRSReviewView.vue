@@ -24,15 +24,36 @@
         </button>
       </div>
 
-      <div v-else class="quality-buttons">
-        <p class="quality-label">{{ t('srs.rateRecall') }}</p>
-        <div class="quality-grid">
-          <button class="btn q-btn q-0" @click="submitReview(0)">0 - {{ t('srs.forgot') }}</button>
-          <button class="btn q-btn q-1" @click="submitReview(1)">1</button>
-          <button class="btn q-btn q-2" @click="submitReview(2)">2</button>
-          <button class="btn q-btn q-3" @click="submitReview(3)">3 - {{ t('srs.ok') }}</button>
-          <button class="btn q-btn q-4" @click="submitReview(4)">4</button>
-          <button class="btn q-btn q-5" @click="submitReview(5)">5 - {{ t('srs.perfect') }}</button>
+      <div v-else>
+        <div class="answer-panel">
+          <div v-if="currentCard.user_notes" class="answer-section">
+            <h3>{{ t('modelCards.notes') }}</h3>
+            <p>{{ currentCard.user_notes }}</p>
+          </div>
+          <div v-if="currentCard.examples?.length" class="answer-section">
+            <h3>{{ t('modelCards.examples') }}</h3>
+            <ul>
+              <li v-for="(example, index) in currentCard.examples" :key="index">{{ example }}</li>
+            </ul>
+          </div>
+          <div v-if="currentCard.counter_examples?.length" class="answer-section">
+            <h3>{{ t('modelCards.counterExamples') }}</h3>
+            <ul>
+              <li v-for="(example, index) in currentCard.counter_examples" :key="index">{{ example }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="quality-buttons">
+          <p class="quality-label">{{ t('srs.rateRecall') }}</p>
+          <div class="quality-grid">
+            <button class="btn q-btn q-0" @click="submitReview(0)">0 - {{ t('srs.forgot') }}</button>
+            <button class="btn q-btn q-1" @click="submitReview(1)">1</button>
+            <button class="btn q-btn q-2" @click="submitReview(2)">2</button>
+            <button class="btn q-btn q-3" @click="submitReview(3)">3 - {{ t('srs.ok') }}</button>
+            <button class="btn q-btn q-4" @click="submitReview(4)">4</button>
+            <button class="btn q-btn q-5" @click="submitReview(5)">5 - {{ t('srs.perfect') }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -117,6 +138,34 @@ onMounted(fetchData)
 .review-card h2 { margin-bottom: 1rem; }
 .review-prompt { color: var(--text-muted); margin-bottom: 1.5rem; }
 .review-action { margin-top: 1rem; }
+
+.answer-panel {
+  text-align: left;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-dark);
+  border-radius: 12px;
+}
+
+.answer-section + .answer-section {
+  margin-top: 1rem;
+}
+
+.answer-section h3 {
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+
+.answer-section p,
+.answer-section li {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.answer-section ul {
+  padding-left: 1.25rem;
+}
 
 .quality-label { color: var(--text-muted); margin-bottom: 1rem; }
 

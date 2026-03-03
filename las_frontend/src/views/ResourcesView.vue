@@ -5,6 +5,12 @@
       <button @click="showAdd = true" class="btn-primary">{{ t('common.add') }}</button>
     </div>
 
+    <input
+      v-model="searchQuery"
+      :placeholder="t('resources.searchResources')"
+      class="input search-input"
+    />
+
     <!-- Add Form -->
     <div v-if="showAdd" class="add-form card">
       <input v-model="newUrl" type="url" :placeholder="t('resources.urlPlaceholder')" class="input" />
@@ -56,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 
@@ -69,6 +75,7 @@ const newTitle = ref('')
 const newType = ref('webpage')
 const filter = ref('all')
 const interpreting = ref<string | null>(null)
+const searchQuery = ref('')
 
 const openLink = async (url: string) => {
   window.open(url, '_blank', 'noopener')
@@ -79,7 +86,11 @@ const filtered = computed(() =>
 )
 
 const fetchResources = async () => {
-  const { data } = await api.get('/resources/')
+  const { data } = await api.get('/resources/', {
+    params: {
+      q: searchQuery.value.trim() || undefined,
+    },
+  })
   resources.value = data
 }
 
@@ -113,10 +124,15 @@ const remove = async (id: string) => {
 }
 
 onMounted(fetchResources)
+
+watch(searchQuery, () => {
+  fetchResources()
+})
 </script>
 
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.search-input { margin-bottom: 1rem; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
 .add-form { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
 .input { background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; color: var(--text); width: 100%; box-sizing: border-box; }

@@ -14,7 +14,14 @@
     "optional": "可选",
     "back": "返回",
     "submit": "提交",
-    "close": "关闭"
+    "close": "关闭",
+    "download": "下载"
+  },
+  "feedback": {
+    "correctness": "正确性",
+    "misconceptions": "误区",
+    "suggestions": "建议",
+    "nextQuestion": "下一问"
   },
   "nav": {
     "dashboard": "仪表盘",
@@ -144,7 +151,18 @@
     "practiceTasks": "练习任务",
     "dueReviews": "待复习",
     "startReview": "开始复习 →",
-    "heatmapTitle": "学习活动"
+    "heatmapTitle": "学习活动",
+    "reviewAssistant": "复盘助手",
+    "reviewRecommendation": "推荐现在生成一个{type}复盘，周期：{period}",
+    "generateReviewNow": "立即生成复盘",
+    "viewReviewHistory": "查看复盘记录",
+    "reviewCreated": "复盘已生成并保存。",
+    "reviewCreateFailed": "复盘生成失败。",
+    "reviewTypes": {
+      "daily": "每日",
+      "weekly": "每周",
+      "monthly": "每月"
+    }
   },
   "problems": {
     "title": "问题",
@@ -166,17 +184,23 @@
     "concepts": "相关概念",
     "status": "状态",
     "learningPath": "学习路径",
+    "progress": "进度",
     "responses": "响应",
     "addResponse": "添加响应",
     "yourResponse": "您的响应",
     "systemFeedback": "系统反馈",
     "submitResponse": "提交",
-    "noResponses": "暂无响应"
+    "noResponses": "暂无响应",
+    "previousStep": "上一步",
+    "markStepDone": "标记当前步骤完成",
+    "completed": "已完成"
   },
   "modelCards": {
     "title": "模型卡",
     "newCard": "新建模型卡",
     "searchCards": "搜索模型卡...",
+    "similarCards": "相似模型卡",
+    "noSimilarCards": "暂未发现相似模型卡",
     "noCards": "未找到模型卡",
     "createFirst": "创建您的第一个模型卡",
     "conceptMaps": "概念图",
@@ -184,6 +208,11 @@
     "examples": "示例",
     "counterExamples": "反例",
     "version": "版本",
+    "addToReview": "加入复习",
+    "scheduled": "已加入复习",
+    "filterAll": "全部",
+    "filterScheduled": "已排复习",
+    "filterUnscheduled": "未排复习",
     "viewCard": "查看",
     "deleteCard": "删除",
     "confirmDelete": "确定要删除这个模型卡吗？"
@@ -200,9 +229,16 @@
   "reviews": {
     "title": "复习",
     "noReviews": "暂无复习记录",
+    "newReview": "新建复盘",
+    "reviewType": "复盘类型",
     "period": "周期",
     "content": "内容",
-    "createdAt": "创建时间"
+    "createdAt": "创建时间",
+    "insights": "洞察",
+    "nextSteps": "下一步",
+    "misconceptions": "误区",
+    "generate": "AI 生成",
+    "generating": "生成中..."
   },
   "chat": {
     "title": "对话",
@@ -215,7 +251,8 @@
   },
   "evolution": {
     "title": "认知演化时间线",
-    "noLogs": "暂无演化记录"
+    "noLogs": "暂无演化记录",
+    "latestSummary": "最近一次演化摘要"
   },
   "srs": {
     "title": "间隔重复复习",
@@ -242,6 +279,7 @@
   },
   "resources": {
     "title": "学习资源",
+    "searchResources": "搜索资源...",
     "urlPlaceholder": "输入网页或视频链接...",
     "titlePlaceholder": "标题（可选）",
     "webpage": "网页",

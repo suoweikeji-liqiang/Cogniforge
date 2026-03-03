@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import openai
 from sqlalchemy import select
@@ -211,15 +213,18 @@ class LLMService:
         self,
         prompt: str,
         context: List[Dict[str, Any]],
+        retrieval_context: Optional[str] = None,
         provider_type: Optional[str] = None,
     ) -> str:
         context_str = "\n".join([
             f"{msg.get('role', 'user')}: {msg.get('content', '')}"
             for msg in context
         ])
+        retrieval_block = f"\nRelevant knowledge:\n{retrieval_context}\n" if retrieval_context else ""
         
         full_prompt = f"""Context:
 {context_str}
+{retrieval_block}
 
 Current question: {prompt}"""
         

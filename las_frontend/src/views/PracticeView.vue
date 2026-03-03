@@ -21,8 +21,11 @@
         <h2>{{ t('practice.submitted') }}</h2>
         <div v-if="submissions.length" class="submissions-list">
           <div v-for="sub in submissions" :key="sub.id" class="submission-item card">
-            <h4>{{ sub.solution.substring(0, 100) }}...</h4>
-            <p v-if="sub.feedback" class="feedback">{{ sub.feedback.substring(0, 200) }}...</p>
+            <h4>{{ truncate(sub.solution, 100) }}</h4>
+            <div v-if="sub.structured_feedback" class="feedback-block">
+              <p v-if="sub.structured_feedback.correctness"><strong>{{ t('feedback.correctness') }}:</strong> {{ sub.structured_feedback.correctness }}</p>
+              <p v-if="sub.structured_feedback.suggestions?.length"><strong>{{ t('feedback.suggestions') }}:</strong> {{ sub.structured_feedback.suggestions.join(' / ') }}</p>
+            </div>
           </div>
         </div>
         <p v-else class="empty">{{ t('practice.noTasks') }}</p>
@@ -39,9 +42,12 @@
             <label>{{ t('practice.yourSolution') }}</label>
             <textarea v-model="solution" rows="6" required></textarea>
           </div>
-          <p v-if="currentFeedback" class="feedback-result">
-            <strong>{{ t('practice.feedback') }}:</strong> {{ currentFeedback }}
-          </p>
+          <div v-if="currentStructuredFeedback" class="feedback-result">
+            <p v-if="currentStructuredFeedback.correctness"><strong>{{ t('feedback.correctness') }}:</strong> {{ currentStructuredFeedback.correctness }}</p>
+            <p v-if="currentStructuredFeedback.misconceptions?.length"><strong>{{ t('feedback.misconceptions') }}:</strong> {{ currentStructuredFeedback.misconceptions.join(' / ') }}</p>
+            <p v-if="currentStructuredFeedback.suggestions?.length"><strong>{{ t('feedback.suggestions') }}:</strong> {{ currentStructuredFeedback.suggestions.join(' / ') }}</p>
+            <p v-if="currentStructuredFeedback.next_question"><strong>{{ t('feedback.nextQuestion') }}:</strong> {{ currentStructuredFeedback.next_question }}</p>
+          </div>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" @click="activeTask = null">
               {{ t('common.close') }}
@@ -67,8 +73,10 @@ const tasks = ref<any[]>([])
 const submissions = ref<any[]>([])
 const activeTask = ref<any>(null)
 const solution = ref('')
-const currentFeedback = ref('')
+const currentStructuredFeedback = ref<any>(null)
 const submitting = ref(false)
+
+const truncate = (text: string, max: number) => text.length > max ? `${text.slice(0, max)}...` : text
 
 const fetchData = async () => {
   try {
@@ -86,7 +94,7 @@ const fetchData = async () => {
 const startTask = (task: any) => {
   activeTask.value = task
   solution.value = ''
-  currentFeedback.value = ''
+  currentStructuredFeedback.value = null
 }
 
 const submitSolution = async () => {
@@ -100,7 +108,7 @@ const submitSolution = async () => {
       solution: solution.value,
     })
     
-    currentFeedback.value = response.data.feedback
+    currentStructuredFeedback.value = response.data.structured_feedback
     submissions.value.unshift(response.data)
   } catch (e) {
     console.error('Failed to submit solution:', e)
@@ -157,9 +165,13 @@ onMounted(() => {
   font-size: 0.875rem;
 }
 
-.feedback {
+.feedback-block {
   font-size: 0.875rem;
   color: var(--primary);
+}
+
+.feedback-block p + p {
+  margin-top: 0.35rem;
 }
 
 .modal-overlay {

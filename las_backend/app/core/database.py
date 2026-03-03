@@ -1,9 +1,9 @@
-import os
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from app.core.config import get_settings
 
-DATABASE_FILE = os.environ.get("DATABASE_FILE", "./las.db")
-DATABASE_URL = f"sqlite+aiosqlite:///{DATABASE_FILE}"
+settings = get_settings()
+DATABASE_URL = settings.effective_database_url
 
 engine = create_async_engine(
     DATABASE_URL,

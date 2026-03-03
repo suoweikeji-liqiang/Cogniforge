@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.models.entities.user import User, Problem, LearningPath
@@ -32,6 +32,13 @@ async def create_problem(
         title=problem_data.title,
         description=problem_data.description,
         associated_concepts=problem_data.associated_concepts,
+        embedding=model_os_service.generate_embedding(
+            model_os_service.build_problem_embedding_text(
+                title=problem_data.title,
+                description=problem_data.description,
+                associated_concepts=problem_data.associated_concepts,
+            )
+        ),
     )
     
     db.add(db_problem)
@@ -59,6 +66,7 @@ async def create_problem(
 
 @router.get("/", response_model=List[ProblemResponse])
 async def list_problems(
+    q: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -68,6 +76,47 @@ async def list_problems(
         .order_by(Problem.created_at.desc())
     )
     problems = result.scalars().all()
+    if q:
+        problems = list(problems)
+        bind = db.get_bind()
+        fallback_ranked = model_os_service.rank_problems(problems, q)
+        if bind and bind.dialect.name == "postgresql" and problems:
+            query_embedding = model_os_service.generate_embedding(q)
+            embedding_param = model_os_service.serialize_embedding_for_pgvector(query_embedding)
+            native_result = await db.execute(
+                text(
+                    """
+                    SELECT p.id
+                    FROM problems p
+                    WHERE p.user_id = :user_id
+                      AND p.embedding IS NOT NULL
+                    ORDER BY p.embedding <=> CAST(:embedding AS vector)
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "user_id": str(current_user.id),
+                    "embedding": embedding_param,
+                    "limit": max(len(problems), 1),
+                },
+            )
+            problem_map = {str(problem.id): problem for problem in problems}
+            native_ranked = [
+                problem_map[row[0]]
+                for row in native_result.all()
+                if row[0] in problem_map
+            ]
+            seen = set()
+            merged = []
+            for problem in native_ranked + fallback_ranked:
+                pid = str(problem.id)
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                merged.append(problem)
+            problems = merged
+        else:
+            problems = fallback_ranked
     return problems
 
 
@@ -117,6 +166,7 @@ async def update_problem(
         problem.associated_concepts = problem_data.associated_concepts
     if problem_data.status:
         problem.status = problem_data.status
+    model_os_service.refresh_problem_embedding(problem)
     
     await db.commit()
     await db.refresh(problem)
@@ -164,12 +214,19 @@ async def create_response(
     
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-    
-    feedback = await model_os_service.generate_feedback(
+
+    retrieval_context = await model_os_service.build_retrieval_context(
+        db=db,
+        user_id=str(current_user.id),
+        query=f"{problem.title}\n{response_data.user_response}",
+    )
+    structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=response_data.user_response,
         concept=problem.title,
         model_examples=problem.associated_concepts,
+        retrieval_context=retrieval_context,
     )
+    feedback = model_os_service.format_feedback_text(structured_feedback)
     
     from app.models.entities.user import ProblemResponse as ProblemResponseModel
     db_response = ProblemResponseModel(
@@ -182,7 +239,49 @@ async def create_response(
     await db.commit()
     await db.refresh(db_response)
     
-    return db_response
+    return {
+        "id": db_response.id,
+        "problem_id": db_response.problem_id,
+        "user_response": db_response.user_response,
+        "system_feedback": db_response.system_feedback,
+        "structured_feedback": structured_feedback,
+        "created_at": db_response.created_at,
+    }
+
+
+@router.get("/{problem_id}/responses", response_model=List[ProblemResponseResponse])
+async def list_responses(
+    problem_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
+        )
+    )
+    if not problem_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    from app.models.entities.user import ProblemResponse as ProblemResponseModel
+
+    result = await db.execute(
+        select(ProblemResponseModel)
+        .where(ProblemResponseModel.problem_id == str(problem_id))
+        .order_by(ProblemResponseModel.created_at.asc())
+    )
+    responses = []
+    for response in result.scalars().all():
+        responses.append({
+            "id": response.id,
+            "problem_id": response.problem_id,
+            "user_response": response.user_response,
+            "system_feedback": response.system_feedback,
+            "structured_feedback": model_os_service.parse_feedback_text(response.system_feedback),
+            "created_at": response.created_at,
+        })
+    return responses
 
 
 @router.get("/{problem_id}/learning-path", response_model=LearningPathResponse)
@@ -228,7 +327,8 @@ async def update_learning_path_progress(
             Problem.user_id == str(current_user.id)
         )
     )
-    if not problem_result.scalar_one_or_none():
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
 
     result = await db.execute(
@@ -243,6 +343,15 @@ async def update_learning_path_progress(
         raise HTTPException(status_code=400, detail="Invalid step number")
 
     learning_path.current_step = data.current_step
+
+    if total_steps > 0:
+        if data.current_step >= total_steps:
+            problem.status = "completed"
+        elif data.current_step > 0:
+            problem.status = "in-progress"
+        else:
+            problem.status = "new"
+
     await db.commit()
     await db.refresh(learning_path)
     return learning_path

@@ -48,5 +48,7 @@ from app.schemas.practice import (
     PracticeSubmissionResponse,
     ReviewBase,
     ReviewCreate,
+    ReviewGenerateRequest,
+    ReviewGenerateResponse,
     ReviewResponse,
 )

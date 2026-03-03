@@ -28,7 +28,7 @@ async def create_conversation(
 ):
     db_conv = Conversation(
         user_id=current_user.id,
-        problem_id=conv_data.problem_id,
+        problem_id=str(conv_data.problem_id) if conv_data.problem_id else None,
         title=conv_data.title or "New Conversation",
         messages=[],
     )
@@ -60,9 +60,10 @@ async def get_conversation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    conv_id_str = str(conv_id)
     result = await db.execute(
         select(Conversation).where(
-            Conversation.id == conv_id,
+            Conversation.id == conv_id_str,
             Conversation.user_id == current_user.id
         )
     )
@@ -81,9 +82,10 @@ async def update_conversation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    conv_id_str = str(conv_id)
     result = await db.execute(
         select(Conversation).where(
-            Conversation.id == conv_id,
+            Conversation.id == conv_id_str,
             Conversation.user_id == current_user.id
         )
     )
@@ -105,9 +107,10 @@ async def delete_conversation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    conv_id_str = str(conv_id)
     result = await db.execute(
         select(Conversation).where(
-            Conversation.id == conv_id,
+            Conversation.id == conv_id_str,
             Conversation.user_id == current_user.id
         )
     )
@@ -129,20 +132,22 @@ async def chat(
     db: AsyncSession = Depends(get_db)
 ):
     conv = None
+    conversation_id = str(chat_data.conversation_id) if chat_data.conversation_id else None
+    problem_id = str(chat_data.problem_id) if chat_data.problem_id else None
     
-    if chat_data.conversation_id:
+    if conversation_id:
         result = await db.execute(
             select(Conversation).where(
-                Conversation.id == chat_data.conversation_id,
+                Conversation.id == conversation_id,
                 Conversation.user_id == current_user.id
             )
         )
         conv = result.scalar_one_or_none()
     
-    if not conv and chat_data.problem_id:
+    if not conv and problem_id:
         result = await db.execute(
             select(Conversation).where(
-                Conversation.problem_id == chat_data.problem_id,
+                Conversation.problem_id == problem_id,
                 Conversation.user_id == current_user.id
             )
         )
@@ -151,7 +156,7 @@ async def chat(
     if not conv:
         conv = Conversation(
             user_id=current_user.id,
-            problem_id=chat_data.problem_id,
+            problem_id=problem_id,
             title="Chat",
             messages=[],
         )
@@ -162,9 +167,15 @@ async def chat(
     messages = conv.messages or []
     messages.append({"role": "user", "content": chat_data.message})
 
+    retrieval_context = await model_os_service.build_retrieval_context(
+        db=db,
+        user_id=str(current_user.id),
+        query=chat_data.message,
+    )
     response_content = await model_os_service.generate_with_context(
         prompt=chat_data.message,
         context=messages,
+        retrieval_context=retrieval_context,
     )
 
     messages.append({"role": "assistant", "content": response_content})

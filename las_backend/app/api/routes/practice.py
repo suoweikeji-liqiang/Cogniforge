@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from uuid import UUID
 from typing import List
 
@@ -17,11 +17,14 @@ from app.schemas.practice import (
     PracticeSubmissionCreate,
     PracticeSubmissionResponse,
     ReviewCreate,
+    ReviewGenerateRequest,
+    ReviewGenerateResponse,
     ReviewUpdate,
     ReviewResponse,
 )
 from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
+from app.services.review_service import review_service
 
 router = APIRouter(prefix="/practice", tags=["Practice"])
 
@@ -36,7 +39,7 @@ async def create_practice_task(
         user_id=current_user.id,
         title=task_data.title,
         description=task_data.description,
-        model_card_id=task_data.model_card_id,
+        model_card_id=str(task_data.model_card_id) if task_data.model_card_id else None,
         task_type=task_data.task_type,
     )
     
@@ -67,15 +70,20 @@ async def delete_practice_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    task_id_str = str(task_id)
     result = await db.execute(
         select(PracticeTask).where(
-            PracticeTask.id == task_id,
+            PracticeTask.id == task_id_str,
             PracticeTask.user_id == current_user.id
         )
     )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Practice task not found")
+
+    await db.execute(
+        delete(PracticeSubmission).where(PracticeSubmission.practice_task_id == task_id_str)
+    )
     await db.delete(task)
     await db.commit()
     return None
@@ -87,23 +95,31 @@ async def create_submission(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    practice_task_id = str(submission_data.practice_task_id)
     result = await db.execute(
-        select(PracticeTask).where(PracticeTask.id == submission_data.practice_task_id)
+        select(PracticeTask).where(PracticeTask.id == practice_task_id)
     )
     task = result.scalar_one_or_none()
     
     if not task:
         raise HTTPException(status_code=404, detail="Practice task not found")
-    
-    feedback = await model_os_service.generate_feedback(
+
+    retrieval_context = await model_os_service.build_retrieval_context(
+        db=db,
+        user_id=str(current_user.id),
+        query=f"{task.title}\n{submission_data.solution}",
+    )
+    structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=submission_data.solution,
         concept=task.title,
         model_examples=[],
+        retrieval_context=retrieval_context,
     )
+    feedback = model_os_service.format_feedback_text(structured_feedback)
     
     db_submission = PracticeSubmission(
         user_id=current_user.id,
-        practice_task_id=submission_data.practice_task_id,
+        practice_task_id=practice_task_id,
         solution=submission_data.solution,
         feedback=feedback,
     )
@@ -112,7 +128,15 @@ async def create_submission(
     await db.commit()
     await db.refresh(db_submission)
     
-    return db_submission
+    return {
+        "id": db_submission.id,
+        "user_id": db_submission.user_id,
+        "practice_task_id": db_submission.practice_task_id,
+        "solution": db_submission.solution,
+        "feedback": db_submission.feedback,
+        "structured_feedback": structured_feedback,
+        "created_at": db_submission.created_at,
+    }
 
 
 @router.get("/submissions", response_model=List[PracticeSubmissionResponse])
@@ -125,7 +149,17 @@ async def list_submissions(
         .where(PracticeSubmission.user_id == current_user.id)
         .order_by(PracticeSubmission.created_at.desc())
     )
-    submissions = result.scalars().all()
+    submissions = []
+    for submission in result.scalars().all():
+        submissions.append({
+            "id": submission.id,
+            "user_id": submission.user_id,
+            "practice_task_id": submission.practice_task_id,
+            "solution": submission.solution,
+            "feedback": submission.feedback,
+            "structured_feedback": model_os_service.parse_feedback_text(submission.feedback),
+            "created_at": submission.created_at,
+        })
     return submissions
 
 
@@ -135,19 +169,62 @@ async def get_submission(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    submission_id_str = str(submission_id)
     result = await db.execute(
         select(PracticeSubmission).where(
-            PracticeSubmission.id == submission_id,
+            PracticeSubmission.id == submission_id_str,
             PracticeSubmission.user_id == current_user.id
         )
     )
     submission = result.scalar_one_or_none()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    return submission
+    return {
+        "id": submission.id,
+        "user_id": submission.user_id,
+        "practice_task_id": submission.practice_task_id,
+        "solution": submission.solution,
+        "feedback": submission.feedback,
+        "structured_feedback": model_os_service.parse_feedback_text(submission.feedback),
+        "created_at": submission.created_at,
+    }
 
 
 router_reviews = APIRouter(prefix="/reviews", tags=["Reviews"])
+
+
+def _build_review_markdown(review: Review) -> str:
+    content = review.content or {}
+    misconceptions = content.get("misconceptions", [])
+    lines = [
+        f"# {review.review_type.capitalize()} Review",
+        "",
+        f"**Period:** {review.period}",
+        f"**Created At:** {review.created_at.strftime('%Y-%m-%d %H:%M UTC')}",
+        "",
+        "## Summary",
+        "",
+        content.get("summary", "No summary."),
+        "",
+        "## Insights",
+        "",
+        content.get("insights", "No insights."),
+        "",
+        "## Next Steps",
+        "",
+        content.get("next_steps", "No next steps."),
+        "",
+        "## Misconceptions",
+        "",
+    ]
+
+    if misconceptions:
+        for item in misconceptions:
+            lines.append(f"- {item}")
+    else:
+        lines.append("None recorded.")
+
+    return "\n".join(lines)
 
 
 @router_reviews.post("/", response_model=ReviewResponse, status_code=201)
@@ -170,6 +247,25 @@ async def create_review(
     return db_review
 
 
+@router_reviews.post("/generate", response_model=ReviewGenerateResponse)
+async def generate_review(
+    data: ReviewGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    content = await review_service.generate_review_content(
+        db=db,
+        user_id=str(current_user.id),
+        review_type=data.review_type,
+        period=data.period,
+    )
+    return {
+        "review_type": data.review_type,
+        "period": data.period,
+        "content": content,
+    }
+
+
 @router_reviews.get("/", response_model=List[ReviewResponse])
 async def list_reviews(
     current_user: User = Depends(get_current_user),
@@ -190,9 +286,10 @@ async def get_review(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    review_id_str = str(review_id)
     result = await db.execute(
         select(Review).where(
-            Review.id == review_id,
+            Review.id == review_id_str,
             Review.user_id == current_user.id
         )
     )
@@ -204,6 +301,32 @@ async def get_review(
     return review
 
 
+@router_reviews.get("/{review_id}/export")
+async def export_review(
+    review_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    review_id_str = str(review_id)
+    result = await db.execute(
+        select(Review).where(
+            Review.id == review_id_str,
+            Review.user_id == current_user.id
+        )
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    content = _build_review_markdown(review)
+    filename = f"{review.review_type}-review-{review.period.replace(' ', '-')}.md"
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router_reviews.put("/{review_id}", response_model=ReviewResponse)
 async def update_review(
     review_id: UUID,
@@ -211,8 +334,9 @@ async def update_review(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    review_id_str = str(review_id)
     result = await db.execute(
-        select(Review).where(Review.id == review_id, Review.user_id == current_user.id)
+        select(Review).where(Review.id == review_id_str, Review.user_id == current_user.id)
     )
     review = result.scalar_one_or_none()
     if not review:
@@ -236,8 +360,9 @@ async def delete_review(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    review_id_str = str(review_id)
     result = await db.execute(
-        select(Review).where(Review.id == review_id, Review.user_id == current_user.id)
+        select(Review).where(Review.id == review_id_str, Review.user_id == current_user.id)
     )
     review = result.scalar_one_or_none()
     if not review:

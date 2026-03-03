@@ -6,6 +6,15 @@
         {{ t('problems.newProblem') }}
       </button>
     </div>
+
+    <div class="filters-bar">
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="search-input"
+        :placeholder="t('problems.searchProblems')"
+      />
+    </div>
     
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
@@ -61,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '@/api'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -74,6 +83,7 @@ const loading = ref(true)
 const showCreateModal = ref(false)
 const creating = ref(false)
 const error = ref('')
+const searchQuery = ref('')
 
 const newProblem = ref({
   title: '',
@@ -83,7 +93,11 @@ const newProblem = ref({
 
 const fetchProblems = async () => {
   try {
-    const response = await api.get('/problems/')
+    const response = await api.get('/problems/', {
+      params: {
+        q: searchQuery.value.trim() || undefined,
+      },
+    })
     problems.value = response.data
   } catch (e) {
     console.error('Failed to fetch problems:', e)
@@ -119,6 +133,10 @@ const createProblem = async () => {
 onMounted(() => {
   fetchProblems()
 })
+
+watch(searchQuery, () => {
+  fetchProblems()
+})
 </script>
 
 <style scoped>
@@ -127,6 +145,19 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+}
+
+.filters-bar {
+  margin-bottom: 1.5rem;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.75rem 1rem;
 }
 
 .problems-grid {

@@ -4,14 +4,18 @@ set -Eeuo pipefail
 # Cogniforge production deploy helper
 # Default workflow:
 # 1) Pull latest main
-# 2) Backup SQLite data volume
+# 2) Backup database (PostgreSQL by default, SQLite fallback)
 # 3) Build backend/frontend images
 # 4) Restart selected services
 # 5) Run basic health checks
 
 APP_DIR="/data/Cogniforge"
 BRANCH="main"
+BACKUP_MODE="auto"
 DB_VOLUME_LOGICAL="las_db_data"
+POSTGRES_SERVICE="postgres"
+POSTGRES_DB="las_db"
+POSTGRES_USER="postgres"
 BACKUP_DIR=""
 NO_CACHE=0
 SKIP_BACKUP=0
@@ -39,7 +43,11 @@ Options:
   --app-dir <path>          Project directory (default: /data/Cogniforge)
   --branch <name>           Git branch to deploy (default: main)
   --services <list>         Comma-separated service list (default: backend,frontend)
+  --backup-mode <mode>      auto, postgres, or sqlite (default: auto)
   --db-volume <name>        Logical DB volume name in compose (default: las_db_data)
+  --pg-service <name>       PostgreSQL service name in compose (default: postgres)
+  --pg-db <name>            PostgreSQL database name (default: las_db)
+  --pg-user <name>          PostgreSQL user (default: postgres)
   --backup-dir <path>       Backup directory (default: <app-dir>/backups)
   --skip-backup             Skip DB backup
   --skip-pull               Skip git pull
@@ -76,9 +84,29 @@ parse_args() {
         IFS=',' read -r -a SERVICES <<<"$2"
         shift 2
         ;;
+      --backup-mode)
+        [[ $# -ge 2 ]] || die "--backup-mode requires a value"
+        BACKUP_MODE="$2"
+        shift 2
+        ;;
       --db-volume)
         [[ $# -ge 2 ]] || die "--db-volume requires a value"
         DB_VOLUME_LOGICAL="$2"
+        shift 2
+        ;;
+      --pg-service)
+        [[ $# -ge 2 ]] || die "--pg-service requires a value"
+        POSTGRES_SERVICE="$2"
+        shift 2
+        ;;
+      --pg-db)
+        [[ $# -ge 2 ]] || die "--pg-db requires a value"
+        POSTGRES_DB="$2"
+        shift 2
+        ;;
+      --pg-user)
+        [[ $# -ge 2 ]] || die "--pg-user requires a value"
+        POSTGRES_USER="$2"
         shift 2
         ;;
       --backup-dir)
@@ -117,6 +145,11 @@ normalize_services() {
   if [[ ${#SERVICES[@]} -eq 0 ]]; then
     SERVICES=("backend" "frontend")
   fi
+
+  case "$BACKUP_MODE" in
+    auto|postgres|sqlite) ;;
+    *) die "Invalid --backup-mode: $BACKUP_MODE" ;;
+  esac
 }
 
 check_repo_clean() {
@@ -157,16 +190,48 @@ resolve_db_volume_name() {
 }
 
 backup_db() {
-  local volume_name
-  local backup_name
-  local backup_path
-
   [[ "$SKIP_BACKUP" -eq 1 ]] && {
     log "Skip DB backup (requested)."
     return 0
   }
 
   mkdir -p "$BACKUP_DIR"
+
+  if [[ "$BACKUP_MODE" == "postgres" ]]; then
+    backup_postgres_db
+    return 0
+  fi
+
+  if [[ "$BACKUP_MODE" == "sqlite" ]]; then
+    backup_sqlite_db
+    return 0
+  fi
+
+  if dc ps -q "$POSTGRES_SERVICE" >/dev/null 2>&1 && [[ -n "$(dc ps -q "$POSTGRES_SERVICE" 2>/dev/null || true)" ]]; then
+    backup_postgres_db
+    return 0
+  fi
+
+  backup_sqlite_db
+}
+
+backup_postgres_db() {
+  local backup_name
+  local backup_path
+
+  backup_name="las_db_$(date +%F_%H%M%S).sql.gz"
+  backup_path="$BACKUP_DIR/$backup_name"
+
+  log "Backing up PostgreSQL database '$POSTGRES_DB' from service '$POSTGRES_SERVICE' -> $backup_path"
+  dc exec -T "$POSTGRES_SERVICE" sh -lc \
+    "PGPASSWORD=\$POSTGRES_PASSWORD pg_dump -U \"$POSTGRES_USER\" \"$POSTGRES_DB\"" \
+    | gzip > "$backup_path"
+}
+
+backup_sqlite_db() {
+  local volume_name
+  local backup_name
+  local backup_path
 
   volume_name="$(resolve_db_volume_name)" || die "Cannot resolve docker volume for DB ($DB_VOLUME_LOGICAL)."
   backup_name="las_db_$(date +%F_%H%M%S).tgz"
@@ -210,6 +275,15 @@ build_images() {
 restart_services() {
   log "Restarting services: ${SERVICES[*]}"
   dc up -d "${SERVICES[@]}"
+}
+
+run_backend_migrations() {
+  if ! printf '%s\n' "${SERVICES[@]}" | grep -qx "backend"; then
+    return 0
+  fi
+
+  log "Running backend database migrations"
+  dc exec -T backend sh -lc "alembic upgrade head"
 }
 
 wait_backend_health() {
@@ -266,6 +340,7 @@ main() {
   pull_code
   build_images
   restart_services
+  run_backend_migrations
   wait_backend_health
   show_summary
   log "Deploy finished successfully."

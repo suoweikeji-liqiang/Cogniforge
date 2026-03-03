@@ -39,7 +39,10 @@
 
         <div v-if="c.ai_feedback" class="feedback-section">
           <h4>{{ t('challenges.feedback') }}</h4>
-          <p>{{ c.ai_feedback }}</p>
+          <p v-if="c.structured_feedback?.correctness"><strong>{{ t('feedback.correctness') }}:</strong> {{ c.structured_feedback.correctness }}</p>
+          <p v-if="c.structured_feedback?.misconceptions?.length"><strong>{{ t('feedback.misconceptions') }}:</strong> {{ c.structured_feedback.misconceptions.join(' / ') }}</p>
+          <p v-if="c.structured_feedback?.suggestions?.length"><strong>{{ t('feedback.suggestions') }}:</strong> {{ c.structured_feedback.suggestions.join(' / ') }}</p>
+          <p v-if="c.structured_feedback?.next_question"><strong>{{ t('feedback.nextQuestion') }}:</strong> {{ c.structured_feedback.next_question }}</p>
         </div>
       </div>
     </div>
@@ -90,6 +93,7 @@ const submitAnswer = async (c: any) => {
       `/challenges/${c.id}/answer?answer=${encodeURIComponent(c._answer)}`
     )
     c.ai_feedback = res.data.ai_feedback
+    c.structured_feedback = res.data.structured_feedback
     c.status = 'answered'
   } catch (e) {
     console.error('Failed to submit answer:', e)

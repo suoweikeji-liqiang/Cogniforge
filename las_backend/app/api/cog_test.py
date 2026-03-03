@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.services.llm_service import llm_service
 from app.services.srs_service import srs_service
 from app.services.cog_test_engine import CogTestEngine, get_engine, register_engine, unregister_engine
@@ -19,6 +19,8 @@ router = APIRouter(prefix="/cog-test", tags=["cognitive-test"])
 
 
 class StartSessionBody(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     concept: str
     max_rounds: int = 3
     model_card_id: Optional[str] = None

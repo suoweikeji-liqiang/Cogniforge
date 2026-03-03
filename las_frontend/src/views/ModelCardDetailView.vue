@@ -35,6 +35,15 @@
           <span>{{ t('modelCards.version') }}: v{{ card.version }}</span>
           <span>{{ t('problems.createdAt') }}: {{ formatDate(card.created_at) }}</span>
         </div>
+        <div class="review-actions">
+          <button
+            class="btn btn-secondary"
+            :disabled="schedulingReview || isScheduled"
+            @click="scheduleReview"
+          >
+            {{ isScheduled ? t('modelCards.scheduled') : t('modelCards.addToReview') }}
+          </button>
+        </div>
         <div class="cog-test-action">
           <button class="btn btn-primary" @click="startCogTest">
             {{ t('cogTest.startTest') }}
@@ -45,6 +54,18 @@
       <!-- Evolution Timeline -->
       <div class="evolution-section">
         <h2>{{ t('evolution.title') }}</h2>
+        <div v-if="evolutionCompare" class="summary-card">
+          <h3>{{ t('evolution.latestSummary') }}</h3>
+          <p>{{ evolutionCompare.changes_summary }}</p>
+          <div class="summary-meta">
+            <span v-if="evolutionCompare.old_version">
+              v{{ evolutionCompare.old_version.version }} -> v{{ evolutionCompare.new_version.version }}
+            </span>
+            <span v-else>
+              v{{ evolutionCompare.new_version.version }}
+            </span>
+          </div>
+        </div>
         <div v-if="evolutionLogs.length" class="timeline">
           <div
             v-for="log in evolutionLogs"
@@ -59,12 +80,28 @@
               </div>
               <p v-if="log.reason_for_change">{{ log.reason_for_change }}</p>
               <div v-if="log.snapshot" class="snapshot-preview">
-                <span>v{{ log.snapshot.version }} - {{ log.snapshot.title }}</span>
+                <span>v{{ log.snapshot.version }} - {{ log.snapshot.title || card.title }}</span>
               </div>
             </div>
           </div>
         </div>
         <p v-else class="empty">{{ t('evolution.noLogs') }}</p>
+      </div>
+
+      <div class="evolution-section">
+        <h2>{{ t('modelCards.similarCards') }}</h2>
+        <div v-if="similarCards.length" class="similar-list">
+          <router-link
+            v-for="similar in similarCards"
+            :key="similar.id"
+            :to="`/model-cards/${similar.id}`"
+            class="similar-card"
+          >
+            <strong>{{ similar.title }}</strong>
+            <p>{{ similar.user_notes || '-' }}</p>
+          </router-link>
+        </div>
+        <p v-else class="empty">{{ t('modelCards.noSimilarCards') }}</p>
       </div>
     </template>
   </div>
@@ -89,23 +126,48 @@ const startCogTest = async () => {
 
 const card = ref<any>(null)
 const evolutionLogs = ref<any[]>([])
+const evolutionCompare = ref<any>(null)
+const similarCards = ref<any[]>([])
 const loading = ref(true)
+const schedulingReview = ref(false)
+const isScheduled = ref(false)
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString()
 
 const fetchCard = async () => {
   try {
     const id = route.params.id
-    const [cardRes, logsRes] = await Promise.all([
+    const [cardRes, logsRes, schedulesRes, compareRes, similarRes] = await Promise.all([
       api.get(`/model-cards/${id}`),
       api.get(`/model-cards/${id}/evolution`),
+      api.get('/srs/schedules').catch(() => ({ data: [] })),
+      api.get(`/model-cards/${id}/compare`).catch(() => ({ data: null })),
+      api.get(`/model-cards/${id}/similar`).catch(() => ({ data: [] })),
     ])
     card.value = cardRes.data
     evolutionLogs.value = logsRes.data
+    evolutionCompare.value = compareRes.data
+    similarCards.value = similarRes.data
+    isScheduled.value = schedulesRes.data.some((schedule: any) => schedule.model_card_id === id)
   } catch (e) {
     console.error('Failed to fetch model card:', e)
   } finally {
     loading.value = false
+  }
+}
+
+const scheduleReview = async () => {
+  if (!card.value || isScheduled.value || schedulingReview.value) return
+
+  schedulingReview.value = true
+
+  try {
+    await api.post(`/srs/schedule/${card.value.id}`)
+    isScheduled.value = true
+  } catch (e) {
+    console.error('Failed to schedule review:', e)
+  } finally {
+    schedulingReview.value = false
   }
 }
 
@@ -148,8 +210,36 @@ onMounted(fetchCard)
   border-top: 1px solid var(--border);
 }
 
+.review-actions {
+  margin-top: 1rem;
+}
+
 .evolution-section { margin-top: 2rem; }
 .evolution-section h2 { margin-bottom: 1rem; }
+
+.summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.summary-card h3 {
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+}
+
+.summary-card p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.summary-meta {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
 
 .timeline {
   position: relative;
@@ -218,6 +308,27 @@ onMounted(fetchCard)
   text-align: center;
   padding: 2rem;
   color: var(--text-muted);
+}
+
+.similar-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.similar-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.similar-card p {
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 .cog-test-action {

@@ -14,7 +14,14 @@
     "optional": "optional",
     "back": "Back",
     "submit": "Submit",
-    "close": "Close"
+    "close": "Close",
+    "download": "Download"
+  },
+  "feedback": {
+    "correctness": "Correctness",
+    "misconceptions": "Misconceptions",
+    "suggestions": "Suggestions",
+    "nextQuestion": "Next Question"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -144,7 +151,18 @@
     "practiceTasks": "Practice Tasks",
     "dueReviews": "Due Reviews",
     "startReview": "Start Review →",
-    "heatmapTitle": "Learning Activity"
+    "heatmapTitle": "Learning Activity",
+    "reviewAssistant": "Review Assistant",
+    "reviewRecommendation": "Recommended now: generate a {type} review for {period}",
+    "generateReviewNow": "Generate Review Now",
+    "viewReviewHistory": "View Review History",
+    "reviewCreated": "Review generated and saved.",
+    "reviewCreateFailed": "Failed to generate review.",
+    "reviewTypes": {
+      "daily": "daily",
+      "weekly": "weekly",
+      "monthly": "monthly"
+    }
   },
   "problems": {
     "title": "Problems",
@@ -166,17 +184,23 @@
     "concepts": "Associated Concepts",
     "status": "Status",
     "learningPath": "Learning Path",
+    "progress": "Progress",
     "responses": "Responses",
     "addResponse": "Add Response",
     "yourResponse": "Your Response",
     "systemFeedback": "System Feedback",
     "submitResponse": "Submit",
-    "noResponses": "No responses yet"
+    "noResponses": "No responses yet",
+    "previousStep": "Previous Step",
+    "markStepDone": "Mark Step Done",
+    "completed": "Completed"
   },
   "modelCards": {
     "title": "Model Cards",
     "newCard": "New Model Card",
     "searchCards": "Search model cards...",
+    "similarCards": "Similar Model Cards",
+    "noSimilarCards": "No similar model cards yet",
     "noCards": "No model cards found",
     "createFirst": "Create your first model card",
     "conceptMaps": "Concept Maps",
@@ -184,6 +208,11 @@
     "examples": "Examples",
     "counterExamples": "Counter Examples",
     "version": "Version",
+    "addToReview": "Add to Review",
+    "scheduled": "Scheduled",
+    "filterAll": "All",
+    "filterScheduled": "Scheduled",
+    "filterUnscheduled": "Unscheduled",
     "viewCard": "View",
     "deleteCard": "Delete",
     "confirmDelete": "Are you sure you want to delete this model card?"
@@ -200,9 +229,16 @@
   "reviews": {
     "title": "Reviews",
     "noReviews": "No reviews yet",
+    "newReview": "New Review",
+    "reviewType": "Review Type",
     "period": "Period",
     "content": "Content",
-    "createdAt": "Created At"
+    "createdAt": "Created At",
+    "insights": "Insights",
+    "nextSteps": "Next Steps",
+    "misconceptions": "Misconceptions",
+    "generate": "Generate with AI",
+    "generating": "Generating..."
   },
   "chat": {
     "title": "Chat",
@@ -215,7 +251,8 @@
   },
   "evolution": {
     "title": "Evolution Timeline",
-    "noLogs": "No evolution history yet"
+    "noLogs": "No evolution history yet",
+    "latestSummary": "Latest Evolution Summary"
   },
   "srs": {
     "title": "Spaced Repetition Review",
@@ -242,6 +279,7 @@
   },
   "resources": {
     "title": "Learning Resources",
+    "searchResources": "Search resources...",
     "urlPlaceholder": "Enter a web or video link...",
     "titlePlaceholder": "Title (optional)",
     "webpage": "Webpage",

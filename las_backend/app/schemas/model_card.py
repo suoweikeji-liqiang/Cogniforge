@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -17,15 +17,15 @@ class ConceptMapEdge(BaseModel):
 
 
 class ConceptMap(BaseModel):
-    nodes: List[ConceptMapNode] = []
-    edges: List[ConceptMapEdge] = []
+    nodes: List[ConceptMapNode] = Field(default_factory=list)
+    edges: List[ConceptMapEdge] = Field(default_factory=list)
 
 
 class ModelCardBase(BaseModel):
     title: str = Field(..., max_length=500)
     concept_maps: Optional[ConceptMap] = None
     user_notes: Optional[str] = None
-    examples: List[str] = []
+    examples: List[str] = Field(default_factory=list)
 
 
 class ModelCardCreate(ModelCardBase):
@@ -42,6 +42,8 @@ class ModelCardUpdate(BaseModel):
 
 
 class ModelCardResponse(ModelCardBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: UUID
     counter_examples: List[str]
@@ -50,23 +52,26 @@ class ModelCardResponse(ModelCardBase):
     parent_id: Optional[UUID]
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class CounterExampleInput(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_id: UUID
     concept: str
 
 
 class MigrationInput(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_id: UUID
     target_domain: str
 
 
 # Evolution Log schemas
 class EvolutionLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     id: UUID
     model_id: UUID
     user_id: UUID
@@ -75,9 +80,6 @@ class EvolutionLogResponse(BaseModel):
     reason_for_change: Optional[str] = None
     snapshot: Optional[dict] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class EvolutionCompare(BaseModel):

@@ -6,6 +6,20 @@
         {{ t('modelCards.newCard') }}
       </button>
     </div>
+
+    <div class="filters-bar">
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="search-input"
+        :placeholder="t('modelCards.searchCards')"
+      />
+      <select v-model="filterMode" class="filter-select">
+        <option value="all">{{ t('modelCards.filterAll') }}</option>
+        <option value="scheduled">{{ t('modelCards.filterScheduled') }}</option>
+        <option value="unscheduled">{{ t('modelCards.filterUnscheduled') }}</option>
+      </select>
+    </div>
     
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
@@ -22,6 +36,13 @@
         
         <div class="card-actions">
           <button @click="viewCard(card)" class="btn btn-secondary">{{ t('modelCards.viewCard') }}</button>
+          <button
+            @click="scheduleReview(card)"
+            class="btn btn-secondary"
+            :disabled="card.scheduling || card.isScheduled"
+          >
+            {{ card.isScheduled ? t('modelCards.scheduled') : t('modelCards.addToReview') }}
+          </button>
           <button @click="generateCounterExamples(card)" class="btn btn-secondary">
             {{ t('modelCards.counterExamples') }}
           </button>
@@ -48,7 +69,7 @@
       </div>
     </div>
     
-    <p v-else class="empty">{{ t('modelCards.createFirst') }}</p>
+    <p v-else class="empty">{{ modelCards.length ? t('modelCards.noCards') : t('modelCards.createFirst') }}</p>
     
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
@@ -82,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -95,6 +116,9 @@ const loading = ref(true)
 const showCreateModal = ref(false)
 const creating = ref(false)
 const error = ref('')
+const scheduledCardIds = ref<Set<string>>(new Set())
+const searchQuery = ref('')
+const filterMode = ref('all')
 
 const newCard = ref({
   title: '',
@@ -104,9 +128,25 @@ const newCard = ref({
 
 const fetchCards = async () => {
   try {
-    const response = await api.get('/model-cards/')
-    modelCards.value = response.data.map((c: any) => ({
+    const [cardsRes, schedulesRes] = await Promise.all([
+      api.get('/model-cards/', {
+        params: {
+          q: searchQuery.value.trim() || undefined,
+          scheduled:
+            filterMode.value === 'all'
+              ? undefined
+              : filterMode.value === 'scheduled',
+        },
+      }),
+      api.get('/srs/schedules').catch(() => ({ data: [] })),
+    ])
+    scheduledCardIds.value = new Set(
+      schedulesRes.data.map((schedule: any) => schedule.model_card_id)
+    )
+    modelCards.value = cardsRes.data.map((c: any) => ({
       ...c,
+      isScheduled: scheduledCardIds.value.has(c.id),
+      scheduling: false,
       showCounterExamples: false,
       showMigrations: false,
     }))
@@ -178,7 +218,26 @@ const suggestMigration = async (card: any) => {
   }
 }
 
+const scheduleReview = async (card: any) => {
+  if (card.isScheduled || card.scheduling) return
+
+  card.scheduling = true
+
+  try {
+    await api.post(`/srs/schedule/${card.id}`)
+    card.isScheduled = true
+  } catch (e) {
+    console.error('Failed to schedule review:', e)
+  } finally {
+    card.scheduling = false
+  }
+}
+
 onMounted(() => {
+  fetchCards()
+})
+
+watch([searchQuery, filterMode], () => {
   fetchCards()
 })
 </script>
@@ -189,6 +248,25 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+}
+
+.filters-bar {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-input,
+.filter-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.75rem 1rem;
+}
+
+.search-input {
+  flex: 1;
 }
 
 .cards-grid {

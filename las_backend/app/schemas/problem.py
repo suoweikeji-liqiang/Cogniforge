@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -7,7 +7,7 @@ from datetime import datetime
 class ProblemBase(BaseModel):
     title: str = Field(..., max_length=500)
     description: Optional[str] = None
-    associated_concepts: List[str] = []
+    associated_concepts: List[str] = Field(default_factory=list)
 
 
 class ProblemCreate(ProblemBase):
@@ -22,6 +22,8 @@ class ProblemUpdate(BaseModel):
 
 
 class ProblemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: UUID
     title: str
@@ -30,9 +32,6 @@ class ProblemResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class ProblemResponseCreate(BaseModel):
@@ -41,21 +40,21 @@ class ProblemResponseCreate(BaseModel):
 
 
 class ProblemResponseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     problem_id: UUID
     user_response: str
     system_feedback: Optional[str]
+    structured_feedback: Optional[dict] = None
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class LearningPathStep(BaseModel):
     step: int
     concept: str
     description: str
-    resources: List[str] = []
+    resources: List[str] = Field(default_factory=list)
 
 
 class LearningPathProgressUpdate(BaseModel):
@@ -63,10 +62,9 @@ class LearningPathProgressUpdate(BaseModel):
 
 
 class LearningPathResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     problem_id: UUID
     path_data: List[LearningPathStep]
     current_step: int
-    
-    class Config:
-        from_attributes = True

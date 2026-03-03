@@ -20,9 +20,12 @@ if config.config_file_name is not None:
 
 # Import Base and all models so metadata is populated
 from app.core.database import Base
-import app.models.entities.user  # noqa: F401 — registers all models
+from app.core.config import get_settings
+import app.models.entities  # noqa: F401 - registers all models
 
 target_metadata = Base.metadata
+settings = get_settings()
+config.set_main_option("sqlalchemy.url", settings.effective_database_url)
 
 
 def run_migrations_offline() -> None:

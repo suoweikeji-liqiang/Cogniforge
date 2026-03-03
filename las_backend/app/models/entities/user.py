@@ -3,6 +3,10 @@ from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
 from app.core.database import Base
+from app.core.config import get_settings
+from app.core.vector import EmbeddingVector
+
+settings = get_settings()
 
 
 class User(Base):
@@ -35,6 +39,7 @@ class Problem(Base):
     description = Column(Text)
     associated_concepts = Column(JSON, default=list)
     status = Column(String(50), default="new")
+    embedding = Column(EmbeddingVector(settings.MODEL_CARD_EMBEDDING_DIMENSIONS))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -81,7 +86,7 @@ class ModelCard(Base):
     migration_attempts = Column(JSON, default=list)
     version = Column(Integer, default=1)
     parent_id = Column(String(36), ForeignKey("model_cards.id"))
-    embedding = Column(JSON)
+    embedding = Column(EmbeddingVector(settings.MODEL_CARD_EMBEDDING_DIMENSIONS))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -221,6 +226,7 @@ class ResourceLink(Base):
     link_type = Column(String(20), default="webpage")  # webpage, video
     ai_summary = Column(Text)
     status = Column(String(20), default="unread")  # unread, reading, completed
+    embedding = Column(EmbeddingVector(settings.MODEL_CARD_EMBEDDING_DIMENSIONS))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

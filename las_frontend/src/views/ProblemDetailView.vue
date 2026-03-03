@@ -7,6 +7,12 @@
         <router-link to="/problems" class="back-link">&larr; {{ t('common.back') }}</router-link>
         <h1>{{ problem.title }}</h1>
         <p>{{ problem.description }}</p>
+        <div class="problem-meta">
+          <span class="status" :class="problem.status">{{ problem.status }}</span>
+          <span v-if="learningPath?.path_data?.length" class="progress-text">
+            {{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps }}
+          </span>
+        </div>
       </div>
       
       <div class="problem-content">
@@ -17,7 +23,10 @@
               v-for="(step, index) in learningPath.path_data" 
               :key="index"
               class="path-step"
-              :class="{ active: index === learningPath.current_step }"
+              :class="{
+                active: index === activeStepIndex,
+                completed: index < completedSteps,
+              }"
             >
               <div class="step-number">{{ index + 1 }}</div>
               <div class="step-content">
@@ -30,6 +39,26 @@
                 </ul>
               </div>
             </div>
+          </div>
+          <div v-if="learningPath?.path_data?.length" class="path-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="updatingPath || completedSteps === 0"
+              @click="updateCurrentStep(completedSteps - 1)"
+            >
+              {{ t('problemDetail.previousStep') }}
+            </button>
+            <button
+              v-if="!isPathCompleted"
+              type="button"
+              class="btn btn-primary"
+              :disabled="updatingPath"
+              @click="updateCurrentStep(completedSteps + 1)"
+            >
+              {{ t('problemDetail.markStepDone') }}
+            </button>
+            <span v-else class="completed-badge">{{ t('problemDetail.completed') }}</span>
           </div>
           <p v-else class="empty">{{ t('problemDetail.noResponses') }}</p>
         </div>
@@ -60,7 +89,20 @@
               </div>
               <div v-if="response.system_feedback" class="system-feedback">
                 <strong>{{ t('problemDetail.systemFeedback') }}:</strong>
-                <p>{{ response.system_feedback }}</p>
+                <div class="feedback-structured">
+                  <p v-if="response.structured_feedback?.correctness">
+                    <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
+                  </p>
+                  <p v-if="response.structured_feedback?.misconceptions?.length">
+                    <strong>{{ t('feedback.misconceptions') }}:</strong> {{ response.structured_feedback.misconceptions.join(' / ') }}
+                  </p>
+                  <p v-if="response.structured_feedback?.suggestions?.length">
+                    <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
+                  </p>
+                  <p v-if="response.structured_feedback?.next_question">
+                    <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -71,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
@@ -85,21 +127,30 @@ const learningPath = ref<any>(null)
 const responses = ref<any[]>([])
 const loading = ref(true)
 const submitting = ref(false)
+const updatingPath = ref(false)
 const responseText = ref('')
+
+const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
+const completedSteps = computed(() => learningPath.value?.current_step || 0)
+const isPathCompleted = computed(() => totalSteps.value > 0 && completedSteps.value >= totalSteps.value)
+const activeStepIndex = computed(() => {
+  if (!totalSteps.value || isPathCompleted.value) {
+    return -1
+  }
+  return completedSteps.value
+})
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes] = await Promise.all([
+    const [problemRes, pathRes, responsesRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
+      api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
     ])
     
     problem.value = problemRes.data
     learningPath.value = pathRes.data
-    
-    if (problem.value.responses) {
-      responses.value = problem.value.responses
-    }
+    responses.value = responsesRes.data
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -122,6 +173,33 @@ const submitResponse = async () => {
     console.error('Failed to submit response:', e)
   } finally {
     submitting.value = false
+  }
+}
+
+const updateCurrentStep = async (nextStep: number) => {
+  if (!learningPath.value) return
+
+  updatingPath.value = true
+
+  try {
+    const response = await api.put(`/problems/${route.params.id}/learning-path`, {
+      current_step: nextStep,
+    })
+    learningPath.value = response.data
+
+    if (problem.value) {
+      if (totalSteps.value > 0 && nextStep >= totalSteps.value) {
+        problem.value.status = 'completed'
+      } else if (nextStep > 0) {
+        problem.value.status = 'in-progress'
+      } else {
+        problem.value.status = 'new'
+      }
+    }
+  } catch (e) {
+    console.error('Failed to update learning path:', e)
+  } finally {
+    updatingPath.value = false
   }
 }
 
@@ -159,6 +237,14 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
+.problem-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
 .problem-content {
   display: grid;
   gap: 2rem;
@@ -185,6 +271,10 @@ onMounted(() => {
 
 .path-step.active {
   border-color: var(--primary);
+}
+
+.path-step.completed {
+  border-color: rgba(74, 222, 128, 0.45);
 }
 
 .step-number {
@@ -216,6 +306,13 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
+.path-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
 .response-form {
   margin-bottom: 2rem;
   padding-bottom: 2rem;
@@ -243,6 +340,43 @@ onMounted(() => {
   background: rgba(74, 222, 128, 0.1);
   border-left: 3px solid var(--primary);
   border-radius: 4px;
+}
+
+.feedback-structured p + p {
+  margin-top: 0.5rem;
+}
+
+.status {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.status.new {
+  background: #3b82f6;
+  color: white;
+}
+
+.status.in-progress {
+  background: #f59e0b;
+  color: black;
+}
+
+.status.completed {
+  background: var(--primary);
+  color: var(--bg-dark);
+}
+
+.progress-text {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.completed-badge {
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .loading {

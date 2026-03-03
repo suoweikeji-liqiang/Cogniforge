@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: las-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=las_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d las_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./las_backend
@@ -9,11 +27,12 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    volumes:
-      - las_db_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      # Use an environment variable for the DB path to store it in the mounted volume
-      - DATABASE_FILE=./data/las.db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/las_db
+      - AUTO_CREATE_TABLES=false
 
   frontend:
     build:
@@ -27,4 +46,4 @@ services:
       - backend
 
 volumes:
-  las_db_data:
+  postgres_data:

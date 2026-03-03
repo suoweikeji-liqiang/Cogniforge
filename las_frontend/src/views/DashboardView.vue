@@ -48,6 +48,32 @@
       </div>
     </div>
 
+    <div class="review-assistant card-panel">
+      <div class="assistant-header">
+        <div>
+          <h2>{{ t('dashboard.reviewAssistant') }}</h2>
+          <p>{{ t('dashboard.reviewRecommendation', {
+            type: t(`dashboard.reviewTypes.${recommendedReview.type}`),
+            period: recommendedReview.period,
+          }) }}</p>
+        </div>
+        <div class="assistant-actions">
+          <button
+            v-if="!recommendedReviewExists"
+            class="btn btn-primary"
+            :disabled="reviewGenerating"
+            @click="generateRecommendedReview"
+          >
+            {{ reviewGenerating ? t('reviews.generating') : t('dashboard.generateReviewNow') }}
+          </button>
+          <router-link v-else to="/reviews" class="review-link">
+            {{ t('dashboard.viewReviewHistory') }}
+          </router-link>
+        </div>
+      </div>
+      <p v-if="reviewMessage" class="assistant-message">{{ reviewMessage }}</p>
+    </div>
+
     <!-- Learning Heatmap -->
     <div class="heatmap-section">
       <h2>{{ t('dashboard.heatmapTitle') }}</h2>
@@ -81,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
@@ -99,6 +125,9 @@ const stats = ref({
 
 const recentProblems = ref<any[]>([])
 const heatmapDays = ref<any[]>([])
+const reviewGenerating = ref(false)
+const reviewMessage = ref('')
+const existingReviews = ref<any[]>([])
 
 const buildHeatmap = (activity: Record<string, number>) => {
   const days = []
@@ -114,15 +143,52 @@ const buildHeatmap = (activity: Record<string, number>) => {
   return days
 }
 
+const getWeekPeriod = (date: Date) => {
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const day = utcDate.getUTCDay() || 7
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1))
+  const weekNo = Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  return `${utcDate.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
+}
+
+const recommendedReview = computed(() => {
+  const now = new Date()
+  if (now.getDate() === 1) {
+    return {
+      type: 'monthly',
+      period: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+    }
+  }
+  if (now.getDay() === 1) {
+    return {
+      type: 'weekly',
+      period: getWeekPeriod(now),
+    }
+  }
+  return {
+    type: 'daily',
+    period: now.toISOString().slice(0, 10),
+  }
+})
+
+const recommendedReviewExists = computed(() =>
+  existingReviews.value.some((review) =>
+    review.review_type === recommendedReview.value.type &&
+    review.period === recommendedReview.value.period
+  )
+)
+
 const fetchDashboardData = async () => {
   try {
-    const [problemsRes, cardsRes, convsRes, practiceRes, statsRes, heatmapRes] = await Promise.all([
+    const [problemsRes, cardsRes, convsRes, practiceRes, statsRes, heatmapRes, reviewsRes] = await Promise.all([
       api.get('/problems/'),
       api.get('/model-cards/'),
       api.get('/conversations/'),
       api.get('/practice/tasks'),
       api.get('/statistics/overview'),
       api.get('/statistics/heatmap'),
+      api.get('/reviews/').catch(() => ({ data: [] })),
     ])
 
     stats.value.problems = problemsRes.data.length
@@ -132,8 +198,35 @@ const fetchDashboardData = async () => {
     stats.value.dueReviews = statsRes.data.due_reviews || 0
     recentProblems.value = problemsRes.data.slice(0, 5)
     heatmapDays.value = buildHeatmap(heatmapRes.data.activity || {})
+    existingReviews.value = reviewsRes.data
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
+  }
+}
+
+const generateRecommendedReview = async () => {
+  reviewGenerating.value = true
+  reviewMessage.value = ''
+
+  try {
+    const generated = await api.post('/reviews/generate', {
+      review_type: recommendedReview.value.type,
+      period: recommendedReview.value.period,
+    })
+
+    await api.post('/reviews/', {
+      review_type: recommendedReview.value.type,
+      period: recommendedReview.value.period,
+      content: generated.data.content,
+    })
+
+    reviewMessage.value = t('dashboard.reviewCreated')
+    await fetchDashboardData()
+  } catch (error) {
+    console.error('Failed to generate recommended review:', error)
+    reviewMessage.value = t('dashboard.reviewCreateFailed')
+  } finally {
+    reviewGenerating.value = false
   }
 }
 
@@ -209,6 +302,37 @@ onMounted(() => {
 
 .action-card p {
   color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.card-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.assistant-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.assistant-header p {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+}
+
+.assistant-actions {
+  display: flex;
+  align-items: center;
+}
+
+.assistant-message {
+  margin-top: 0.75rem;
+  color: var(--primary);
   font-size: 0.875rem;
 }
 
