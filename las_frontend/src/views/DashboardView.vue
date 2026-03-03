@@ -1,33 +1,95 @@
 <template>
   <div class="dashboard">
-    <h1>{{ t('dashboard.welcome') }}, {{ authStore.user?.username }}</h1>
-    
-    <div class="stats-grid">
-      <div class="stat-card">
-        <h3>{{ t('dashboard.problems') }}</h3>
-        <p class="stat-number">{{ stats.problems }}</p>
+    <section class="hero-shell">
+      <div class="hero-copy">
+        <p class="hero-kicker">{{ t('dashboard.focusTitle') }}</p>
+        <h1>{{ t('dashboard.welcome') }}, {{ authStore.user?.username }}</h1>
+        <p class="hero-subtitle">{{ t('dashboard.focusSubtitle') }}</p>
       </div>
-      <div class="stat-card">
-        <h3>{{ t('dashboard.modelCards') }}</h3>
-        <p class="stat-number">{{ stats.modelCards }}</p>
+
+      <div class="focus-grid">
+        <router-link :to="focusCard.to" class="focus-card" :class="focusCard.tone">
+          <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
+          <h2>{{ focusCard.title }}</h2>
+          <p>{{ focusCard.description }}</p>
+          <span class="focus-cta">{{ focusCard.cta }}</span>
+        </router-link>
+
+        <div class="focus-side">
+          <div class="review-assistant card-panel">
+            <div class="section-meta">{{ t('dashboard.reviewAssistant') }}</div>
+            <h3>{{ t('dashboard.prioritySummary') }}</h3>
+            <p>{{ t('dashboard.reviewRecommendation', {
+              type: t(`dashboard.reviewTypes.${recommendedReview.type}`),
+              period: recommendedReview.period,
+            }) }}</p>
+            <div class="assistant-actions">
+              <button
+                v-if="!recommendedReviewExists"
+                class="btn btn-primary"
+                :disabled="reviewGenerating"
+                @click="generateRecommendedReview"
+              >
+                {{ reviewGenerating ? t('reviews.generating') : t('dashboard.generateReviewNow') }}
+              </button>
+              <router-link v-else to="/reviews" class="inline-link">
+                {{ t('dashboard.viewReviewHistory') }}
+              </router-link>
+            </div>
+            <p v-if="reviewMessage" class="assistant-message">{{ reviewMessage }}</p>
+          </div>
+
+          <div class="momentum-card card-panel">
+            <div class="section-meta">{{ t('dashboard.keepMomentum') }}</div>
+            <h3>{{ t('dashboard.activityWindow') }}</h3>
+            <p>{{ t('dashboard.momentumDescription') }}</p>
+            <div class="momentum-metrics">
+              <div>
+                <strong>{{ activeDays }}</strong>
+                <span>{{ t('dashboard.activeDays') }}</span>
+              </div>
+              <div>
+                <strong>{{ stats.dueReviews }}</strong>
+                <span>{{ t('dashboard.openReviews') }}</span>
+              </div>
+              <div>
+                <strong>{{ stats.practice }}</strong>
+                <span>{{ t('dashboard.practiceTasks') }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="stat-card">
-        <h3>{{ t('dashboard.conversations') }}</h3>
-        <p class="stat-number">{{ stats.conversations }}</p>
+    </section>
+
+    <section class="stats-section">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>{{ t('dashboard.problems') }}</h3>
+          <p class="stat-number">{{ stats.problems }}</p>
+        </div>
+        <div class="stat-card">
+          <h3>{{ t('dashboard.modelCards') }}</h3>
+          <p class="stat-number">{{ stats.modelCards }}</p>
+        </div>
+        <div class="stat-card">
+          <h3>{{ t('dashboard.conversations') }}</h3>
+          <p class="stat-number">{{ stats.conversations }}</p>
+        </div>
+        <div class="stat-card">
+          <h3>{{ t('dashboard.practiceTasks') }}</h3>
+          <p class="stat-number">{{ stats.practice }}</p>
+        </div>
       </div>
-      <div class="stat-card">
-        <h3>{{ t('dashboard.practiceTasks') }}</h3>
-        <p class="stat-number">{{ stats.practice }}</p>
+    </section>
+
+    <section class="actions-section">
+      <div class="section-heading">
+        <div>
+          <p class="section-meta">{{ t('dashboard.quickActions') }}</p>
+          <h2>{{ t('dashboard.quickActionTitle') }}</h2>
+        </div>
       </div>
-      <div class="stat-card stat-card-alert" v-if="stats.dueReviews > 0">
-        <h3>{{ t('dashboard.dueReviews') }}</h3>
-        <p class="stat-number due">{{ stats.dueReviews }}</p>
-        <router-link to="/srs-review" class="review-link">{{ t('dashboard.startReview') }}</router-link>
-      </div>
-    </div>
-    
-    <div class="actions-section">
-      <h2>{{ t('dashboard.quickActions') }}</h2>
       <div class="actions-grid">
         <router-link to="/problems" class="action-card">
           <h3>{{ t('dashboard.newProblem') }}</h3>
@@ -46,68 +108,56 @@
           <p>{{ t('dashboard.testUnderstanding') }}</p>
         </router-link>
       </div>
-    </div>
+    </section>
 
-    <div class="review-assistant card-panel">
-      <div class="assistant-header">
-        <div>
-          <h2>{{ t('dashboard.reviewAssistant') }}</h2>
-          <p>{{ t('dashboard.reviewRecommendation', {
-            type: t(`dashboard.reviewTypes.${recommendedReview.type}`),
-            period: recommendedReview.period,
-          }) }}</p>
+    <section class="insights-grid">
+      <div class="heatmap-section card-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-meta">{{ t('dashboard.heatmapTitle') }}</p>
+            <h2>{{ t('dashboard.activityWindow') }}</h2>
+          </div>
         </div>
-        <div class="assistant-actions">
-          <button
-            v-if="!recommendedReviewExists"
-            class="btn btn-primary"
-            :disabled="reviewGenerating"
-            @click="generateRecommendedReview"
+        <div class="heatmap-grid">
+          <div
+            v-for="day in heatmapDays"
+            :key="day.date"
+            class="heatmap-cell"
+            :class="'level-' + day.level"
+            :title="day.date + ': ' + day.count + ' activities'"
+          ></div>
+        </div>
+      </div>
+
+      <div class="recent-section card-panel">
+        <div class="section-heading">
+          <div>
+            <p class="section-meta">{{ t('dashboard.recentActivity') }}</p>
+            <h2>{{ t('dashboard.recentTitle') }}</h2>
+          </div>
+        </div>
+        <div v-if="recentProblems.length" class="recent-list">
+          <router-link
+            v-for="problem in recentProblems"
+            :key="problem.id"
+            :to="`/problems/${problem.id}`"
+            class="recent-item"
           >
-            {{ reviewGenerating ? t('reviews.generating') : t('dashboard.generateReviewNow') }}
-          </button>
-          <router-link v-else to="/reviews" class="review-link">
-            {{ t('dashboard.viewReviewHistory') }}
+            <div>
+              <h4>{{ problem.title }}</h4>
+              <p>{{ problem.description || t('dashboard.resumeLatestProblemDescription') }}</p>
+            </div>
+            <span class="status">{{ problem.status }}</span>
           </router-link>
         </div>
+        <p v-else class="empty">{{ t('dashboard.noRecent') }}</p>
       </div>
-      <p v-if="reviewMessage" class="assistant-message">{{ reviewMessage }}</p>
-    </div>
-
-    <!-- Learning Heatmap -->
-    <div class="heatmap-section">
-      <h2>{{ t('dashboard.heatmapTitle') }}</h2>
-      <div class="heatmap-grid">
-        <div
-          v-for="day in heatmapDays"
-          :key="day.date"
-          class="heatmap-cell"
-          :class="'level-' + day.level"
-          :title="day.date + ': ' + day.count + ' activities'"
-        ></div>
-      </div>
-    </div>
-
-    <div class="recent-section">
-      <h2>{{ t('dashboard.recentActivity') }}</h2>
-      <div v-if="recentProblems.length" class="recent-list">
-        <router-link 
-          v-for="problem in recentProblems" 
-          :key="problem.id" 
-          :to="`/problems/${problem.id}`"
-          class="recent-item"
-        >
-          <h4>{{ problem.title }}</h4>
-          <span class="status">{{ problem.status }}</span>
-        </router-link>
-      </div>
-      <p v-else class="empty">{{ t('dashboard.noRecent') }}</p>
-    </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
@@ -179,6 +229,54 @@ const recommendedReviewExists = computed(() =>
   )
 )
 
+const activeDays = computed(() =>
+  heatmapDays.value.filter((day: any) => day.count > 0).length
+)
+
+const focusCard = computed(() => {
+  if (stats.value.dueReviews > 0) {
+    return {
+      eyebrow: t('dashboard.priorityNow'),
+      title: t('dashboard.reviewQueueReady', { count: stats.value.dueReviews }),
+      description: t('dashboard.reviewQueueDescription'),
+      cta: t('dashboard.startReview'),
+      to: '/srs-review',
+      tone: 'tone-alert',
+    }
+  }
+
+  if (recentProblems.value.length > 0) {
+    return {
+      eyebrow: t('dashboard.priorityNow'),
+      title: t('dashboard.resumeLatestProblem'),
+      description: recentProblems.value[0].title,
+      cta: t('dashboard.openProblem'),
+      to: `/problems/${recentProblems.value[0].id}`,
+      tone: 'tone-primary',
+    }
+  }
+
+  if (stats.value.modelCards === 0) {
+    return {
+      eyebrow: t('dashboard.priorityNow'),
+      title: t('dashboard.buildModelLibrary'),
+      description: t('dashboard.modelLibraryDescription'),
+      cta: t('dashboard.createModelCard'),
+      to: '/model-cards',
+      tone: 'tone-neutral',
+    }
+  }
+
+  return {
+    eyebrow: t('dashboard.priorityNow'),
+    title: t('dashboard.captureFirstProblem'),
+    description: t('dashboard.resumeLatestProblemDescription'),
+    cta: t('dashboard.newProblem'),
+    to: '/problems',
+    tone: 'tone-primary',
+  }
+})
+
 const fetchDashboardData = async () => {
   try {
     const [problemsRes, cardsRes, convsRes, practiceRes, statsRes, heatmapRes, reviewsRes] = await Promise.all([
@@ -236,98 +334,138 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.dashboard h1 {
-  margin-bottom: 2rem;
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+.hero-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
 }
 
-.stat-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.5rem;
+.hero-copy h1 {
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.05;
 }
 
-.stat-card h3 {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  margin-bottom: 0.5rem;
-}
-
-.stat-number {
-  font-size: 2rem;
-  font-weight: bold;
+.hero-kicker,
+.section-meta {
   color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-.actions-section {
-  margin-bottom: 2rem;
+.hero-subtitle {
+  max-width: 680px;
+  margin-top: 0.75rem;
+  color: var(--text-muted);
+  font-size: 1rem;
 }
 
-.actions-section h2 {
-  margin-bottom: 1rem;
-}
-
-.actions-grid {
+.focus-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
   gap: 1rem;
 }
 
-.action-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+.focus-card,
+.card-panel {
+  border-radius: 18px;
   padding: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.focus-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 280px;
   text-decoration: none;
   color: var(--text);
-  transition: all 0.2s;
+  background: linear-gradient(180deg, rgba(26, 26, 46, 0.94), rgba(15, 15, 35, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.action-card:hover {
-  border-color: var(--primary);
-  transform: translateY(-2px);
+.focus-card h2 {
+  margin-top: 0.75rem;
+  font-size: 1.75rem;
+  line-height: 1.1;
 }
 
-.action-card h3 {
-  color: var(--primary);
-  margin-bottom: 0.5rem;
+.focus-card p {
+  margin-top: 0.75rem;
+  color: #d3d7df;
+  max-width: 42ch;
 }
 
-.action-card p {
+.focus-eyebrow {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
-  font-size: 0.875rem;
+  font-size: 0.78rem;
+}
+
+.focus-cta {
+  margin-top: auto;
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.7rem 0.95rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.tone-primary {
+  border-color: rgba(74, 222, 128, 0.2);
+  background:
+    radial-gradient(circle at top right, rgba(74, 222, 128, 0.18), transparent 32%),
+    linear-gradient(180deg, rgba(21, 33, 29, 0.96), rgba(13, 17, 27, 0.98));
+}
+
+.tone-alert {
+  border-color: rgba(250, 204, 21, 0.2);
+  background:
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(40, 32, 17, 0.96), rgba(20, 20, 24, 0.98));
+}
+
+.tone-neutral {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.focus-side {
+  display: grid;
+  gap: 1rem;
 }
 
 .card-panel {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
 }
 
-.assistant-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
+.card-panel h3 {
+  margin-top: 0.45rem;
+  font-size: 1.15rem;
 }
 
-.assistant-header p {
-  margin-top: 0.35rem;
+.card-panel p {
+  margin-top: 0.55rem;
   color: var(--text-muted);
 }
 
 .assistant-actions {
-  display: flex;
-  align-items: center;
+  margin-top: 1rem;
+}
+
+.inline-link {
+  color: var(--primary);
+  text-decoration: none;
 }
 
 .assistant-message {
@@ -336,85 +474,189 @@ onMounted(() => {
   font-size: 0.875rem;
 }
 
-.recent-section h2 {
-  margin-bottom: 1rem;
+.momentum-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1rem;
 }
+
+.momentum-metrics div {
+  padding: 0.8rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.momentum-metrics strong {
+  display: block;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+
+.momentum-metrics span {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.stats-grid,
+.actions-grid,
+.insights-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stat-card {
+  padding: 1.25rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.stat-card h3 {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.stat-number {
+  margin-top: 0.45rem;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: 0.9rem;
+}
+
+.section-heading h2 {
+  margin-top: 0.25rem;
+}
+
+.actions-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.action-card {
+  padding: 1.25rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  text-decoration: none;
+  color: var(--text);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.action-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(74, 222, 128, 0.28);
+}
+
+.action-card h3 {
+  color: var(--primary);
+}
+
+.action-card p {
+  margin-top: 0.45rem;
+  color: var(--text-muted);
+}
+
+.insights-grid {
+  grid-template-columns: 1.15fr 0.95fr;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(18, 1fr);
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+.heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.level-1 { background: rgba(74, 222, 128, 0.25); }
+.level-2 { background: rgba(74, 222, 128, 0.45); }
+.level-3 { background: rgba(74, 222, 128, 0.65); }
+.level-4 { background: rgba(74, 222, 128, 0.9); }
 
 .recent-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.8rem;
+  margin-top: 1rem;
 }
 
 .recent-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  gap: 1rem;
   padding: 1rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
   text-decoration: none;
   color: var(--text);
 }
 
-.recent-item:hover {
-  border-color: var(--primary);
+.recent-item p {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 .status {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  background: var(--primary);
-  color: var(--bg-dark);
-  border-radius: 4px;
+  align-self: flex-start;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--primary);
+  font-size: 0.78rem;
+  text-transform: capitalize;
 }
 
 .empty {
+  margin-top: 1rem;
   color: var(--text-muted);
-  text-align: center;
-  padding: 2rem;
 }
 
-.stat-card-alert {
-  border-color: #f97316;
+@media (max-width: 1024px) {
+  .focus-grid,
+  .insights-grid,
+  .actions-grid,
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
-.stat-number.due {
-  color: #f97316;
-}
+@media (max-width: 768px) {
+  .focus-grid,
+  .insights-grid,
+  .actions-grid,
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 
-.review-link {
-  display: inline-block;
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--primary);
-  text-decoration: none;
-}
+  .momentum-metrics {
+    grid-template-columns: 1fr;
+  }
 
-.heatmap-section {
-  margin-bottom: 2rem;
-}
+  .recent-item {
+    flex-direction: column;
+  }
 
-.heatmap-section h2 {
-  margin-bottom: 1rem;
+  .heatmap-grid {
+    grid-template-columns: repeat(10, 1fr);
+  }
 }
-
-.heatmap-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-}
-
-.heatmap-cell {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-}
-
-.level-0 { background: var(--bg-card); border: 1px solid var(--border); }
-.level-1 { background: #0e4429; }
-.level-2 { background: #006d32; }
-.level-3 { background: #26a641; }
-.level-4 { background: #39d353; }
 </style>

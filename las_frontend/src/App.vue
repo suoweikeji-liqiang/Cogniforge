@@ -4,23 +4,53 @@
       <LangSwitch />
     </div>
     <nav v-if="authStore.isAuthenticated" class="navbar">
-      <div class="nav-brand">LAS</div>
-      <div class="nav-links">
-        <router-link to="/dashboard">{{ t('nav.dashboard') }}</router-link>
-        <router-link to="/problems">{{ t('nav.problems') }}</router-link>
-        <router-link to="/model-cards">{{ t('nav.modelCards') }}</router-link>
-        <router-link to="/knowledge-graph">{{ t('nav.graph') }}</router-link>
-        <router-link to="/srs-review">{{ t('nav.srsReview') }}</router-link>
-        <router-link to="/challenges">{{ t('nav.challenges') }}</router-link>
-        <router-link to="/resources">{{ t('nav.resources') }}</router-link>
-        <router-link to="/notes">{{ t('nav.notes') }}</router-link>
-        <router-link to="/practice">{{ t('nav.practice') }}</router-link>
-        <router-link to="/reviews">{{ t('nav.reviews') }}</router-link>
-        <router-link to="/cog-test">{{ t('nav.cogTest') }}</router-link>
-        <router-link v-if="authStore.user?.role === 'admin'" to="/admin">{{ t('nav.admin') }}</router-link>
-        <button @click="logout">{{ t('nav.logout') }}</button>
+      <div class="nav-top">
+        <router-link to="/dashboard" class="nav-brand">
+          <span class="brand-mark">C</span>
+          <div class="brand-copy">
+            <span class="brand-name">Cogniforge</span>
+            <span class="brand-subtitle">{{ t('nav.workspace') }}</span>
+          </div>
+        </router-link>
+
+        <div class="nav-meta">
+          <div class="nav-user">
+            <span class="nav-user-label">{{ t('nav.signedInAs') }}</span>
+            <strong>{{ authStore.user?.username }}</strong>
+          </div>
+          <button class="logout-button" @click="logout">{{ t('nav.logout') }}</button>
+        </div>
+      </div>
+
+      <div class="nav-row nav-row-primary">
+        <router-link
+          v-for="item in primaryNavItems"
+          :key="item.to"
+          :to="item.to"
+          class="nav-pill"
+          :class="{ active: isRouteActive(item.to) }"
+        >
+          {{ t(item.label) }}
+        </router-link>
+
+        <button class="nav-toggle" @click="secondaryExpanded = !secondaryExpanded">
+          {{ secondaryExpanded ? t('nav.less') : t('nav.more') }}
+        </button>
+      </div>
+
+      <div v-if="secondaryExpanded" class="nav-row nav-row-secondary">
+        <router-link
+          v-for="item in secondaryNavItems"
+          :key="item.to"
+          :to="item.to"
+          class="nav-secondary-link"
+          :class="{ active: isRouteActive(item.to) }"
+        >
+          {{ t(item.label) }}
+        </router-link>
       </div>
     </nav>
+
     <main class="main-content">
       <router-view />
     </main>
@@ -28,14 +58,56 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import LangSwitch from '@/components/LangSwitch.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+const secondaryExpanded = ref(false)
+
+const primaryNavItems = [
+  { to: '/dashboard', label: 'nav.dashboard' },
+  { to: '/problems', label: 'nav.problems' },
+  { to: '/model-cards', label: 'nav.modelCards' },
+  { to: '/srs-review', label: 'nav.srsReview' },
+  { to: '/reviews', label: 'nav.reviews' },
+]
+
+const secondaryNavItems = computed(() => {
+  const items = [
+    { to: '/practice', label: 'nav.practice' },
+    { to: '/chat', label: 'nav.chat' },
+    { to: '/challenges', label: 'nav.challenges' },
+    { to: '/resources', label: 'nav.resources' },
+    { to: '/notes', label: 'nav.notes' },
+    { to: '/knowledge-graph', label: 'nav.graph' },
+    { to: '/cog-test', label: 'nav.cogTest' },
+  ]
+
+  if (authStore.user?.role === 'admin') {
+    items.push({ to: '/admin', label: 'nav.admin' })
+  }
+
+  return items
+})
+
+const isRouteActive = (path: string) =>
+  route.path === path || route.path.startsWith(`${path}/`)
+
+watch(
+  () => route.path,
+  (path) => {
+    if (secondaryNavItems.value.some((item) => path === item.to || path.startsWith(`${item.to}/`))) {
+      secondaryExpanded.value = true
+    }
+  },
+  { immediate: true }
+)
 
 const logout = async () => {
   await authStore.logout()
@@ -57,62 +129,187 @@ const logout = async () => {
 }
 
 .navbar {
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 1.25rem 2rem 0;
+}
+
+.nav-top,
+.nav-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1rem 120px 1rem 2rem;
-  background: #1a1a2e;
-  color: white;
-  flex-wrap: wrap;
+}
+
+.nav-top {
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(74, 222, 128, 0.16);
+  border-radius: 20px 20px 0 0;
+  background:
+    radial-gradient(circle at top left, rgba(74, 222, 128, 0.12), transparent 40%),
+    linear-gradient(180deg, rgba(26, 26, 46, 0.94), rgba(16, 16, 34, 0.98));
 }
 
 .nav-brand {
-  font-size: 1.5rem;
-  font-weight: bold;
-}
-
-.nav-links {
   display: flex;
-  gap: 1.5rem;
   align-items: center;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 768px) {
-  .navbar {
-    padding: 0.75rem 1rem;
-    gap: 0.5rem;
-  }
-  .nav-links {
-    gap: 0.75rem;
-    font-size: 0.85rem;
-  }
-  .main-content {
-    padding: 1rem;
-  }
-}
-
-.nav-links a {
-  color: #a0a0a0;
+  gap: 0.9rem;
+  color: var(--text);
   text-decoration: none;
 }
 
-.nav-links a.router-link-active {
-  color: #4ade80;
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary), #8bffbe);
+  color: #07210f;
+  font-size: 1.15rem;
+  font-weight: 800;
 }
 
-.nav-links button {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.brand-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.brand-subtitle {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.nav-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.nav-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  font-size: 0.9rem;
+}
+
+.nav-user-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.logout-button {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.14);
+  color: #ffd3d3;
+  padding: 0.65rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.nav-row {
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.95rem 1.1rem;
+  border-left: 1px solid rgba(74, 222, 128, 0.12);
+  border-right: 1px solid rgba(74, 222, 128, 0.12);
+  background: rgba(19, 19, 37, 0.96);
+}
+
+.nav-row-primary {
+  border-top: 1px solid rgba(74, 222, 128, 0.12);
+}
+
+.nav-row-secondary {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(74, 222, 128, 0.12);
+  border-radius: 0 0 20px 20px;
+}
+
+.nav-pill,
+.nav-secondary-link,
+.nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.nav-pill {
+  padding: 0.65rem 1rem;
+  color: #d3d8df;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+}
+
+.nav-pill.active {
+  color: #04160a;
+  background: linear-gradient(135deg, var(--primary), #7cf0a9);
+  box-shadow: 0 10px 24px rgba(74, 222, 128, 0.2);
+}
+
+.nav-secondary-link {
+  padding: 0.4rem 0.8rem;
+  color: var(--text-muted);
+}
+
+.nav-secondary-link.active {
+  color: var(--primary);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.nav-toggle {
+  margin-left: auto;
+  padding: 0.65rem 0.95rem;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .main-content {
   padding: 2rem;
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  .navbar {
+    padding: 0.9rem 1rem 0;
+  }
+
+  .nav-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nav-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .nav-user {
+    align-items: flex-start;
+  }
+
+  .nav-toggle {
+    margin-left: 0;
+  }
+
+  .main-content {
+    padding: 1rem;
+  }
 }
 </style>
