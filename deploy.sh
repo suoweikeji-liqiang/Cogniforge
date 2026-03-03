@@ -123,7 +123,8 @@ check_repo_clean() {
   local tracked_changes
   tracked_changes="$(git status --porcelain --untracked-files=no)"
   if [[ -n "$tracked_changes" ]]; then
-    die "Git working tree has tracked changes. Commit/stash before deploy."
+    echo "$tracked_changes" >&2
+    die "Git working tree has tracked changes. Commit/stash before deploy, or use --skip-pull."
   fi
 }
 
@@ -186,8 +187,6 @@ pull_code() {
     log "Skip git pull (requested)."
     return 0
   }
-
-  check_repo_clean
 
   before_sha="$(git rev-parse --short HEAD)"
   log "Updating code on branch '$BRANCH' (current: $before_sha)"
@@ -257,6 +256,10 @@ main() {
   [[ -d "$APP_DIR" ]] || die "App dir not found: $APP_DIR"
   cd "$APP_DIR"
   [[ -f "docker-compose.yml" ]] || die "docker-compose.yml not found in $APP_DIR"
+
+  if [[ "$SKIP_PULL" -eq 0 ]]; then
+    check_repo_clean
+  fi
 
   log "Deploy start: app_dir=$APP_DIR branch=$BRANCH services=${SERVICES[*]}"
   backup_db
