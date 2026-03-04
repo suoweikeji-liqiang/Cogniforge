@@ -15,7 +15,6 @@ os.environ["SECRET_KEY"] = "test-secret-key"
 
 from app.main import app  # noqa: E402
 from app.core.database import Base, engine, AsyncSessionLocal  # noqa: E402
-from app.api.routes.auth import _token_blacklist, _login_attempts, _login_blocks  # noqa: E402
 from app.services.model_os_service import model_os_service  # noqa: E402
 from app.services.cog_test_engine import _engines  # noqa: E402
 
@@ -25,9 +24,6 @@ async def clean_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    _token_blacklist.clear()
-    _login_attempts.clear()
-    _login_blocks.clear()
     _engines.clear()
     yield
     async with engine.begin() as conn:

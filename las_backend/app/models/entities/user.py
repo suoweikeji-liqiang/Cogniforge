@@ -257,6 +257,45 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    token = Column(String(2048), unique=True, nullable=False, index=True)
+    token_type = Column(String(20), nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LoginThrottle(Base):
+    __tablename__ = "login_throttles"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    scope_key = Column(String(255), unique=True, nullable=False, index=True)
+    username = Column(String(100), nullable=True, index=True)
+    client_ip = Column(String(100), nullable=True, index=True)
+    failed_count = Column(Integer, default=0, nullable=False)
+    window_started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    blocked_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RetrievalEvent(Base):
+    __tablename__ = "retrieval_events"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    source = Column(String(100), nullable=False, index=True)
+    query = Column(Text, nullable=False)
+    retrieval_context = Column(Text)
+    items = Column(JSON, default=list)
+    result_count = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", backref="retrieval_events")
+
+
 class CogTestSession(Base):
     __tablename__ = "cog_test_sessions"
 

@@ -48,7 +48,11 @@ async def promote_user_to_admin(db_session, username="tester"):
 
 
 @pytest.mark.asyncio
-async def test_auth_refresh_and_logout_flow(client):
+async def test_auth_refresh_and_logout_flow(client, db_session):
+    from sqlalchemy import select
+
+    from app.models.entities.user import RevokedToken
+
     tokens = await register_and_login(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
@@ -64,6 +68,20 @@ async def test_auth_refresh_and_logout_flow(client):
     refreshed_body = refresh_response.json()
     refreshed_token = refreshed_body["access_token"]
     assert refreshed_token
+    assert refreshed_body["refresh_token"] != tokens["refresh_token"]
+
+    replay_refresh_response = await client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+    assert replay_refresh_response.status_code == 401
+
+    revoked_after_refresh = await db_session.execute(
+        select(RevokedToken).where(RevokedToken.token == tokens["refresh_token"])
+    )
+    revoked_refresh = revoked_after_refresh.scalar_one()
+    assert revoked_refresh.token_type == "refresh"
+    assert revoked_refresh.expires_at is not None
 
     refreshed_headers = {"Authorization": f"Bearer {refreshed_token}"}
     logout_response = await client.post(
@@ -74,6 +92,22 @@ async def test_auth_refresh_and_logout_flow(client):
         },
     )
     assert logout_response.status_code == 200
+
+    revoked_tokens = await db_session.execute(
+        select(RevokedToken).where(
+            RevokedToken.token.in_(
+                [
+                    tokens["refresh_token"],
+                    refreshed_token,
+                    refreshed_body["refresh_token"],
+                ]
+            )
+        )
+    )
+    revoked_payloads = {item.token: item.token_type for item in revoked_tokens.scalars().all()}
+    assert revoked_payloads[tokens["refresh_token"]] == "refresh"
+    assert revoked_payloads[refreshed_token] == "access"
+    assert revoked_payloads[refreshed_body["refresh_token"]] == "refresh"
 
     me_after_logout = await client.get("/api/auth/me", headers=refreshed_headers)
     assert me_after_logout.status_code == 401
@@ -150,7 +184,89 @@ async def test_problem_and_resource_search(client):
 
 
 @pytest.mark.asyncio
-async def test_login_rate_limit(client):
+async def test_retrieval_logs_and_summary(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    await create_model_card(client, headers, "Retrieval Signals", "semantic cues and prior knowledge")
+    problem_response = await client.post(
+        "/api/problems/",
+        json={
+            "title": "Need stronger retrieval context",
+            "description": "Connect current answer to prior model cards",
+            "associated_concepts": ["retrieval", "memory"],
+        },
+        headers=headers,
+    )
+    assert problem_response.status_code == 201
+    problem = problem_response.json()
+
+    create_response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "I should connect this with old cards."},
+        headers=headers,
+    )
+    assert create_response.status_code == 200
+
+    conversation_response = await client.post(
+        "/api/conversations/",
+        json={"title": "Retrieval Chat"},
+        headers=headers,
+    )
+    assert conversation_response.status_code == 201
+    conversation = conversation_response.json()
+
+    chat_response = await client.post(
+        "/api/conversations/chat",
+        json={
+            "conversation_id": conversation["id"],
+            "message": "Use my prior knowledge to answer this question.",
+        },
+        headers=headers,
+    )
+    assert chat_response.status_code == 200
+
+    logs_response = await client.get("/api/retrieval/logs", headers=headers)
+    assert logs_response.status_code == 200
+    logs = logs_response.json()
+    assert len(logs) >= 2
+    sources = {item["source"] for item in logs}
+    assert "problem_response" in sources
+    assert "conversation_chat" in sources
+    assert any(log["result_count"] > 0 for log in logs)
+    assert any(
+        entry["entity_type"] == "model_card"
+        for log in logs
+        for entry in log["items"]
+    )
+
+    filtered_logs_response = await client.get(
+        "/api/retrieval/logs",
+        params={"source": "conversation_chat"},
+        headers=headers,
+    )
+    assert filtered_logs_response.status_code == 200
+    assert all(item["source"] == "conversation_chat" for item in filtered_logs_response.json())
+
+    summary_response = await client.get("/api/retrieval/summary", headers=headers)
+    assert summary_response.status_code == 200
+    summary = summary_response.json()
+    assert summary["total_events"] >= 2
+    assert summary["total_hits"] >= 2
+    assert summary["zero_hit_events"] == 0
+    assert summary["poor_hit_events"] >= 1
+    assert summary["zero_hit_rate"] == 0
+    assert summary["health_status"] == "healthy"
+    assert summary["source_breakdown"]["problem_response"] >= 1
+    assert summary["source_breakdown"]["conversation_chat"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limit(client, db_session):
+    from sqlalchemy import select
+
+    from app.models.entities.user import LoginThrottle
+
     await register_and_login(client)
 
     for _ in range(5):
@@ -165,6 +281,12 @@ async def test_login_rate_limit(client):
         data={"username": "tester", "password": "wrong-password"},
     )
     assert blocked_response.status_code == 429
+
+    throttle_rows = await db_session.execute(select(LoginThrottle))
+    throttles = throttle_rows.scalars().all()
+    assert len(throttles) == 3
+    assert all(item.failed_count == 5 for item in throttles)
+    assert all(item.blocked_until is not None for item in throttles)
 
 
 @pytest.mark.asyncio
@@ -439,7 +561,9 @@ async def test_conversations_and_chat_flow(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_users_and_llm_config_flow(client, db_session):
+async def test_admin_users_and_llm_config_flow(client, db_session, monkeypatch):
+    import openai
+
     tokens = await register_and_login(client)
     await promote_user_to_admin(db_session)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -476,10 +600,10 @@ async def test_admin_users_and_llm_config_flow(client, db_session):
     create_provider_response = await client.post(
         "/api/admin/llm-config/providers",
         json={
-            "name": "OpenAI Main",
-            "provider_type": "openai",
+            "name": "Qwen Main",
+            "provider_type": "qwen",
             "api_key": "super-secret-key",
-            "base_url": "https://api.example.com",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "enabled": True,
             "priority": 1,
         },
@@ -498,8 +622,8 @@ async def test_admin_users_and_llm_config_flow(client, db_session):
         "/api/admin/llm-config/models",
         json={
             "provider_id": provider_id,
-            "model_id": "gpt-4o-mini",
-            "model_name": "GPT 4o Mini",
+            "model_id": "qwen-plus",
+            "model_name": "Qwen Plus",
             "enabled": True,
             "is_default": True,
         },
@@ -510,7 +634,7 @@ async def test_admin_users_and_llm_config_flow(client, db_session):
 
     update_model_response = await client.put(
         f"/api/admin/llm-config/models/{llm_model_id}",
-        json={"model_name": "GPT 4o Mini Updated", "enabled": False},
+        json={"model_name": "Qwen Plus Updated", "enabled": False},
         headers=headers,
     )
     assert update_model_response.status_code == 200
@@ -518,8 +642,29 @@ async def test_admin_users_and_llm_config_flow(client, db_session):
     providers_after_model_response = await client.get("/api/admin/llm-config/providers", headers=headers)
     assert providers_after_model_response.status_code == 200
     model = providers_after_model_response.json()[0]["models"][0]
-    assert model["model_name"] == "GPT 4o Mini Updated"
+    assert model["model_name"] == "Qwen Plus Updated"
     assert model["enabled"] is False
+
+    class FakeOpenAI:
+        def __init__(self, api_key, base_url=None):
+            self.api_key = api_key
+            self.base_url = base_url
+            self.chat = self
+            self.completions = self
+
+        def create(self, model, messages, max_tokens):
+            assert self.api_key == "super-secret-key"
+            assert self.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            assert model == "qwen-plus"
+            return {"ok": True}
+
+    monkeypatch.setattr(openai, "OpenAI", FakeOpenAI)
+    provider_test_response = await client.get(
+        f"/api/admin/llm-config/providers/{provider_id}/test",
+        headers=headers,
+    )
+    assert provider_test_response.status_code == 200
+    assert provider_test_response.json()["status"] == "success"
 
     delete_model_response = await client.delete(
         f"/api/admin/llm-config/models/{llm_model_id}",

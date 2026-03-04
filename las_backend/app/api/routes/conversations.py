@@ -171,6 +171,7 @@ async def chat(
         db=db,
         user_id=str(current_user.id),
         query=chat_data.message,
+        source="conversation_chat",
     )
     response_content = await model_os_service.generate_with_context(
         prompt=chat_data.message,

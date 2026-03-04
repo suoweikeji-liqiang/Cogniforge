@@ -58,6 +58,50 @@
               </div>
             </div>
           </div>
+
+          <div class="retrieval-card card-panel">
+            <div class="section-meta">{{ t('dashboard.retrievalObserver') }}</div>
+            <h3>{{ t('dashboard.retrievalTitle') }}</h3>
+            <p>{{ t('dashboard.retrievalDescription') }}</p>
+            <div class="retrieval-metrics">
+              <div>
+                <strong>{{ retrievalSummary.total_events }}</strong>
+                <span>{{ t('dashboard.retrievalEvents') }}</span>
+              </div>
+              <div>
+                <strong>{{ retrievalSummary.average_hits }}</strong>
+                <span>{{ t('dashboard.averageHits') }}</span>
+              </div>
+              <div>
+                <strong>{{ retrievalSummary.total_hits }}</strong>
+                <span>{{ t('dashboard.totalHits') }}</span>
+              </div>
+            </div>
+            <div class="retrieval-health" :class="retrievalSummary.health_status">
+              <strong>{{ t(`dashboard.retrievalHealth.${retrievalSummary.health_status || 'healthy'}`) }}</strong>
+              <span>
+                {{ t('dashboard.retrievalHealthMeta', {
+                  zeroHits: retrievalSummary.zero_hit_events,
+                  poorHits: retrievalSummary.poor_hit_events,
+                }) }}
+              </span>
+            </div>
+            <div v-if="retrievalLogs.length" class="retrieval-list">
+              <div
+                v-for="log in retrievalLogs"
+                :key="log.id"
+                class="retrieval-item"
+              >
+                <div class="retrieval-item-top">
+                  <span class="retrieval-source">{{ formatRetrievalSource(log.source) }}</span>
+                  <span class="retrieval-count">{{ log.result_count }} {{ t('dashboard.hitsUnit') }}</span>
+                </div>
+                <p class="retrieval-query">{{ log.query }}</p>
+                <p class="retrieval-preview">{{ summarizeRetrievalItems(log.items) }}</p>
+              </div>
+            </div>
+            <p v-else class="empty">{{ t('dashboard.noRetrievalLogs') }}</p>
+          </div>
         </div>
       </div>
     </section>
@@ -178,6 +222,17 @@ const heatmapDays = ref<any[]>([])
 const reviewGenerating = ref(false)
 const reviewMessage = ref('')
 const existingReviews = ref<any[]>([])
+const retrievalSummary = ref({
+  total_events: 0,
+  total_hits: 0,
+  average_hits: 0,
+  zero_hit_events: 0,
+  poor_hit_events: 0,
+  zero_hit_rate: 0,
+  health_status: 'healthy',
+  source_breakdown: {} as Record<string, number>,
+})
+const retrievalLogs = ref<any[]>([])
 
 const buildHeatmap = (activity: Record<string, number>) => {
   const days = []
@@ -233,6 +288,19 @@ const activeDays = computed(() =>
   heatmapDays.value.filter((day: any) => day.count > 0).length
 )
 
+const formatRetrievalSource = (source: string) =>
+  t(`dashboard.retrievalSources.${source}`, source.replace(/_/g, ' '))
+
+const summarizeRetrievalItems = (items: any[]) => {
+  if (!items?.length) {
+    return t('dashboard.noRetrievalHits')
+  }
+  return items
+    .slice(0, 2)
+    .map((item) => item.title)
+    .join(' · ')
+}
+
 const focusCard = computed(() => {
   if (stats.value.dueReviews > 0) {
     return {
@@ -279,7 +347,17 @@ const focusCard = computed(() => {
 
 const fetchDashboardData = async () => {
   try {
-    const [problemsRes, cardsRes, convsRes, practiceRes, statsRes, heatmapRes, reviewsRes] = await Promise.all([
+    const [
+      problemsRes,
+      cardsRes,
+      convsRes,
+      practiceRes,
+      statsRes,
+      heatmapRes,
+      reviewsRes,
+      retrievalSummaryRes,
+      retrievalLogsRes,
+    ] = await Promise.all([
       api.get('/problems/'),
       api.get('/model-cards/'),
       api.get('/conversations/'),
@@ -287,6 +365,19 @@ const fetchDashboardData = async () => {
       api.get('/statistics/overview'),
       api.get('/statistics/heatmap'),
       api.get('/reviews/').catch(() => ({ data: [] })),
+      api.get('/retrieval/summary').catch(() => ({
+        data: {
+          total_events: 0,
+          total_hits: 0,
+          average_hits: 0,
+          zero_hit_events: 0,
+          poor_hit_events: 0,
+          zero_hit_rate: 0,
+          health_status: 'healthy',
+          source_breakdown: {},
+        },
+      })),
+      api.get('/retrieval/logs', { params: { limit: 3 } }).catch(() => ({ data: [] })),
     ])
 
     stats.value.problems = problemsRes.data.length
@@ -297,6 +388,8 @@ const fetchDashboardData = async () => {
     recentProblems.value = problemsRes.data.slice(0, 5)
     heatmapDays.value = buildHeatmap(heatmapRes.data.activity || {})
     existingReviews.value = reviewsRes.data
+    retrievalSummary.value = retrievalSummaryRes.data
+    retrievalLogs.value = retrievalLogsRes.data
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
   }
@@ -481,23 +574,99 @@ onMounted(() => {
   margin-top: 1rem;
 }
 
-.momentum-metrics div {
+.momentum-metrics div,
+.retrieval-metrics div {
   padding: 0.8rem;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.03);
 }
 
-.momentum-metrics strong {
+.momentum-metrics strong,
+.retrieval-metrics strong {
   display: block;
   font-size: 1.5rem;
   color: var(--text);
 }
 
-.momentum-metrics span {
+.momentum-metrics span,
+.retrieval-metrics span {
   display: block;
   margin-top: 0.25rem;
   color: var(--text-muted);
   font-size: 0.82rem;
+}
+
+.retrieval-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.retrieval-health {
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.retrieval-health strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.retrieval-health span {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.retrieval-health.healthy {
+  border-color: rgba(74, 222, 128, 0.25);
+}
+
+.retrieval-health.needs_attention {
+  border-color: rgba(250, 204, 21, 0.28);
+}
+
+.retrieval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.retrieval-item {
+  padding: 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.retrieval-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.retrieval-source,
+.retrieval-count {
+  font-size: 0.8rem;
+  color: var(--primary);
+}
+
+.retrieval-query {
+  margin-top: 0.45rem;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.retrieval-preview {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
 }
 
 .stats-grid,
@@ -648,6 +817,10 @@ onMounted(() => {
   }
 
   .momentum-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .retrieval-metrics {
     grid-template-columns: 1fr;
   }
 

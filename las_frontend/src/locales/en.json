@@ -115,6 +115,7 @@
     "confirmDelete": "Are you sure you want to delete this?",
     "types": {
       "openai": "OpenAI",
+      "qwen": "Qwen",
       "anthropic": "Anthropic",
       "azure": "Azure OpenAI",
       "ollama": "Ollama",
@@ -182,6 +183,27 @@
     "viewReviewHistory": "View Review History",
     "reviewCreated": "Review generated and saved.",
     "reviewCreateFailed": "Failed to generate review.",
+    "retrievalObserver": "Retrieval Observer",
+    "retrievalTitle": "RAG Retrieval Activity",
+    "retrievalDescription": "A compact view of what context retrieval is pulling in, so retrieval stops being a black box.",
+    "retrievalEvents": "Retrieval events",
+    "averageHits": "Average hits",
+    "totalHits": "Total hits",
+    "hitsUnit": "hits",
+    "noRetrievalLogs": "No retrieval logs yet.",
+    "noRetrievalHits": "No context hits for this event",
+    "retrievalHealthMeta": "{zeroHits} zero-hit events, {poorHits} low-signal events",
+    "retrievalHealth": {
+      "healthy": "Retrieval looks healthy",
+      "needs_attention": "Retrieval needs attention"
+    },
+    "retrievalSources": {
+      "problem_response": "Problem response",
+      "practice_submission": "Practice submission",
+      "challenge_answer": "Challenge answer",
+      "conversation_chat": "Conversation chat",
+      "unknown": "Unknown source"
+    },
     "reviewTypes": {
       "daily": "daily",
       "weekly": "weekly",

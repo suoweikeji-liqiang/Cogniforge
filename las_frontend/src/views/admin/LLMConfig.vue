@@ -127,6 +127,7 @@
             <label>{{ t('llm.providerType') }}</label>
             <select v-model="providerForm.provider_type" required @change="onProviderTypeChange">
               <option value="openai">OpenAI</option>
+              <option value="qwen">Qwen / 千问</option>
               <option value="anthropic">Anthropic</option>
               <option value="ollama">Ollama</option>
               <option value="azure">Azure OpenAI</option>
@@ -308,6 +309,7 @@ const testConnection = async () => {
 const getBaseUrlPlaceholder = () => {
   const type = providerForm.value.provider_type
   if (type === 'openai') return 'https://api.openai.com/v1'
+  if (type === 'qwen') return 'https://dashscope.aliyuncs.com/compatible-mode/v1'
   if (type === 'anthropic') return 'https://api.anthropic.com'
   if (type === 'ollama') return 'http://localhost:11434'
   return 'https://api.example.com/v1'
@@ -316,13 +318,15 @@ const getBaseUrlPlaceholder = () => {
 const getModelIdPlaceholder = () => {
   const type = selectedProvider.value?.provider_type || providerForm.value.provider_type
   if (type === 'openai') return 'gpt-4o-mini'
+  if (type === 'qwen') return 'qwen-plus'
   if (type === 'anthropic') return 'claude-3-5-sonnet-20241022'
   if (type === 'ollama') return 'llama2'
   return 'model-id'
 }
 
 const onProviderTypeChange = () => {
-  providerForm.value.base_url = ''
+  const type = providerForm.value.provider_type
+  providerForm.value.base_url = type === 'qwen' ? 'https://dashscope.aliyuncs.com/compatible-mode/v1' : ''
 }
 
 const saveModel = async () => {

@@ -219,6 +219,7 @@ async def create_response(
         db=db,
         user_id=str(current_user.id),
         query=f"{problem.title}\n{response_data.user_response}",
+        source="problem_response",
     )
     structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=response_data.user_response,

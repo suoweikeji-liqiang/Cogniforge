@@ -108,6 +108,7 @@ async def create_submission(
         db=db,
         user_id=str(current_user.id),
         query=f"{task.title}\n{submission_data.solution}",
+        source="practice_submission",
     )
     structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=submission_data.solution,

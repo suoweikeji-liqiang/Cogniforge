@@ -110,6 +110,7 @@ async def answer_challenge(
         db=db,
         user_id=str(current_user.id),
         query=f"{(challenge.context or {}).get('card_title', '')}\n{answer}",
+        source="challenge_answer",
     )
     structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=answer,

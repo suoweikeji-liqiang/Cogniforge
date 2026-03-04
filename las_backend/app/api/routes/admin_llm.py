@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.models.entities.llm_provider import LLMProvider, LLMModel
 from app.models.entities.user import User
 from app.api.deps import require_admin
+from app.services.llm_service import DEFAULT_BASE_URLS, OPENAI_COMPATIBLE_PROVIDERS
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 
@@ -253,11 +254,14 @@ async def test_provider(
         raise HTTPException(status_code=404, detail="Provider not found")
     
     try:
-        if provider.provider_type == "openai":
+        if provider.provider_type in OPENAI_COMPATIBLE_PROVIDERS:
             import openai
-            client = openai.OpenAI(api_key=provider.api_key, base_url=provider.base_url or None)
+            client = openai.OpenAI(
+                api_key=provider.api_key,
+                base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
+            )
             response = client.chat.completions.create(
-                model=provider.models[0].model_id if provider.models else "gpt-4o-mini",
+                model=provider.models[0].model_id if provider.models else ("qwen-plus" if provider.provider_type == "qwen" else "gpt-4o-mini"),
                 messages=[{"role": "user", "content": "Hi"}],
                 max_tokens=10
             )

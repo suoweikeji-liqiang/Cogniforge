@@ -277,16 +277,49 @@ class ModelOSService:
         substring_bonus = 0.5 if query.lower() in text.lower() else 0.0
         return (token_hits / len(query_tokens)) + substring_bonus
 
+    def _build_retrieval_item(
+        self,
+        entity_type: str,
+        entity_id: str,
+        title: str,
+        score: float,
+        preview: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "title": title,
+            "score": round(max(score, 0.0), 4),
+            "preview": (preview or "")[:240] or None,
+        }
+
+    def score_review(self, review, query: str) -> float:
+        content = review.content or {}
+        review_text = "\n".join(
+            [
+                review.review_type or "",
+                review.period or "",
+                str(content.get("summary", "")),
+                str(content.get("insights", "")),
+                str(content.get("next_steps", "")),
+            ]
+        )
+        return self._score_text_match(review_text, query)
+
     async def build_retrieval_context(
         self,
         db,
         user_id: str,
         query: str,
         limit: int = 5,
+        source: str = "unknown",
     ) -> str:
-        from app.models.entities.user import ModelCard, Problem, Review
+        from app.models.entities.user import ModelCard, Problem, RetrievalEvent, Review
 
         sections: List[str] = []
+        items: List[Dict[str, Any]] = []
+        normalized_limit = max(1, limit)
+        query_embedding = self.generate_embedding(query)
 
         cards_result = await db.execute(
             select(ModelCard)
@@ -295,6 +328,7 @@ class ModelOSService:
         )
         ranked_cards = self.rank_model_cards(list(cards_result.scalars().all()), query)[:3]
         for card in ranked_cards:
+            score = self.score_model_card(card, query, query_embedding)
             sections.append(
                 "\n".join(
                     [
@@ -305,26 +339,24 @@ class ModelOSService:
                     ]
                 )
             )
+            items.append(
+                self._build_retrieval_item(
+                    entity_type="model_card",
+                    entity_id=str(card.id),
+                    title=card.title,
+                    score=score,
+                    preview=card.user_notes or ", ".join(card.examples or []),
+                )
+            )
 
         problems_result = await db.execute(
             select(Problem)
             .where(Problem.user_id == user_id)
             .order_by(Problem.updated_at.desc())
         )
-        scored_problems = []
-        for problem in problems_result.scalars().all():
-            problem_text = "\n".join(
-                [
-                    problem.title or "",
-                    problem.description or "",
-                    " ".join(problem.associated_concepts or []),
-                ]
-            )
-            score = self._score_text_match(problem_text, query)
-            if score > 0:
-                scored_problems.append((score, problem))
-        scored_problems.sort(key=lambda item: item[0], reverse=True)
-        for _, problem in scored_problems[:2]:
+        ranked_problems = self.rank_problems(list(problems_result.scalars().all()), query)[:2]
+        for problem in ranked_problems:
+            score = self.score_problem(problem, query, query_embedding)
             sections.append(
                 "\n".join(
                     [
@@ -335,13 +367,29 @@ class ModelOSService:
                     ]
                 )
             )
+            items.append(
+                self._build_retrieval_item(
+                    entity_type="problem",
+                    entity_id=str(problem.id),
+                    title=problem.title,
+                    score=score,
+                    preview=problem.description or ", ".join(problem.associated_concepts or []),
+                )
+            )
 
         reviews_result = await db.execute(
             select(Review)
             .where(Review.user_id == user_id)
             .order_by(Review.created_at.desc())
         )
-        for review in list(reviews_result.scalars().all())[:2]:
+        scored_reviews = []
+        for review in reviews_result.scalars().all():
+            score = self.score_review(review, query)
+            if score > 0:
+                scored_reviews.append((score, review))
+        scored_reviews.sort(key=lambda item: item[0], reverse=True)
+
+        for score, review in scored_reviews[:2]:
             content = review.content or {}
             sections.append(
                 "\n".join(
@@ -353,8 +401,33 @@ class ModelOSService:
                     ]
                 )
             )
+            items.append(
+                self._build_retrieval_item(
+                    entity_type="review",
+                    entity_id=str(review.id),
+                    title=f"{review.review_type} / {review.period}",
+                    score=score,
+                    preview=content.get("summary") or content.get("insights"),
+                )
+            )
 
-        return "\n\n".join(sections[:limit])
+        selected_sections = sections[:normalized_limit]
+        selected_items = items[:normalized_limit]
+        retrieval_context = "\n\n".join(selected_sections)
+
+        if query.strip():
+            db.add(
+                RetrievalEvent(
+                    user_id=user_id,
+                    source=source,
+                    query=query,
+                    retrieval_context=retrieval_context or None,
+                    items=selected_items,
+                    result_count=len(selected_items),
+                )
+            )
+
+        return retrieval_context
 
     def build_model_snapshot(self, card) -> Dict[str, Any]:
         return {

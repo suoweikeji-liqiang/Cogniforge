@@ -7,6 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 from app.models.entities.llm_provider import LLMProvider, LLMModel
 
+OPENAI_COMPATIBLE_PROVIDERS = {"openai", "qwen"}
+DEFAULT_BASE_URLS = {
+    "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+}
+
 
 class LLMService:
     def __init__(self):
@@ -54,13 +59,14 @@ class LLMService:
 
             fallbacks = {
                 "openai": "gpt-4o-mini",
+                "qwen": "qwen-plus",
                 "anthropic": "claude-3-5-sonnet-20241022",
                 "ollama": "llama2",
             }
             resolved_model = model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
 
-            if provider.provider_type == "openai":
-                return await self._generate_openai(prompt, provider, resolved_model)
+            if provider.provider_type in OPENAI_COMPATIBLE_PROVIDERS:
+                return await self._generate_openai_compatible(prompt, provider, resolved_model)
             elif provider.provider_type == "anthropic":
                 return await self._generate_anthropic(prompt, provider, resolved_model)
             elif provider.provider_type == "ollama":
@@ -68,11 +74,11 @@ class LLMService:
             else:
                 return f"Error: Unsupported provider type: {provider.provider_type}"
     
-    async def _generate_openai(self, prompt: str, provider: LLMProvider, model: str) -> str:
+    async def _generate_openai_compatible(self, prompt: str, provider: LLMProvider, model: str) -> str:
         try:
             client = openai.OpenAI(
                 api_key=provider.api_key,
-                base_url=provider.base_url or None
+                base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
             )
             response = client.chat.completions.create(
                 model=model,
@@ -135,13 +141,14 @@ class LLMService:
 
             fallbacks = {
                 "openai": "gpt-4o-mini",
+                "qwen": "qwen-plus",
                 "anthropic": "claude-3-5-sonnet-20241022",
                 "ollama": "llama2",
             }
             resolved_model = model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
 
-            if provider.provider_type == "openai":
-                async for token in self._stream_openai(messages, system_prompt, provider, resolved_model, temperature):
+            if provider.provider_type in OPENAI_COMPATIBLE_PROVIDERS:
+                async for token in self._stream_openai_compatible(messages, system_prompt, provider, resolved_model, temperature):
                     yield token
             elif provider.provider_type == "anthropic":
                 async for token in self._stream_anthropic(messages, system_prompt, provider, resolved_model, temperature):
@@ -149,7 +156,7 @@ class LLMService:
             else:
                 yield f"Error: Streaming not supported for provider: {provider.provider_type}"
 
-    async def _stream_openai(
+    async def _stream_openai_compatible(
         self,
         messages: list[dict],
         system_prompt: str,
@@ -160,7 +167,7 @@ class LLMService:
         try:
             client = openai.AsyncOpenAI(
                 api_key=provider.api_key,
-                base_url=provider.base_url or None,
+                base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
             )
             all_messages = []
             if system_prompt:

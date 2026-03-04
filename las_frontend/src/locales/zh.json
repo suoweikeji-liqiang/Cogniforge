@@ -115,6 +115,7 @@
     "confirmDelete": "确定要删除吗？",
     "types": {
       "openai": "OpenAI",
+      "qwen": "千问",
       "anthropic": "Anthropic",
       "azure": "Azure OpenAI",
       "ollama": "Ollama",
@@ -182,6 +183,27 @@
     "viewReviewHistory": "查看复盘记录",
     "reviewCreated": "复盘已生成并保存。",
     "reviewCreateFailed": "复盘生成失败。",
+    "retrievalObserver": "召回观察",
+    "retrievalTitle": "RAG 召回情况",
+    "retrievalDescription": "快速看最近召回用了哪些上下文，避免知识命中变成黑盒。",
+    "retrievalEvents": "召回次数",
+    "averageHits": "平均命中",
+    "totalHits": "总命中数",
+    "hitsUnit": "条",
+    "noRetrievalLogs": "还没有召回记录。",
+    "noRetrievalHits": "本次没有命中上下文",
+    "retrievalHealthMeta": "{zeroHits} 次零命中，{poorHits} 次低信号召回",
+    "retrievalHealth": {
+      "healthy": "召回状态良好",
+      "needs_attention": "召回需要关注"
+    },
+    "retrievalSources": {
+      "problem_response": "问题回答",
+      "practice_submission": "练习提交",
+      "challenge_answer": "挑战作答",
+      "conversation_chat": "对话聊天",
+      "unknown": "未知来源"
+    },
     "reviewTypes": {
       "daily": "每日",
       "weekly": "每周",
