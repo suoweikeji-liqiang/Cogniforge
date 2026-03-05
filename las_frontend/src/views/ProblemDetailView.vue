@@ -60,35 +60,35 @@
             </button>
             <span v-else class="completed-badge">{{ t('problemDetail.completed') }}</span>
           </div>
-          <p v-else class="empty">{{ t('problemDetail.noResponses') }}</p>
+          <p v-else class="empty">{{ t('problemDetail.noLearningPath') }}</p>
         </div>
         
         <div class="responses-section card">
-          <h2>{{ t('problemDetail.responses') }}</h2>
+          <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
           
           <form @submit.prevent="submitResponse" class="response-form">
             <div class="form-group">
-              <label>{{ t('problemDetail.yourResponse') }}</label>
+              <label>{{ t('problemDetail.progressInputLabel') }}</label>
               <textarea 
                 v-model="responseText" 
                 rows="4" 
-                :placeholder="t('problemDetail.yourResponse')"
+                :placeholder="t('problemDetail.progressInputPlaceholder')"
                 required
               ></textarea>
             </div>
             <button type="submit" class="btn btn-primary" :disabled="submitting">
-              {{ submitting ? t('common.loading') : t('problemDetail.submitResponse') }}
+              {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
             </button>
           </form>
           
           <div v-if="responses.length" class="responses-list">
             <div v-for="response in responses" :key="response.id" class="response-item">
               <div class="user-response">
-                <strong>{{ t('problemDetail.yourResponse') }}:</strong>
+                <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
                 <p>{{ response.user_response }}</p>
               </div>
               <div v-if="response.system_feedback" class="system-feedback">
-                <strong>{{ t('problemDetail.systemFeedback') }}:</strong>
+                <strong>{{ t('problemDetail.improvementSuggestion') }}:</strong>
                 <div class="feedback-structured">
                   <p v-if="response.structured_feedback?.correctness">
                     <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
@@ -106,6 +106,7 @@
               </div>
             </div>
           </div>
+          <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
         </div>
       </div>
     </template>
