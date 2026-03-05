@@ -119,12 +119,18 @@ const createProblem = async () => {
       title: newProblem.value.title,
       description: newProblem.value.description,
       associated_concepts: concepts,
+    }, {
+      timeout: 15000,
     })
     
     showCreateModal.value = false
     router.push(`/problems/${response.data.id}`)
   } catch (e: any) {
-    error.value = e.response?.data?.detail || 'Failed to create problem'
+    if (e.code === 'ECONNABORTED') {
+      error.value = t('problems.createTimeout')
+    } else {
+      error.value = e.response?.data?.detail || t('problems.createFailed')
+    }
   } finally {
     creating.value = false
   }

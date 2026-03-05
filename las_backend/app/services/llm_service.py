@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 import openai
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
 from app.models.entities.llm_provider import LLMProvider, LLMModel
 
@@ -15,7 +16,7 @@ DEFAULT_BASE_URLS = {
 
 class LLMService:
     def __init__(self):
-        pass
+        self.settings = get_settings()
     
     async def _get_db(self):
         async with AsyncSessionLocal() as session:
@@ -84,6 +85,7 @@ class LLMService:
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
+                timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -112,7 +114,7 @@ class LLMService:
             response = httpx.post(
                 f"{base_url}/api/generate",
                 json={"model": model, "prompt": prompt, "stream": False},
-                timeout=60
+                timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
             )
             if response.status_code == 200:
                 return response.json().get("response", "No response")
@@ -179,6 +181,7 @@ class LLMService:
                 messages=all_messages,
                 temperature=temperature,
                 stream=True,
+                timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
             )
             async for chunk in stream:
                 content = chunk.choices[0].delta.content if chunk.choices else None
@@ -228,12 +231,18 @@ class LLMService:
             for msg in context
         ])
         retrieval_block = f"\nRelevant knowledge:\n{retrieval_context}\n" if retrieval_context else ""
+        language_instruction = (
+            "Language requirement: Respond in the same language as the current question. "
+            "If the question contains Chinese, respond in Simplified Chinese."
+        )
         
         full_prompt = f"""Context:
 {context_str}
 {retrieval_block}
 
-Current question: {prompt}"""
+Current question: {prompt}
+
+{language_instruction}"""
         
         return await self.generate(full_prompt, provider_type)
 

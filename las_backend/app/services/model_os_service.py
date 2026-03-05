@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import asyncio
 import hashlib
 from app.services.llm_service import llm_service
 from app.core.config import get_settings
@@ -40,6 +41,54 @@ class ModelOSService:
 
     def _tokenize_text(self, text: str) -> List[str]:
         return re.findall(r"[a-zA-Z0-9_]+", text.lower())
+
+    def _contains_cjk(self, text: Optional[str]) -> bool:
+        if not text:
+            return False
+        return bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", text))
+
+    def _build_language_instruction(self, *texts: Optional[str], json_mode: bool = False) -> str:
+        has_cjk = any(self._contains_cjk(text) for text in texts)
+        if has_cjk:
+            base = "Language requirement: Respond in Simplified Chinese."
+        else:
+            base = "Language requirement: Respond in the same language as the user's input."
+
+        if json_mode:
+            return f"{base} Keep JSON keys exactly as requested."
+        return base
+
+    def _build_fallback_learning_path(
+        self,
+        problem_title: str,
+        problem_description: str,
+        existing_knowledge: List[str],
+    ) -> List[Dict[str, Any]]:
+        knowledge_text = ", ".join(existing_knowledge) if existing_knowledge else "your current foundation"
+        first_resource = "Existing notes and prior project docs"
+        if problem_description:
+            first_resource = problem_description[:120]
+
+        return [
+            {
+                "step": 1,
+                "concept": "Clarify goal and constraints",
+                "description": (
+                    f"Define success criteria for '{problem_title}' and list hard constraints. "
+                    f"Anchor decisions using {knowledge_text}."
+                ),
+                "resources": [first_resource, "Problem statement"],
+            },
+            {
+                "step": 2,
+                "concept": "Create and validate a minimal solution",
+                "description": (
+                    "Build the smallest viable implementation, run one validation cycle, "
+                    "and record open risks for the next iteration."
+                ),
+                "resources": ["Current codebase", "Test checklist"],
+            },
+        ]
 
     def build_embedding_text(
         self,
@@ -447,6 +496,12 @@ class ModelOSService:
         description: str,
         associated_concepts: List[str],
     ) -> Dict[str, Any]:
+        language_instruction = self._build_language_instruction(
+            title,
+            description,
+            ", ".join(associated_concepts or []),
+            json_mode=True,
+        )
         prompt = f"""Based on the following learning content, create a structured cognitive model card:
 
 Title: {title}
@@ -468,7 +523,9 @@ Return the response as a JSON object with the following structure:
     "core_principles": ["principle 1", "principle 2"],
     "examples": ["example 1", "example 2"],
     "limitations": ["limitation 1"]
-}}"""
+}}
+
+{language_instruction}"""
         
         result = await self.llm.generate(prompt)
         
@@ -490,6 +547,12 @@ Return the response as a JSON object with the following structure:
         model_concepts: List[str],
         user_response: str,
     ) -> List[str]:
+        language_instruction = self._build_language_instruction(
+            model_title,
+            ", ".join(model_concepts or []),
+            user_response,
+            json_mode=True,
+        )
         prompt = f"""You are the Contradiction Generation Module in Model OS.
 
 Current Model: {model_title}
@@ -501,7 +564,9 @@ Generate 2-3 counter-examples or challenging questions that:
 2. Challenge assumptions in the model
 3. Highlight potential misunderstandings
 
-Format as a JSON array of strings, each being a counter-example or challenging question."""
+Format as a JSON array of strings, each being a counter-example or challenging question.
+
+{language_instruction}"""
         
         result = await self.llm.generate(prompt)
         
@@ -517,6 +582,11 @@ Format as a JSON array of strings, each being a counter-example or challenging q
         model_title: str,
         model_concepts: List[str],
     ) -> List[Dict[str, str]]:
+        language_instruction = self._build_language_instruction(
+            model_title,
+            ", ".join(model_concepts or []),
+            json_mode=True,
+        )
         prompt = f"""You are the Cross-Domain Migration Module in Model OS.
 
 Current Model: {model_title}
@@ -527,7 +597,9 @@ Suggest 2-3 other domains where this model could be applied, with brief explanat
 Return as JSON array:
 [
     {{"domain": "domain name", "application": "how to apply", "key_adaptations": "what to adapt"}}
-]"""
+]
+
+{language_instruction}"""
         
         result = await self.llm.generate(prompt)
         
@@ -544,6 +616,12 @@ Return as JSON array:
         problem_description: str,
         existing_knowledge: List[str],
     ) -> List[Dict[str, Any]]:
+        language_instruction = self._build_language_instruction(
+            problem_title,
+            problem_description,
+            ", ".join(existing_knowledge or []),
+            json_mode=True,
+        )
         prompt = f"""Generate an optimized learning path for:
 
 Problem/Goal: {problem_title}
@@ -563,7 +641,9 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
         "description": "what to learn, including model collisions if applicable",
         "resources": ["resource 1", "resource 2"]
     }}
-]"""
+]
+
+{language_instruction}"""
         
         result = await self.llm.generate(prompt)
         
@@ -576,6 +656,36 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
             path = []
         
         return path
+
+    async def generate_learning_path_resilient(
+        self,
+        problem_title: str,
+        problem_description: str,
+        existing_knowledge: List[str],
+        timeout_seconds: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        effective_timeout = timeout_seconds or get_settings().LEARNING_PATH_TIMEOUT_SECONDS
+        try:
+            path = await asyncio.wait_for(
+                self.generate_learning_path(
+                    problem_title=problem_title,
+                    problem_description=problem_description,
+                    existing_knowledge=existing_knowledge,
+                ),
+                timeout=max(1, int(effective_timeout)),
+            )
+            if isinstance(path, list) and path:
+                return path
+        except asyncio.TimeoutError:
+            pass
+        except Exception:
+            pass
+
+        return self._build_fallback_learning_path(
+            problem_title=problem_title,
+            problem_description=problem_description,
+            existing_knowledge=existing_knowledge,
+        )
     
     async def generate_feedback(
         self,
@@ -583,6 +693,11 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
         concept: str,
         model_examples: List[str],
     ) -> str:
+        language_instruction = self._build_language_instruction(
+            user_response,
+            concept,
+            ", ".join(model_examples or []),
+        )
         prompt = f"""Provide feedback on the user's understanding:
 
 Concept: {concept}
@@ -593,7 +708,9 @@ Model Examples: {', '.join(model_examples)}
 1. Whether the understanding is correct
 2. Specific gaps or misconceptions
 3. Suggestions for improvement
-4. A challenging question to test deeper understanding"""
+4. A challenging question to test deeper understanding
+
+{language_instruction}"""
         
         return await self.llm.generate(prompt)
 
@@ -618,6 +735,13 @@ Model Examples: {', '.join(model_examples)}
         model_examples: List[str],
         retrieval_context: Optional[str] = None,
     ) -> Dict[str, Any]:
+        language_instruction = self._build_language_instruction(
+            user_response,
+            concept,
+            ", ".join(model_examples or []),
+            retrieval_context,
+            json_mode=True,
+        )
         retrieval_block = f"\nRelevant learner context:\n{retrieval_context}\n" if retrieval_context else ""
         prompt = f"""Evaluate the user's understanding and return ONLY valid JSON.
 
@@ -633,6 +757,8 @@ Return this exact JSON shape:
   "suggestions": ["specific suggestion"],
   "next_question": "a challenging follow-up question"
 }}
+
+{language_instruction}
 """
 
         result = await self.llm.generate(prompt)
@@ -747,13 +873,20 @@ Return this exact JSON shape:
     ) -> str:
         """AI-generated summary of how a model card evolved."""
         old_desc = str(old_snapshot) if old_snapshot else "Initial creation"
+        language_instruction = self._build_language_instruction(
+            card_title,
+            old_desc,
+            str(new_snapshot),
+        )
         prompt = f"""Compare two versions of a cognitive model card and summarize the evolution:
 
 Model: {card_title}
 Previous state: {old_desc}
 Current state: {str(new_snapshot)}
 
-Provide a concise summary (2-3 sentences) of what changed and why it matters for the learner's understanding."""
+Provide a concise summary (2-3 sentences) of what changed and why it matters for the learner's understanding.
+
+{language_instruction}"""
         return await self.llm.generate(prompt)
 
 

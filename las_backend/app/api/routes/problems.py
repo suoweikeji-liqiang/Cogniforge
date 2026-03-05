@@ -4,6 +4,7 @@ from sqlalchemy import select, text
 from uuid import UUID
 from typing import List, Optional
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.entities.user import User, Problem, LearningPath
 from app.schemas.problem import (
@@ -19,6 +20,7 @@ from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
 
 router = APIRouter(prefix="/problems", tags=["Problems"])
+settings = get_settings()
 
 
 @router.post("/", response_model=ProblemResponse, status_code=201)
@@ -46,10 +48,11 @@ async def create_problem(
     await db.refresh(db_problem)
     
     existing_knowledge = []
-    learning_path_data = await model_os_service.generate_learning_path(
+    learning_path_data = await model_os_service.generate_learning_path_resilient(
         problem_title=problem_data.title,
         problem_description=problem_data.description or "",
         existing_knowledge=existing_knowledge,
+        timeout_seconds=settings.LEARNING_PATH_TIMEOUT_SECONDS,
     )
     
     db_learning_path = LearningPath(

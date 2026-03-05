@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     
     # Default LLM Provider
     DEFAULT_LLM_PROVIDER: str = "openai"
+    LLM_REQUEST_TIMEOUT_SECONDS: int = 25
+    LEARNING_PATH_TIMEOUT_SECONDS: int = 8
     
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
