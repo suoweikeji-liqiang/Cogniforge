@@ -1,5 +1,8 @@
 # Cogniforge 功能增强开发计划
 
+## 最新专项计划（2026-03-05）
+- 学习闭环与知识治理优化计划：`docs/plans/2026-03-05-learning-loop-hardening-plan.md`
+
 ## 阶段一：P0 核心功能（本次实现）
 
 ### 1.1 认知演化时间线

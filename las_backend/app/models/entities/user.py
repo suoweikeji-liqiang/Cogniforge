@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, JSON, Boolean
+from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, JSON, Boolean, Float
 from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
@@ -28,6 +28,15 @@ class User(Base):
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     practice_submissions = relationship("PracticeSubmission", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
+    mastery_events = relationship("ProblemMasteryEvent", back_populates="user", cascade="all, delete-orphan")
+    concept_candidates = relationship(
+        "ProblemConceptCandidate",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="ProblemConceptCandidate.user_id",
+    )
+    concepts = relationship("Concept", back_populates="user", cascade="all, delete-orphan")
+    learning_events = relationship("LearningEvent", back_populates="user", cascade="all, delete-orphan")
 
 
 class Problem(Base):
@@ -46,6 +55,9 @@ class Problem(Base):
     user = relationship("User", back_populates="problems")
     responses = relationship("ProblemResponse", back_populates="problem", cascade="all, delete-orphan")
     learning_path = relationship("LearningPath", back_populates="problem", uselist=False, cascade="all, delete-orphan")
+    mastery_events = relationship("ProblemMasteryEvent", back_populates="problem", cascade="all, delete-orphan")
+    concept_candidates = relationship("ProblemConceptCandidate", back_populates="problem", cascade="all, delete-orphan")
+    learning_events = relationship("LearningEvent", back_populates="problem", cascade="all, delete-orphan")
 
 
 class ProblemResponse(Base):
@@ -71,6 +83,121 @@ class LearningPath(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     problem = relationship("Problem", back_populates="learning_path")
+
+
+class Concept(Base):
+    __tablename__ = "concepts"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    canonical_name = Column(String(120), nullable=False)
+    normalized_name = Column(String(120), nullable=False, index=True)
+    language = Column(String(20), default="auto")
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="concepts")
+    aliases = relationship("ConceptAlias", back_populates="concept", cascade="all, delete-orphan")
+    evidence_entries = relationship("ConceptEvidence", back_populates="concept", cascade="all, delete-orphan")
+
+
+class ConceptAlias(Base):
+    __tablename__ = "concept_aliases"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    concept_id = Column(String(36), ForeignKey("concepts.id"), nullable=False, index=True)
+    alias = Column(String(120), nullable=False)
+    normalized_alias = Column(String(120), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    concept = relationship("Concept", back_populates="aliases")
+
+
+class ConceptRelation(Base):
+    __tablename__ = "concept_relations"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    source_concept_id = Column(String(36), ForeignKey("concepts.id"), nullable=False, index=True)
+    target_concept_id = Column(String(36), ForeignKey("concepts.id"), nullable=False, index=True)
+    relation_type = Column(String(50), nullable=False, default="related")
+    weight = Column(Float, default=1.0)
+    version = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    source_concept = relationship("Concept", foreign_keys=[source_concept_id], backref="outgoing_relations")
+    target_concept = relationship("Concept", foreign_keys=[target_concept_id], backref="incoming_relations")
+
+
+class ConceptEvidence(Base):
+    __tablename__ = "concept_evidences"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    concept_id = Column(String(36), ForeignKey("concepts.id"), nullable=False, index=True)
+    source_type = Column(String(30), nullable=False)
+    source_id = Column(String(36), nullable=True)
+    snippet = Column(Text)
+    confidence = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    concept = relationship("Concept", back_populates="evidence_entries")
+
+
+class ProblemMasteryEvent(Base):
+    __tablename__ = "problem_mastery_events"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    step_index = Column(Integer, nullable=False, default=0)
+    mastery_score = Column(Integer, nullable=False, default=0)
+    confidence = Column(Float, nullable=False, default=0.0)
+    pass_stage = Column(Boolean, default=False)
+    auto_advanced = Column(Boolean, default=False)
+    correctness_label = Column(String(100), nullable=True)
+    decision_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="mastery_events")
+    problem = relationship("Problem", back_populates="mastery_events")
+
+
+class ProblemConceptCandidate(Base):
+    __tablename__ = "problem_concept_candidates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    concept_text = Column(String(120), nullable=False)
+    normalized_text = Column(String(120), nullable=False, index=True)
+    source = Column(String(30), nullable=False, default="response")
+    confidence = Column(Float, nullable=False, default=0.0)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    evidence_snippet = Column(Text, nullable=True)
+    reviewer_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="concept_candidates", foreign_keys=[user_id])
+    reviewer = relationship("User", foreign_keys=[reviewer_id])
+    problem = relationship("Problem", back_populates="concept_candidates")
+
+
+class LearningEvent(Base):
+    __tablename__ = "learning_events"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=True, index=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    trace_id = Column(String(36), nullable=True, index=True)
+    payload_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="learning_events")
+    problem = relationship("Problem", back_populates="learning_events")
 
 
 class ModelCard(Base):

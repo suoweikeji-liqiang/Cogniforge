@@ -119,6 +119,12 @@
             <p v-if="latestFeedback.correctness">
               <strong>{{ t('feedback.correctness') }}:</strong> {{ latestFeedback.correctness }}
             </p>
+            <p v-if="latestFeedback.mastery_score !== undefined">
+              <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ latestFeedback.mastery_score }}
+              · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(latestFeedback.confidence) }}
+              · <strong>{{ t('problemDetail.passStage') }}:</strong>
+              {{ latestFeedback.pass_stage ? t('problemDetail.passStageYes') : t('problemDetail.passStageNo') }}
+            </p>
             <p v-if="latestFeedback.misconceptions?.length">
               <strong>{{ t('feedback.misconceptions') }}:</strong> {{ latestFeedback.misconceptions.join(' / ') }}
             </p>
@@ -128,9 +134,24 @@
             <p v-if="latestFeedback.next_question">
               <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ latestFeedback.next_question }}
             </p>
-            <p v-if="latestResponse?.new_concepts?.length" class="new-concepts-line">
+            <p v-if="latestFeedback.decision_reason">
+              <strong>{{ t('problemDetail.decisionReason') }}:</strong> {{ latestFeedback.decision_reason }}
+            </p>
+            <p v-if="latestResponse?.accepted_concepts?.length" class="new-concepts-line">
               <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong>
-              {{ latestResponse.new_concepts.join(' / ') }}
+              {{ latestResponse.accepted_concepts.join(' / ') }}
+            </p>
+            <p v-if="latestResponse?.pending_concepts?.length" class="pending-concepts-line">
+              <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong>
+              {{ latestResponse.pending_concepts.join(' / ') }}
+            </p>
+            <p v-if="latestResponse?.trace_id || latestResponse?.llm_calls !== undefined" class="ops-meta-line">
+              <strong>{{ t('problemDetail.traceId') }}:</strong> {{ latestResponse?.trace_id || '-' }}
+              · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ latestResponse?.llm_calls ?? '-' }}
+              · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ latestResponse?.llm_latency_ms ?? '-' }}
+            </p>
+            <p v-if="latestResponse?.fallback_reason" class="ops-fallback-line">
+              <strong>{{ t('problemDetail.fallbackReason') }}:</strong> {{ latestResponse.fallback_reason }}
             </p>
           </div>
 
@@ -146,20 +167,85 @@
                   <p v-if="response.structured_feedback.correctness">
                     <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
                   </p>
+                  <p v-if="response.structured_feedback.mastery_score !== undefined">
+                    <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
+                    · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
+                  </p>
                   <p v-if="response.structured_feedback.suggestions?.length">
                     <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
                   </p>
                   <p v-if="response.structured_feedback.next_question">
                     <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
                   </p>
-                  <p v-if="response.new_concepts?.length">
-                    <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.new_concepts.join(' / ') }}
+                  <p v-if="response.accepted_concepts?.length">
+                    <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.accepted_concepts.join(' / ') }}
+                  </p>
+                  <p v-if="response.pending_concepts?.length">
+                    <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ response.pending_concepts.join(' / ') }}
+                  </p>
+                  <p v-if="response.trace_id || response.llm_calls !== undefined" class="ops-meta-line">
+                    <strong>{{ t('problemDetail.traceId') }}:</strong> {{ response.trace_id || '-' }}
+                    · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ response.llm_calls ?? '-' }}
+                    · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ response.llm_latency_ms ?? '-' }}
                   </p>
                 </div>
               </div>
             </div>
           </details>
           <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
+        </section>
+
+        <section class="card concept-governance-section">
+          <h2>{{ t('problemDetail.conceptGovernanceTitle') }}</h2>
+          <p class="section-subtitle">{{ t('problemDetail.conceptGovernanceSubtitle') }}</p>
+
+          <div v-if="candidateLoading" class="loading">{{ t('common.loading') }}</div>
+          <p v-else-if="!conceptCandidates.length" class="empty">{{ t('problemDetail.noConceptCandidates') }}</p>
+          <div v-else class="candidate-list">
+            <div
+              v-for="candidate in conceptCandidates"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="`candidate-${candidate.status}`"
+            >
+              <div class="candidate-head">
+                <strong>{{ candidate.concept_text }}</strong>
+                <span class="candidate-status">{{ candidate.status }}</span>
+                <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
+                <span class="candidate-source">{{ candidate.source }}</span>
+              </div>
+              <p v-if="candidate.evidence_snippet" class="candidate-evidence">{{ candidate.evidence_snippet }}</p>
+              <div class="candidate-actions">
+                <button
+                  v-if="candidate.status === 'pending'"
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="candidateSubmittingId === candidate.id"
+                  @click="acceptCandidate(candidate.id)"
+                >
+                  {{ t('problemDetail.acceptCandidate') }}
+                </button>
+                <button
+                  v-if="candidate.status === 'pending'"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="candidateSubmittingId === candidate.id"
+                  @click="rejectCandidate(candidate.id)"
+                >
+                  {{ t('problemDetail.rejectCandidate') }}
+                </button>
+                <button
+                  v-if="candidate.status === 'accepted'"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="candidateSubmittingId === candidate.id"
+                  @click="rollbackConcept(candidate.id, candidate.concept_text)"
+                >
+                  {{ t('problemDetail.rollbackConcept') }}
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="card qa-section">
@@ -213,6 +299,23 @@
               <strong>{{ t('problemDetail.answerLabel') }}</strong>
               <p>{{ latestQA.answer }}</p>
             </div>
+            <p v-if="latestQA.suggested_next_focus" class="qa-focus-line">
+              <strong>{{ t('problemDetail.suggestedNextFocus') }}:</strong> {{ latestQA.suggested_next_focus }}
+            </p>
+            <p v-if="latestQA.accepted_concepts?.length" class="new-concepts-line">
+              <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ latestQA.accepted_concepts.join(' / ') }}
+            </p>
+            <p v-if="latestQA.pending_concepts?.length" class="pending-concepts-line">
+              <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ latestQA.pending_concepts.join(' / ') }}
+            </p>
+            <p v-if="latestQA.trace_id || latestQA.llm_calls !== undefined" class="ops-meta-line">
+              <strong>{{ t('problemDetail.traceId') }}:</strong> {{ latestQA.trace_id || '-' }}
+              · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ latestQA.llm_calls ?? '-' }}
+              · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ latestQA.llm_latency_ms ?? '-' }}
+            </p>
+            <p v-if="latestQA.fallback_reason" class="ops-fallback-line">
+              <strong>{{ t('problemDetail.fallbackReason') }}:</strong> {{ latestQA.fallback_reason }}
+            </p>
           </div>
 
           <details v-if="qaHistory.length" class="history-panel">
@@ -261,6 +364,9 @@ const learningQuestion = ref('')
 const askingQuestion = ref(false)
 const answerMode = ref<'direct' | 'guided'>('direct')
 const qaHistory = ref<any[]>([])
+const conceptCandidates = ref<any[]>([])
+const candidateLoading = ref(false)
+const candidateSubmittingId = ref<string | null>(null)
 const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
@@ -282,6 +388,26 @@ const completedStepList = computed(() => (learningPath.value?.path_data || []).s
 const latestResponse = computed(() => responses.value[responses.value.length - 1] || null)
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
 
+const formatConfidence = (value: number | string | undefined | null) => {
+  const parsed = Number(value ?? 0)
+  if (!Number.isFinite(parsed)) return '0%'
+  const percent = Math.round(Math.max(0, Math.min(1, parsed)) * 100)
+  return `${percent}%`
+}
+
+const fetchConceptCandidates = async () => {
+  candidateLoading.value = true
+  try {
+    const response = await api.get(`/problems/${route.params.id}/concept-candidates`)
+    conceptCandidates.value = response.data || []
+  } catch (e) {
+    console.error('Failed to fetch concept candidates:', e)
+    conceptCandidates.value = []
+  } finally {
+    candidateLoading.value = false
+  }
+}
+
 const fetchLearningPath = async () => {
   const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
   learningPath.value = pathRes.data
@@ -289,15 +415,17 @@ const fetchLearningPath = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, responsesRes] = await Promise.all([
+    const [problemRes, pathRes, responsesRes, candidatesRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/concept-candidates`).catch(() => ({ data: [] })),
     ])
 
     problem.value = problemRes.data
     learningPath.value = pathRes.data
     responses.value = responsesRes.data
+    conceptCandidates.value = candidatesRes.data || []
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -314,6 +442,12 @@ const submitResponse = async () => {
       user_response: responseText.value,
     })
     responses.value.push(response.data)
+    await Promise.all([
+      fetchConceptCandidates(),
+      api.get(`/problems/${route.params.id}`).then((res) => {
+        problem.value = res.data
+      }).catch(() => null),
+    ])
     responseText.value = ''
     if (response.data?.auto_advanced) {
       await fetchLearningPath()
@@ -418,11 +552,66 @@ const askLearningQuestion = async () => {
       answer_mode: answerMode.value,
     })
     qaHistory.value.unshift(response.data)
+    await Promise.all([
+      fetchConceptCandidates(),
+      api.get(`/problems/${route.params.id}`).then((res) => {
+        problem.value = res.data
+      }).catch(() => null),
+    ])
     learningQuestion.value = ''
   } catch (e) {
     console.error('Failed to ask learning question:', e)
   } finally {
     askingQuestion.value = false
+  }
+}
+
+const acceptCandidate = async (candidateId: string) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/accept`)
+    await Promise.all([
+      fetchConceptCandidates(),
+      api.get(`/problems/${route.params.id}`).then((res) => {
+        problem.value = res.data
+      }).catch(() => null),
+    ])
+  } catch (e) {
+    console.error('Failed to accept concept candidate:', e)
+  } finally {
+    candidateSubmittingId.value = null
+  }
+}
+
+const rejectCandidate = async (candidateId: string) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/reject`)
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to reject concept candidate:', e)
+  } finally {
+    candidateSubmittingId.value = null
+  }
+}
+
+const rollbackConcept = async (candidateId: string, conceptText: string) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concepts/rollback`, {
+      concept_text: conceptText,
+      reason: 'Manual rollback from UI',
+    })
+    await Promise.all([
+      fetchConceptCandidates(),
+      api.get(`/problems/${route.params.id}`).then((res) => {
+        problem.value = res.data
+      }).catch(() => null),
+    ])
+  } catch (e) {
+    console.error('Failed to rollback concept:', e)
+  } finally {
+    candidateSubmittingId.value = null
   }
 }
 
@@ -683,6 +872,11 @@ onMounted(fetchProblem)
   white-space: pre-wrap;
 }
 
+.qa-focus-line {
+  margin-top: 0.55rem;
+  color: var(--text-muted);
+}
+
 .system-feedback {
   margin-top: 0.5rem;
   padding: 0.9rem;
@@ -731,6 +925,81 @@ onMounted(fetchProblem)
 .new-concepts-line {
   margin-top: 0.45rem;
   color: #86efac;
+}
+
+.pending-concepts-line {
+  margin-top: 0.35rem;
+  color: #facc15;
+}
+
+.ops-meta-line {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.ops-fallback-line {
+  margin-top: 0.25rem;
+  color: #fda4af;
+  font-size: 0.82rem;
+}
+
+.concept-governance-section {
+  margin-top: 0.25rem;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.candidate-item {
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-dark);
+}
+
+.candidate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.candidate-status {
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  color: var(--text-muted);
+}
+
+.candidate-confidence,
+.candidate-source {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.candidate-evidence {
+  margin-top: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.candidate-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.candidate-pending {
+  border-color: rgba(250, 204, 21, 0.35);
+}
+
+.candidate-accepted {
+  border-color: rgba(34, 197, 94, 0.35);
 }
 
 .status {

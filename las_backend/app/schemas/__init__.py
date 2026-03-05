@@ -18,6 +18,10 @@ from app.schemas.problem import (
     LearningStepHintResponse,
     LearningQuestionRequest,
     LearningQuestionResponse,
+    ProblemConceptCandidateResponse,
+    ProblemConceptCandidateActionResponse,
+    ProblemConceptRollbackRequest,
+    ProblemConceptRollbackResponse,
 )
 from app.schemas.model_card import (
     ConceptMap,

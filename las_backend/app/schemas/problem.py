@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import datetime
 
@@ -50,7 +50,13 @@ class ProblemResponseResponse(BaseModel):
     auto_advanced: Optional[bool] = None
     new_current_step: Optional[int] = None
     new_concepts: Optional[List[str]] = None
+    accepted_concepts: Optional[List[str]] = None
+    pending_concepts: Optional[List[str]] = None
     concepts_updated: Optional[bool] = None
+    trace_id: Optional[str] = None
+    llm_calls: Optional[int] = None
+    llm_latency_ms: Optional[int] = None
+    fallback_reason: Optional[str] = None
     created_at: datetime
 
 
@@ -92,3 +98,42 @@ class LearningQuestionResponse(BaseModel):
     answer_mode: str
     step_index: int
     step_concept: str
+    suggested_next_focus: Optional[str] = None
+    accepted_concepts: Optional[List[str]] = None
+    pending_concepts: Optional[List[str]] = None
+    trace_id: Optional[str] = None
+    llm_calls: Optional[int] = None
+    llm_latency_ms: Optional[int] = None
+    fallback_reason: Optional[str] = None
+
+
+class ProblemConceptCandidateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    problem_id: UUID
+    concept_text: str
+    source: str
+    confidence: float
+    status: str
+    evidence_snippet: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class ProblemConceptCandidateActionResponse(BaseModel):
+    candidate: ProblemConceptCandidateResponse
+    accepted_concepts: List[str] = Field(default_factory=list)
+    trace_id: Optional[str] = None
+
+
+class ProblemConceptRollbackRequest(BaseModel):
+    concept_text: str = Field(..., min_length=1, max_length=120)
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+class ProblemConceptRollbackResponse(BaseModel):
+    removed: bool
+    concept_text: str
+    associated_concepts: List[str] = Field(default_factory=list)
+    trace_id: Optional[str] = None

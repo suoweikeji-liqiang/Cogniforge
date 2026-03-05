@@ -108,6 +108,117 @@ class ModelOSService:
                 break
         return normalized
 
+    def normalize_concept_key(self, concept: str) -> str:
+        base = re.sub(r"\s+", " ", str(concept or "")).strip().casefold()
+        if not base:
+            return ""
+        return re.sub(r"[^\w\u4e00-\u9fff\s-]", "", base).strip()
+
+    def _normalize_float(self, value: Any, default: float, min_value: float, max_value: float) -> float:
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            num = default
+        return round(max(min_value, min(max_value, num)), 4)
+
+    def _normalize_int(self, value: Any, default: int, min_value: int, max_value: int) -> int:
+        try:
+            num = int(round(float(value)))
+        except (TypeError, ValueError):
+            num = default
+        return max(min_value, min(max_value, num))
+
+    def _normalize_bool(self, value: Any, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "yes", "y", "1"}:
+                return True
+            if lowered in {"false", "no", "n", "0"}:
+                return False
+        return default
+
+    def _derive_mastery_defaults(self, correctness: str, misconception_count: int) -> tuple[int, bool]:
+        verdict = correctness.strip().lower()
+        if any(marker in verdict for marker in ("incorrect", "wrong", "not correct", "错误", "不正确")):
+            return 35, False
+        if any(marker in verdict for marker in ("partially", "mostly", "部分", "基本正确", "较为正确")):
+            return (68 if misconception_count <= 1 else 60), misconception_count == 0
+        if any(marker in verdict for marker in ("correct", "正确")):
+            return (86 if misconception_count == 0 else 78), misconception_count <= 1
+        return 55, False
+
+    def normalize_feedback_structured(self, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        data = payload or {}
+        correctness = str(data.get("correctness", "") or "").strip()
+        misconceptions = [
+            str(item).strip()
+            for item in (data.get("misconceptions") or [])
+            if str(item).strip()
+        ]
+        suggestions = [
+            str(item).strip()
+            for item in (data.get("suggestions") or [])
+            if str(item).strip()
+        ]
+        next_question = str(data.get("next_question", "") or "").strip()
+
+        default_score, default_pass = self._derive_mastery_defaults(
+            correctness=correctness,
+            misconception_count=len(misconceptions),
+        )
+        mastery_score = self._normalize_int(data.get("mastery_score"), default_score, 0, 100)
+        confidence = self._normalize_float(data.get("confidence"), 0.65, 0.0, 1.0)
+        pass_stage = self._normalize_bool(data.get("pass_stage"), default_pass)
+
+        raw_dimensions = data.get("dimension_scores")
+        dimensions: Dict[str, int] = {}
+        if isinstance(raw_dimensions, dict):
+            for key in ("accuracy", "completeness", "transfer", "rigor"):
+                dimensions[key] = self._normalize_int(raw_dimensions.get(key), mastery_score, 0, 100)
+        else:
+            dimensions = {
+                "accuracy": mastery_score,
+                "completeness": mastery_score,
+                "transfer": mastery_score,
+                "rigor": mastery_score,
+            }
+
+        decision_reason = str(data.get("decision_reason", "") or "").strip()
+        if not decision_reason:
+            decision_reason = (
+                f"Mastery score={mastery_score}, confidence={confidence}, misconceptions={len(misconceptions)}"
+            )
+
+        return {
+            "correctness": correctness,
+            "misconceptions": misconceptions,
+            "suggestions": suggestions,
+            "next_question": next_question,
+            "mastery_score": mastery_score,
+            "dimension_scores": dimensions,
+            "confidence": confidence,
+            "pass_stage": pass_stage,
+            "decision_reason": decision_reason,
+        }
+
+    def build_learning_answer_fallback(self, question: str, step_concept: str, mode: str = "direct") -> str:
+        question = str(question or "").strip()
+        step_concept = str(step_concept or "this concept").strip()
+        if mode == "guided":
+            return (
+                f"Hint: focus on the core boundary of '{step_concept}'. "
+                f"Try one concrete example for your question ({question or 'your question'}), "
+                "then explain why an alternative interpretation would fail."
+            )
+        return (
+            f"A concise starting point for '{step_concept}': define it in one sentence, "
+            "contrast it with the closest confusing concept, then apply it in one concrete example."
+        )
+
     def _hint_tokens(self, text: str) -> set[str]:
         tokens = set(re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]", (text or "").lower()))
         return {token for token in tokens if token.strip()}
@@ -1107,7 +1218,12 @@ Return this exact JSON shape:
   "correctness": "correct / partially correct / incorrect",
   "misconceptions": ["specific misconception"],
   "suggestions": ["specific suggestion"],
-  "next_question": "a challenging follow-up question"
+  "next_question": "a challenging follow-up question",
+  "mastery_score": 0,
+  "dimension_scores": {{"accuracy": 0, "completeness": 0, "transfer": 0, "rigor": 0}},
+  "confidence": 0.0,
+  "pass_stage": false,
+  "decision_reason": "why pass_stage is true/false"
 }}
 
 {language_instruction}
@@ -1117,55 +1233,66 @@ Return this exact JSON shape:
 
         try:
             parsed = json.loads(_clean_json_str(result))
-            return {
-                "correctness": parsed.get("correctness", ""),
-                "misconceptions": parsed.get("misconceptions", []),
-                "suggestions": parsed.get("suggestions", []),
-                "next_question": parsed.get("next_question", ""),
-            }
+            return self.normalize_feedback_structured(parsed if isinstance(parsed, dict) else {})
         except json.JSONDecodeError:
-            return {
+            return self.normalize_feedback_structured({
                 "correctness": "",
                 "misconceptions": [],
                 "suggestions": [result.strip()] if result.strip() else [],
                 "next_question": "",
-            }
+            })
 
     def format_feedback_text(self, structured_feedback: Dict[str, Any]) -> str:
         misconceptions = structured_feedback.get("misconceptions", [])
         suggestions = structured_feedback.get("suggestions", [])
         next_question = structured_feedback.get("next_question", "")
         correctness = structured_feedback.get("correctness", "")
+        mastery_score = structured_feedback.get("mastery_score", 0)
+        confidence = structured_feedback.get("confidence", 0.0)
+        pass_stage = structured_feedback.get("pass_stage", False)
+        decision_reason = structured_feedback.get("decision_reason", "")
 
         lines = [
             f"Correctness: {correctness or 'N/A'}",
+            f"Mastery Score: {mastery_score}",
+            f"Confidence: {confidence}",
+            f"Pass Stage: {pass_stage}",
             f"Misconceptions: {' | '.join(misconceptions) if misconceptions else 'None'}",
             f"Suggestions: {' | '.join(suggestions) if suggestions else 'None'}",
             f"Next Question: {next_question or 'None'}",
+            f"Decision Reason: {decision_reason or 'None'}",
         ]
         return "\n".join(lines)
 
     def parse_feedback_text(self, feedback_text: Optional[str]) -> Dict[str, Any]:
         if not feedback_text:
-            return {
+            return self.normalize_feedback_structured({
                 "correctness": "",
                 "misconceptions": [],
                 "suggestions": [],
                 "next_question": "",
-            }
+            })
 
         structured = {
             "correctness": "",
+            "mastery_score": 0,
+            "confidence": 0.0,
+            "pass_stage": False,
             "misconceptions": [],
             "suggestions": [],
             "next_question": "",
+            "decision_reason": "",
         }
 
         patterns = {
             "correctness": r"Correctness:\s*(.*)",
+            "mastery_score": r"Mastery Score:\s*(.*)",
+            "confidence": r"Confidence:\s*(.*)",
+            "pass_stage": r"Pass Stage:\s*(.*)",
             "misconceptions": r"Misconceptions:\s*(.*)",
             "suggestions": r"Suggestions:\s*(.*)",
             "next_question": r"Next Question:\s*(.*)",
+            "decision_reason": r"Decision Reason:\s*(.*)",
         }
 
         for key, pattern in patterns.items():
@@ -1175,6 +1302,12 @@ Return this exact JSON shape:
             value = match.group(1).strip()
             if key in ("misconceptions", "suggestions"):
                 structured[key] = [] if value in ("None", "") else [item.strip() for item in value.split("|") if item.strip()]
+            elif key == "mastery_score":
+                structured[key] = self._normalize_int(value, 0, 0, 100)
+            elif key == "confidence":
+                structured[key] = self._normalize_float(value, 0.0, 0.0, 1.0)
+            elif key == "pass_stage":
+                structured[key] = self._normalize_bool(value, False)
             else:
                 structured[key] = "" if value in ("None", "N/A") else value
 
@@ -1186,7 +1319,7 @@ Return this exact JSON shape:
         ):
             structured["suggestions"] = [feedback_text.strip()]
 
-        return structured
+        return self.normalize_feedback_structured(structured)
     
     async def log_evolution(
         self,

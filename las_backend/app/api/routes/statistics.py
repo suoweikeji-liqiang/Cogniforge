@@ -4,11 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timedelta
 import hashlib
+import re
 
 from app.core.database import get_db
 from app.models.entities.user import (
     User, Problem, ModelCard, Conversation,
     EvolutionLog, ReviewSchedule, Review, LearningPath,
+    Concept, ConceptRelation, ConceptEvidence,
 )
 from app.api.routes.auth import get_current_user
 
@@ -104,6 +106,14 @@ async def get_knowledge_graph(
     edges: list[dict] = []
     node_ids: set[str] = set()
     edge_ids: set[tuple[str, str, str]] = set()
+    concept_entity_index: dict[str, str] = {}
+    pending_problem_concept_edges: list[tuple[str, str, str]] = []
+
+    def normalize_concept_key(text: str) -> str:
+        base = re.sub(r"\s+", " ", str(text or "")).strip().casefold()
+        if not base:
+            return ""
+        return re.sub(r"[^\w\u4e00-\u9fff\s-]", "", base).strip()
 
     def add_node(
         node_id: str,
@@ -135,6 +145,52 @@ async def get_knowledge_graph(
             return
         edge_ids.add(key)
         edges.append({"source": source, "target": target, "label": label})
+
+    concepts_result = await db.execute(
+        select(Concept).where(Concept.user_id == uid)
+    )
+    for concept in concepts_result.scalars().all():
+        concept_node_id = f"conceptentity:{concept.id}"
+        concept_entity_index[str(concept.id)] = concept_node_id
+        add_node(
+            node_id=concept_node_id,
+            label=concept.canonical_name,
+            node_type="concept",
+            route_id=str(concept.id),
+            version=1,
+            examples_count=0,
+        )
+
+    concept_relations_result = await db.execute(
+        select(ConceptRelation).where(ConceptRelation.user_id == uid)
+    )
+    for relation in concept_relations_result.scalars().all():
+        source_id = concept_entity_index.get(str(relation.source_concept_id))
+        target_id = concept_entity_index.get(str(relation.target_concept_id))
+        if source_id and target_id:
+            add_edge(source_id, target_id, relation.relation_type or "related")
+
+    concept_name_index: dict[str, str] = {}
+    if concept_entity_index:
+        concept_rows = await db.execute(
+            select(Concept.id, Concept.normalized_name).where(Concept.user_id == uid)
+        )
+        for concept_id, normalized_name in concept_rows.all():
+            if not normalized_name:
+                continue
+            concept_name_index[str(normalized_name)] = concept_entity_index.get(str(concept_id), "")
+
+    evidences_result = await db.execute(
+        select(ConceptEvidence).where(ConceptEvidence.user_id == uid)
+    )
+    for evidence in evidences_result.scalars().all():
+        concept_node_id = concept_entity_index.get(str(evidence.concept_id))
+        if not concept_node_id:
+            continue
+        if evidence.source_id:
+            pending_problem_concept_edges.append(
+                (f"problem:{evidence.source_id}", concept_node_id, evidence.source_type or "supports")
+            )
 
     cards_result = await db.execute(select(ModelCard).where(ModelCard.user_id == uid))
     cards = cards_result.scalars().all()
@@ -205,13 +261,15 @@ async def get_knowledge_graph(
             concept_text = str(concept or "").strip()
             if not concept_text:
                 continue
-            concept_hash = hashlib.sha1(concept_text.casefold().encode("utf-8")).hexdigest()[:12]
-            concept_node_id = f"concept:{concept_hash}"
-            add_node(
-                node_id=concept_node_id,
-                label=concept_text,
-                node_type="concept",
-            )
+            concept_node_id = concept_name_index.get(normalize_concept_key(concept_text))
+            if not concept_node_id:
+                concept_hash = hashlib.sha1(concept_text.casefold().encode("utf-8")).hexdigest()[:12]
+                concept_node_id = f"concept:{concept_hash}"
+                add_node(
+                    node_id=concept_node_id,
+                    label=concept_text,
+                    node_type="concept",
+                )
             add_edge(problem_node_id, concept_node_id, "related")
 
         if not learning_path or not isinstance(learning_path.path_data, list):
@@ -237,5 +295,8 @@ async def get_knowledge_graph(
             if previous_step_node_id:
                 add_edge(previous_step_node_id, step_node_id, "next")
             previous_step_node_id = step_node_id
+
+    for source, target, label in pending_problem_concept_edges:
+        add_edge(source, target, label)
 
     return {"nodes": nodes, "edges": edges}
