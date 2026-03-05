@@ -128,6 +128,10 @@
             <p v-if="latestFeedback.next_question">
               <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ latestFeedback.next_question }}
             </p>
+            <p v-if="latestResponse?.new_concepts?.length" class="new-concepts-line">
+              <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong>
+              {{ latestResponse.new_concepts.join(' / ') }}
+            </p>
           </div>
 
           <details v-if="responses.length" class="history-panel">
@@ -148,11 +152,84 @@
                   <p v-if="response.structured_feedback.next_question">
                     <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
                   </p>
+                  <p v-if="response.new_concepts?.length">
+                    <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.new_concepts.join(' / ') }}
+                  </p>
                 </div>
               </div>
             </div>
           </details>
           <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
+        </section>
+
+        <section class="card qa-section">
+          <h2>{{ t('problemDetail.askTitle') }}</h2>
+          <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
+
+          <div class="ask-mode-toggle">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: answerMode === 'direct' }"
+              :disabled="askingQuestion"
+              @click="answerMode = 'direct'"
+            >
+              {{ t('problemDetail.askModeDirect') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: answerMode === 'guided' }"
+              :disabled="askingQuestion"
+              @click="answerMode = 'guided'"
+            >
+              {{ t('problemDetail.askModeGuided') }}
+            </button>
+          </div>
+
+          <form @submit.prevent="askLearningQuestion" class="response-form">
+            <div class="form-group">
+              <label>{{ t('problemDetail.askInputLabel') }}</label>
+              <textarea
+                v-model="learningQuestion"
+                rows="3"
+                :placeholder="t('problemDetail.askInputPlaceholder')"
+                required
+              ></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()">
+              {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
+            </button>
+          </form>
+
+          <div v-if="latestQA" class="qa-latest">
+            <h3>{{ t('problemDetail.latestAnswerTitle') }}</h3>
+            <p class="qa-meta">{{ t('problemDetail.stepIndicator', { current: latestQA.step_index + 1, total: totalSteps || latestQA.step_index + 1 }) }} · {{ latestQA.step_concept }}</p>
+            <div class="qa-block">
+              <strong>{{ t('problemDetail.questionLabel') }}</strong>
+              <p>{{ latestQA.question }}</p>
+            </div>
+            <div class="qa-block">
+              <strong>{{ t('problemDetail.answerLabel') }}</strong>
+              <p>{{ latestQA.answer }}</p>
+            </div>
+          </div>
+
+          <details v-if="qaHistory.length" class="history-panel">
+            <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
+            <div class="responses-list">
+              <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
+                <div class="qa-block">
+                  <strong>{{ t('problemDetail.questionLabel') }}</strong>
+                  <p>{{ item.question }}</p>
+                </div>
+                <div class="qa-block">
+                  <strong>{{ t('problemDetail.answerLabel') }}</strong>
+                  <p>{{ item.answer }}</p>
+                </div>
+              </div>
+            </div>
+          </details>
         </section>
       </div>
     </template>
@@ -180,6 +257,11 @@ const autoAdvanceMessage = ref('')
 const canUndoAutoAdvance = ref(false)
 const undoTargetStep = ref<number | null>(null)
 const stepHint = ref<any | null>(null)
+const learningQuestion = ref('')
+const askingQuestion = ref(false)
+const answerMode = ref<'direct' | 'guided'>('direct')
+const qaHistory = ref<any[]>([])
+const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
 const completedSteps = computed(() => learningPath.value?.current_step || 0)
@@ -324,6 +406,24 @@ const undoAutoAdvance = async () => {
   autoAdvanceMessage.value = t('problemDetail.autoAdvanceUndone')
   canUndoAutoAdvance.value = false
   undoTargetStep.value = null
+}
+
+const askLearningQuestion = async () => {
+  if (!learningQuestion.value.trim() || askingQuestion.value) return
+
+  askingQuestion.value = true
+  try {
+    const response = await api.post(`/problems/${route.params.id}/ask`, {
+      question: learningQuestion.value.trim(),
+      answer_mode: answerMode.value,
+    })
+    qaHistory.value.unshift(response.data)
+    learningQuestion.value = ''
+  } catch (e) {
+    console.error('Failed to ask learning question:', e)
+  } finally {
+    askingQuestion.value = false
+  }
 }
 
 onMounted(fetchProblem)
@@ -540,6 +640,49 @@ onMounted(fetchProblem)
   margin-top: 0.2rem;
 }
 
+.qa-section {
+  margin-top: 0.25rem;
+}
+
+.ask-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ask-mode-toggle .btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.qa-latest {
+  margin-top: 0.8rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-dark);
+}
+
+.qa-latest h3 {
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+
+.qa-meta {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-bottom: 0.6rem;
+}
+
+.qa-block + .qa-block {
+  margin-top: 0.55rem;
+}
+
+.qa-block p {
+  margin-top: 0.25rem;
+  white-space: pre-wrap;
+}
+
 .system-feedback {
   margin-top: 0.5rem;
   padding: 0.9rem;
@@ -583,6 +726,11 @@ onMounted(fetchProblem)
   margin-top: 0.5rem;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.new-concepts-line {
+  margin-top: 0.45rem;
+  color: #86efac;
 }
 
 .status {

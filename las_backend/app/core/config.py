@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     LLM_REQUEST_TIMEOUT_SECONDS: int = 25
     LEARNING_PATH_TIMEOUT_SECONDS: int = 8
     PROBLEM_AUTO_ADVANCE_MODE: str = "balanced"
+    PROBLEM_MAX_ASSOCIATED_CONCEPTS: int = 16
     
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"

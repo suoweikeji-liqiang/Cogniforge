@@ -16,6 +16,8 @@ from app.schemas.problem import (
     LearningPathResponse,
     LearningPathProgressUpdate,
     LearningStepHintResponse,
+    LearningQuestionRequest,
+    LearningQuestionResponse,
 )
 from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
@@ -79,6 +81,13 @@ def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
     if has_partial:
         return misconception_count == 0
     return False
+
+
+def _normalize_answer_mode(raw_mode: Optional[str]) -> str:
+    mode = (raw_mode or "direct").strip().lower()
+    if mode not in {"direct", "guided"}:
+        return "direct"
+    return mode
 
 
 @router.post("/", response_model=ProblemResponse, status_code=201)
@@ -318,6 +327,47 @@ async def create_response(
         retrieval_context=retrieval_context,
     )
     feedback = model_os_service.format_feedback_text(structured_feedback)
+    max_concepts = max(6, int(settings.PROBLEM_MAX_ASSOCIATED_CONCEPTS))
+    existing_concepts = model_os_service.normalize_concepts(
+        problem.associated_concepts or [],
+        limit=max_concepts,
+    )
+    misconceptions = [str(item).strip() for item in (structured_feedback.get("misconceptions") or []) if str(item).strip()]
+    suggestions = [str(item).strip() for item in (structured_feedback.get("suggestions") or []) if str(item).strip()]
+    next_question = str(structured_feedback.get("next_question") or "").strip()
+
+    concept_context_parts = [
+        f"User response:\n{response_data.user_response}",
+        f"Current step concept:\n{step_concept}",
+        f"Current step description:\n{step_description}",
+    ]
+    if misconceptions:
+        concept_context_parts.append("Misconceptions:\n" + "\n".join(f"- {item}" for item in misconceptions))
+    if suggestions:
+        concept_context_parts.append("Suggestions:\n" + "\n".join(f"- {item}" for item in suggestions))
+    if next_question:
+        concept_context_parts.append(f"Next question:\n{next_question}")
+
+    inferred_concepts = await model_os_service.extract_related_concepts_resilient(
+        problem_title=problem.title,
+        problem_description="\n\n".join(concept_context_parts),
+        limit=min(max_concepts, 10),
+    )
+    merged_concepts = model_os_service.normalize_concepts(
+        existing_concepts + inferred_concepts + [step_concept],
+        limit=max_concepts,
+    )
+    existing_keys = {item.casefold() for item in existing_concepts}
+    new_concepts = [
+        concept
+        for concept in merged_concepts
+        if concept.casefold() not in existing_keys
+    ]
+    concepts_updated = bool(new_concepts)
+    if concepts_updated:
+        problem.associated_concepts = merged_concepts
+        model_os_service.refresh_problem_embedding(problem)
+
     auto_advanced = False
     new_current_step = learning_path.current_step if learning_path else None
 
@@ -354,6 +404,8 @@ async def create_response(
         "structured_feedback": structured_feedback,
         "auto_advanced": auto_advanced,
         "new_current_step": new_current_step,
+        "new_concepts": new_concepts,
+        "concepts_updated": concepts_updated,
         "created_at": db_response.created_at,
     }
 
@@ -457,6 +509,82 @@ async def get_learning_step_hint(
         "step_concept": step_concept,
         "hint": hint,
         "structured_hint": structured_hint,
+    }
+
+
+@router.post("/{problem_id}/ask", response_model=LearningQuestionResponse)
+async def ask_learning_question(
+    problem_id: UUID,
+    payload: LearningQuestionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    path_result = await db.execute(
+        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
+    )
+    learning_path = path_result.scalar_one_or_none()
+    step_index, step_data = _resolve_current_step(learning_path)
+    step_concept = (step_data or {}).get("concept") or problem.title
+    step_description = (step_data or {}).get("description") or (problem.description or "")
+    mode = _normalize_answer_mode(payload.answer_mode)
+
+    retrieval_context = await model_os_service.build_retrieval_context(
+        db=db,
+        user_id=str(current_user.id),
+        query=(
+            f"{problem.title}\n"
+            f"Current step: {step_concept}\n"
+            f"Question: {payload.question}"
+        ),
+        source="problem_inline_qa",
+    )
+
+    if mode == "direct":
+        style_instruction = (
+            "Answer directly and accurately. Keep structure: "
+            "1) concise definition, 2) key distinction, 3) one concrete example, "
+            "4) one common pitfall."
+        )
+    else:
+        style_instruction = (
+            "Use guided style. First give a short hint, then one mini-example, "
+            "and end with one focused check question."
+        )
+
+    prompt = f"""The learner asked a question during a step-by-step learning flow.
+
+Problem: {problem.title}
+Problem description: {problem.description or "N/A"}
+Current step concept: {step_concept}
+Current step description: {step_description}
+
+Learner question: {payload.question}
+
+{style_instruction}
+"""
+
+    answer = await model_os_service.generate_with_context(
+        prompt=prompt,
+        context=[{"role": "user", "content": payload.question}],
+        retrieval_context=retrieval_context,
+    )
+
+    return {
+        "question": payload.question,
+        "answer": answer,
+        "answer_mode": mode,
+        "step_index": step_index,
+        "step_concept": step_concept,
     }
 
 

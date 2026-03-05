@@ -49,6 +49,8 @@ class ProblemResponseResponse(BaseModel):
     structured_feedback: Optional[dict] = None
     auto_advanced: Optional[bool] = None
     new_current_step: Optional[int] = None
+    new_concepts: Optional[List[str]] = None
+    concepts_updated: Optional[bool] = None
     created_at: datetime
 
 
@@ -77,3 +79,16 @@ class LearningStepHintResponse(BaseModel):
     step_concept: str
     hint: str
     structured_hint: Optional[dict] = None
+
+
+class LearningQuestionRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+    answer_mode: str = Field(default="direct")
+
+
+class LearningQuestionResponse(BaseModel):
+    question: str
+    answer: str
+    answer_mode: str
+    step_index: int
+    step_concept: str
