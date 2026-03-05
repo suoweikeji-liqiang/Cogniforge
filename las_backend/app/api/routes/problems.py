@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select, text, desc
 from uuid import UUID
 from typing import List, Optional
 
@@ -15,6 +15,7 @@ from app.schemas.problem import (
     ProblemResponseResponse,
     LearningPathResponse,
     LearningPathProgressUpdate,
+    LearningStepHintResponse,
 )
 from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
@@ -23,22 +24,86 @@ router = APIRouter(prefix="/problems", tags=["Problems"])
 settings = get_settings()
 
 
+def _resolve_current_step(learning_path: Optional[LearningPath]) -> tuple[int, Optional[dict]]:
+    if not learning_path or not isinstance(learning_path.path_data, list) or not learning_path.path_data:
+        return 0, None
+
+    current_step_index = min(
+        max(int(learning_path.current_step or 0), 0),
+        len(learning_path.path_data) - 1,
+    )
+    step_candidate = learning_path.path_data[current_step_index]
+    if not isinstance(step_candidate, dict):
+        return current_step_index, None
+    return current_step_index, step_candidate
+
+
+def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
+    verdict = str((structured_feedback or {}).get("correctness", "")).strip().lower()
+    if not verdict:
+        return False
+
+    negative_markers = ["incorrect", "not correct", "wrong", "错误", "不正确"]
+    if any(marker in verdict for marker in negative_markers):
+        return False
+
+    partial_markers = [
+        "partially correct",
+        "mostly correct",
+        "基本正确",
+        "部分正确",
+        "较为正确",
+    ]
+    full_markers = [
+        "correct",
+        "正确",
+    ]
+    has_partial = any(marker in verdict for marker in partial_markers)
+    has_full = any(marker in verdict for marker in full_markers) and not has_partial
+
+    misconceptions = (structured_feedback or {}).get("misconceptions") or []
+    misconception_count = len([item for item in misconceptions if str(item).strip()])
+
+    normalized_mode = (mode or "balanced").strip().lower()
+    if normalized_mode not in {"conservative", "balanced", "aggressive"}:
+        normalized_mode = "balanced"
+
+    if normalized_mode == "conservative":
+        return has_full and misconception_count == 0
+    if normalized_mode == "aggressive":
+        return has_full or has_partial
+
+    # balanced
+    if has_full:
+        return misconception_count <= 1
+    if has_partial:
+        return misconception_count == 0
+    return False
+
+
 @router.post("/", response_model=ProblemResponse, status_code=201)
 async def create_problem(
     problem_data: ProblemCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    associated_concepts = await model_os_service.build_problem_concepts_resilient(
+        problem_title=problem_data.title,
+        problem_description=problem_data.description or "",
+        seed_concepts=problem_data.associated_concepts,
+        max_concepts=8,
+    )
+
     db_problem = Problem(
         user_id=current_user.id,
         title=problem_data.title,
         description=problem_data.description,
-        associated_concepts=problem_data.associated_concepts,
+        associated_concepts=associated_concepts,
         embedding=model_os_service.generate_embedding(
             model_os_service.build_problem_embedding_text(
                 title=problem_data.title,
                 description=problem_data.description,
-                associated_concepts=problem_data.associated_concepts,
+                associated_concepts=associated_concepts,
             )
         ),
     )
@@ -218,19 +283,57 @@ async def create_response(
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
 
+    learning_path_result = await db.execute(
+        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
+    )
+    learning_path = learning_path_result.scalar_one_or_none()
+    current_step_index, current_step_data = _resolve_current_step(learning_path)
+
+    step_concept = (
+        (current_step_data or {}).get("concept")
+        or problem.title
+    )
+    step_description = (current_step_data or {}).get("description") or ""
+    step_resources = (current_step_data or {}).get("resources") or []
+    model_examples = model_os_service.normalize_concepts(
+        [step_concept, *(problem.associated_concepts or []), *step_resources],
+        limit=10,
+    )
+
     retrieval_context = await model_os_service.build_retrieval_context(
         db=db,
         user_id=str(current_user.id),
-        query=f"{problem.title}\n{response_data.user_response}",
+        query=(
+            f"{problem.title}\n"
+            f"Step {current_step_index + 1}: {step_concept}\n"
+            f"{step_description}\n"
+            f"{response_data.user_response}"
+        ),
         source="problem_response",
     )
     structured_feedback = await model_os_service.generate_feedback_structured(
         user_response=response_data.user_response,
-        concept=problem.title,
-        model_examples=problem.associated_concepts,
+        concept=step_concept,
+        model_examples=model_examples,
         retrieval_context=retrieval_context,
     )
     feedback = model_os_service.format_feedback_text(structured_feedback)
+    auto_advanced = False
+    new_current_step = learning_path.current_step if learning_path else None
+
+    if learning_path and _should_auto_advance(structured_feedback, settings.PROBLEM_AUTO_ADVANCE_MODE):
+        total_steps = len(learning_path.path_data or [])
+        if total_steps > 0 and int(learning_path.current_step or 0) < total_steps:
+            learning_path.current_step = min(total_steps, int(learning_path.current_step or 0) + 1)
+            new_current_step = learning_path.current_step
+            auto_advanced = True
+
+            if learning_path.current_step >= total_steps:
+                problem.status = "completed"
+            elif learning_path.current_step > 0:
+                problem.status = "in-progress"
+            else:
+                problem.status = "new"
     
     from app.models.entities.user import ProblemResponse as ProblemResponseModel
     db_response = ProblemResponseModel(
@@ -249,6 +352,8 @@ async def create_response(
         "user_response": db_response.user_response,
         "system_feedback": db_response.system_feedback,
         "structured_feedback": structured_feedback,
+        "auto_advanced": auto_advanced,
+        "new_current_step": new_current_step,
         "created_at": db_response.created_at,
     }
 
@@ -286,6 +391,73 @@ async def list_responses(
             "created_at": response.created_at,
         })
     return responses
+
+
+@router.get("/{problem_id}/learning-path/hint", response_model=LearningStepHintResponse)
+async def get_learning_step_hint(
+    problem_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    path_result = await db.execute(
+        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
+    )
+    learning_path = path_result.scalar_one_or_none()
+    if not learning_path:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    step_index, step_data = _resolve_current_step(learning_path)
+    step_concept = (step_data or {}).get("concept") or problem.title
+    step_description = (step_data or {}).get("description") or (problem.description or "")
+
+    from app.models.entities.user import ProblemResponse as ProblemResponseModel
+
+    latest_feedback = None
+    latest_feedback_result = await db.execute(
+        select(ProblemResponseModel.system_feedback)
+        .where(ProblemResponseModel.problem_id == str(problem_id))
+        .order_by(desc(ProblemResponseModel.created_at))
+        .limit(1)
+    )
+    latest_feedback_row = latest_feedback_result.first()
+    if latest_feedback_row and latest_feedback_row[0]:
+        latest_feedback = model_os_service.parse_feedback_text(latest_feedback_row[0])
+
+    recent_result = await db.execute(
+        select(ProblemResponseModel.user_response)
+        .where(ProblemResponseModel.problem_id == str(problem_id))
+        .order_by(desc(ProblemResponseModel.created_at))
+        .limit(3)
+    )
+    recent_rows = recent_result.all()
+    recent_responses = [row[0] for row in reversed(recent_rows) if row and row[0]]
+
+    structured_hint = await model_os_service.generate_step_hint(
+        problem_title=problem.title,
+        problem_description=problem.description or "",
+        step_concept=step_concept,
+        step_description=step_description,
+        recent_responses=recent_responses,
+        latest_feedback=latest_feedback,
+    )
+    hint = model_os_service.format_step_hint_text(structured_hint)
+
+    return {
+        "step_index": step_index,
+        "step_concept": step_concept,
+        "hint": hint,
+        "structured_hint": structured_hint,
+    }
 
 
 @router.get("/{problem_id}/learning-path", response_model=LearningPathResponse)

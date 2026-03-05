@@ -47,6 +47,8 @@ class ProblemResponseResponse(BaseModel):
     user_response: str
     system_feedback: Optional[str]
     structured_feedback: Optional[dict] = None
+    auto_advanced: Optional[bool] = None
+    new_current_step: Optional[int] = None
     created_at: datetime
 
 
@@ -68,3 +70,10 @@ class LearningPathResponse(BaseModel):
     problem_id: UUID
     path_data: List[LearningPathStep]
     current_step: int
+
+
+class LearningStepHintResponse(BaseModel):
+    step_index: int
+    step_concept: str
+    hint: str
+    structured_hint: Optional[dict] = None

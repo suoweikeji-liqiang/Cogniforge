@@ -90,6 +90,216 @@ class ModelOSService:
             },
         ]
 
+    def normalize_concepts(self, concepts: List[str], limit: int = 8) -> List[str]:
+        normalized: List[str] = []
+        seen = set()
+        for raw in concepts or []:
+            concept = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n,.;:|/-")
+            if not concept:
+                continue
+            if len(concept) > 80:
+                concept = concept[:80].rstrip()
+            key = concept.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(concept)
+            if len(normalized) >= limit:
+                break
+        return normalized
+
+    def _hint_tokens(self, text: str) -> set[str]:
+        tokens = set(re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]", (text or "").lower()))
+        return {token for token in tokens if token.strip()}
+
+    def _hint_similarity(self, left: str, right: str) -> float:
+        left_tokens = self._hint_tokens(left)
+        right_tokens = self._hint_tokens(right)
+        if not left_tokens or not right_tokens:
+            return 0.0
+        inter = left_tokens.intersection(right_tokens)
+        union = left_tokens.union(right_tokens)
+        if not union:
+            return 0.0
+        return len(inter) / len(union)
+
+    def _dedupe_hint_actions(
+        self,
+        actions: List[str],
+        previous_texts: Optional[List[str]] = None,
+        cjk_context: bool = False,
+    ) -> List[str]:
+        cleaned_previous = [str(item).strip() for item in (previous_texts or []) if str(item).strip()]
+        output: List[str] = []
+        seen_norms = set()
+
+        for raw in actions:
+            action = str(raw or "").strip()
+            if not action:
+                continue
+            norm = re.sub(r"\s+", " ", action).strip().casefold()
+            if norm in seen_norms:
+                continue
+
+            is_repetitive = False
+            for previous in cleaned_previous:
+                previous_norm = re.sub(r"\s+", " ", previous).strip().casefold()
+                if not previous_norm:
+                    continue
+                if norm == previous_norm:
+                    is_repetitive = True
+                    break
+                if len(norm) >= 8 and (norm in previous_norm or previous_norm in norm):
+                    is_repetitive = True
+                    break
+                if self._hint_similarity(norm, previous_norm) >= 0.72:
+                    is_repetitive = True
+                    break
+
+            if is_repetitive:
+                continue
+
+            seen_norms.add(norm)
+            output.append(action)
+            if len(output) >= 3:
+                break
+
+        if len(output) >= 2:
+            return output
+
+        fallback_actions = (
+            [
+                "先写出你已经确认正确的一点。",
+                "再补一个具体例子来检验这一步。",
+                "最后写出一个不确定点请求反馈。",
+            ]
+            if cjk_context
+            else [
+                "Write one thing you are confident about first.",
+                "Add one concrete example to test this step.",
+                "List one uncertainty you want feedback on.",
+            ]
+        )
+        for item in fallback_actions:
+            norm = re.sub(r"\s+", " ", item).strip().casefold()
+            if norm in seen_norms:
+                continue
+            seen_norms.add(norm)
+            output.append(item)
+            if len(output) >= 3:
+                break
+
+        return output[:3]
+
+    def _fallback_concepts_from_problem(
+        self,
+        problem_title: str,
+        problem_description: str,
+        limit: int = 8,
+    ) -> List[str]:
+        combined = "\n".join([problem_title or "", problem_description or ""])
+        candidates: List[str] = [problem_title]
+
+        if self._contains_cjk(combined):
+            candidates.extend(re.findall(r"[\u4e00-\u9fff]{2,12}", combined))
+        else:
+            stop_words = {
+                "what", "when", "where", "which", "with", "from", "into", "this", "that",
+                "need", "want", "have", "has", "for", "and", "the", "you", "your", "about",
+            }
+            words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", combined)
+            candidates.extend([word for word in words if word.casefold() not in stop_words])
+
+        return self.normalize_concepts(candidates, limit=limit)
+
+    async def extract_related_concepts(
+        self,
+        problem_title: str,
+        problem_description: str,
+        limit: int = 8,
+    ) -> List[str]:
+        language_instruction = self._build_language_instruction(
+            problem_title,
+            problem_description,
+            json_mode=True,
+        )
+        normalized_limit = max(3, min(limit, 12))
+        prompt = f"""Extract key learning concepts from the user's question.
+
+Question title: {problem_title}
+Question description: {problem_description}
+
+Requirements:
+1. Return {normalized_limit} or fewer concrete concepts.
+2. Prefer domain concepts, methods, and principles; avoid generic words.
+3. Keep each concept short (1-6 words).
+4. Do not include numbering or explanations.
+
+Return ONLY a JSON array of strings, e.g.:
+["concept A", "concept B"]
+
+{language_instruction}"""
+
+        result = await self.llm.generate(prompt)
+        try:
+            parsed = json.loads(_clean_json_str(result))
+            if isinstance(parsed, dict):
+                parsed = parsed.get("concepts", [])
+            if not isinstance(parsed, list):
+                return []
+            return self.normalize_concepts([str(item) for item in parsed], limit=normalized_limit)
+        except json.JSONDecodeError:
+            return []
+
+    async def extract_related_concepts_resilient(
+        self,
+        problem_title: str,
+        problem_description: str,
+        limit: int = 8,
+        timeout_seconds: Optional[int] = None,
+    ) -> List[str]:
+        effective_timeout = timeout_seconds or max(4, min(get_settings().LLM_REQUEST_TIMEOUT_SECONDS, 12))
+        try:
+            concepts = await asyncio.wait_for(
+                self.extract_related_concepts(
+                    problem_title=problem_title,
+                    problem_description=problem_description,
+                    limit=limit,
+                ),
+                timeout=max(1, int(effective_timeout)),
+            )
+            if concepts:
+                return concepts
+        except asyncio.TimeoutError:
+            pass
+        except Exception:
+            pass
+
+        return self._fallback_concepts_from_problem(
+            problem_title=problem_title,
+            problem_description=problem_description,
+            limit=limit,
+        )
+
+    async def build_problem_concepts_resilient(
+        self,
+        problem_title: str,
+        problem_description: str,
+        seed_concepts: Optional[List[str]] = None,
+        max_concepts: int = 8,
+    ) -> List[str]:
+        normalized_limit = max(3, min(max_concepts, 12))
+        seed = self.normalize_concepts(seed_concepts or [], limit=normalized_limit)
+        if len(seed) >= min(4, normalized_limit):
+            return seed
+
+        inferred = await self.extract_related_concepts_resilient(
+            problem_title=problem_title,
+            problem_description=problem_description,
+            limit=normalized_limit,
+        )
+        return self.normalize_concepts(seed + inferred, limit=normalized_limit)
+
     def build_embedding_text(
         self,
         title: str,
@@ -713,6 +923,148 @@ Model Examples: {', '.join(model_examples)}
 {language_instruction}"""
         
         return await self.llm.generate(prompt)
+
+    async def generate_step_hint(
+        self,
+        problem_title: str,
+        problem_description: str,
+        step_concept: str,
+        step_description: str,
+        recent_responses: Optional[List[str]] = None,
+        latest_feedback: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        recent_block = ""
+        if recent_responses:
+            recent_block = "\nRecent learner responses:\n" + "\n".join(
+                f"- {item}" for item in recent_responses if item
+            )
+        feedback_block = ""
+        previous_hint_texts = list(recent_responses or [])
+        if latest_feedback:
+            misconceptions = latest_feedback.get("misconceptions") or []
+            suggestions = latest_feedback.get("suggestions") or []
+            next_question = str(latest_feedback.get("next_question") or "").strip()
+            misconception_text = "; ".join(str(item).strip() for item in misconceptions if str(item).strip())
+            suggestion_text = "; ".join(str(item).strip() for item in suggestions if str(item).strip())
+            previous_hint_texts.extend(str(item).strip() for item in suggestions if str(item).strip())
+            previous_hint_texts.extend(str(item).strip() for item in misconceptions if str(item).strip())
+            if next_question:
+                previous_hint_texts.append(next_question)
+            feedback_block = (
+                "\nLatest feedback context:"
+                f"\n- Misconceptions: {misconception_text or 'N/A'}"
+                f"\n- Suggestions: {suggestion_text or 'N/A'}"
+                f"\n- Next question: {next_question or 'N/A'}"
+            )
+        language_instruction = self._build_language_instruction(
+            problem_title,
+            problem_description,
+            step_concept,
+            step_description,
+            "\n".join(recent_responses or []),
+            str(latest_feedback or ""),
+            json_mode=True,
+        )
+        prompt = f"""You are guiding the learner on one focused learning step.
+
+Problem: {problem_title}
+Problem description: {problem_description}
+Current step concept: {step_concept}
+Current step description: {step_description}
+{recent_block}
+{feedback_block}
+
+Return ONLY valid JSON in this shape:
+{{
+  "focus": "one sentence on what to focus on now",
+  "next_actions": ["action 1", "action 2", "action 3"],
+  "starter": "one sentence the learner can copy to start writing"
+}}
+
+Constraints:
+1. Keep guidance practical and concrete.
+2. Do not give final answer directly.
+3. next_actions must contain 2-3 items.
+4. Avoid repeating previous suggestions verbatim.
+
+{language_instruction}"""
+
+        result = await self.llm.generate(prompt)
+        try:
+            parsed = json.loads(_clean_json_str(result))
+            if not isinstance(parsed, dict):
+                raise ValueError("Step hint is not a JSON object")
+            actions = parsed.get("next_actions", [])
+            if not isinstance(actions, list):
+                actions = []
+            normalized_actions = [
+                str(item).strip()
+                for item in actions
+                if str(item).strip()
+            ][:3]
+            deduped_actions = self._dedupe_hint_actions(
+                actions=normalized_actions,
+                previous_texts=previous_hint_texts,
+                cjk_context=self._contains_cjk(
+                    problem_title + problem_description + step_concept + step_description
+                ),
+            )
+            return {
+                "focus": str(parsed.get("focus", "")).strip(),
+                "next_actions": deduped_actions,
+                "starter": str(parsed.get("starter", "")).strip(),
+            }
+        except (json.JSONDecodeError, ValueError, TypeError):
+            fallback_focus = (
+                f"Focus on clarifying your understanding of '{step_concept}' in this step."
+                if not self._contains_cjk(problem_title + problem_description + step_concept)
+                else f"先聚焦澄清你对“{step_concept}”这一步的理解。"
+            )
+            fallback_actions = (
+                [
+                    "State what you already understand in 2-3 sentences.",
+                    "Add one concrete example or mini attempt.",
+                    "List one uncertainty you want feedback on.",
+                ]
+                if not self._contains_cjk(problem_title + problem_description + step_concept)
+                else [
+                    "先用 2-3 句话写出你已经理解的内容。",
+                    "补一个具体例子或你的一次尝试。",
+                    "写出一个最不确定的点，便于获得针对性反馈。",
+                ]
+            )
+            fallback_actions = self._dedupe_hint_actions(
+                actions=fallback_actions,
+                previous_texts=previous_hint_texts,
+                cjk_context=self._contains_cjk(problem_title + problem_description + step_concept),
+            )
+            fallback_starter = (
+                f"My current understanding of {step_concept} is:"
+                if not self._contains_cjk(problem_title + problem_description + step_concept)
+                else f"我目前对“{step_concept}”的理解是："
+            )
+            return {
+                "focus": fallback_focus,
+                "next_actions": fallback_actions,
+                "starter": fallback_starter,
+            }
+
+    def format_step_hint_text(self, structured_hint: Dict[str, Any]) -> str:
+        focus = str(structured_hint.get("focus", "")).strip()
+        actions = structured_hint.get("next_actions") or []
+        starter = str(structured_hint.get("starter", "")).strip()
+
+        action_lines = "\n".join(
+            f"- {str(item).strip()}" for item in actions if str(item).strip()
+        )
+        blocks: List[str] = []
+        if focus:
+            blocks.append(f"Focus:\n{focus}")
+        if action_lines:
+            blocks.append(f"Next actions:\n{action_lines}")
+        if starter:
+            blocks.append(f"Starter sentence:\n{starter}")
+        return "\n\n".join(blocks).strip()
 
     async def generate_with_context(
         self,

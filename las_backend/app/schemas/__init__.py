@@ -15,6 +15,7 @@ from app.schemas.problem import (
     ProblemResponseResponse,
     LearningPathStep,
     LearningPathResponse,
+    LearningStepHintResponse,
 )
 from app.schemas.model_card import (
     ConceptMap,
