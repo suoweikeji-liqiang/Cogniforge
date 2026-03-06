@@ -52,6 +52,26 @@ docker compose up --build
 
 默认容器环境现在使用 PostgreSQL（`pgvector/pgvector` 镜像）作为数据库。
 
+### Deploy Script
+
+生产环境可直接使用根目录的 `deploy.sh`：
+
+```bash
+./deploy.sh
+```
+
+如需在部署时把旧 SQLite 数据导入当前 PostgreSQL，并自动补 embedding：
+
+```bash
+./deploy.sh --migrate-sqlite /data/legacy/las.db
+```
+
+如需先清空目标表再导入：
+
+```bash
+./deploy.sh --migrate-sqlite /data/legacy/las.db --truncate-target
+```
+
 ### Backend
 
 ```bash

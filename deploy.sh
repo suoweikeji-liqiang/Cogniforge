@@ -6,8 +6,9 @@ set -Eeuo pipefail
 # 1) Pull latest main
 # 2) Backup database (PostgreSQL by default, SQLite fallback)
 # 3) Build backend/frontend images
-# 4) Restart selected services
-# 5) Run basic health checks
+# 4) Run backend maintenance (schema migration, optional data import)
+# 5) Restart selected services
+# 6) Run basic health checks
 
 APP_DIR="/data/Cogniforge"
 BRANCH="main"
@@ -20,7 +21,12 @@ BACKUP_DIR=""
 NO_CACHE=0
 SKIP_BACKUP=0
 SKIP_PULL=0
+SKIP_BACKFILL=0
+TARGET_DB_URL=""
+MIGRATE_SQLITE=""
+TRUNCATE_TARGET=0
 SERVICES=()
+INVOKE_CWD="$(pwd -P)"
 
 timestamp() {
   date +"%Y-%m-%d %H:%M:%S"
@@ -49,7 +55,11 @@ Options:
   --pg-db <name>            PostgreSQL database name (default: las_db)
   --pg-user <name>          PostgreSQL user (default: postgres)
   --backup-dir <path>       Backup directory (default: <app-dir>/backups)
+  --migrate-sqlite <path>   Import data from a SQLite file after migrations
+  --target-db-url <url>     Target PostgreSQL URL for SQLite import
+  --truncate-target         Truncate target tables before SQLite import
   --skip-backup             Skip DB backup
+  --skip-backfill           Skip embedding backfill after SQLite import
   --skip-pull               Skip git pull
   --no-cache                Use --no-cache on docker compose build
   -h, --help                Show this help
@@ -59,6 +69,8 @@ Examples:
   ./deploy.sh --services backend
   ./deploy.sh --branch main --no-cache
   ./deploy.sh --skip-backup --services backend,frontend
+  ./deploy.sh --migrate-sqlite /data/legacy/las.db
+  ./deploy.sh --migrate-sqlite ./las.db --truncate-target --target-db-url postgresql+asyncpg://postgres:postgres@postgres:5432/las_db
 EOF
 }
 
@@ -114,8 +126,26 @@ parse_args() {
         BACKUP_DIR="$2"
         shift 2
         ;;
+      --migrate-sqlite)
+        [[ $# -ge 2 ]] || die "--migrate-sqlite requires a value"
+        MIGRATE_SQLITE="$2"
+        shift 2
+        ;;
+      --target-db-url)
+        [[ $# -ge 2 ]] || die "--target-db-url requires a value"
+        TARGET_DB_URL="$2"
+        shift 2
+        ;;
+      --truncate-target)
+        TRUNCATE_TARGET=1
+        shift
+        ;;
       --skip-backup)
         SKIP_BACKUP=1
+        shift
+        ;;
+      --skip-backfill)
+        SKIP_BACKFILL=1
         shift
         ;;
       --skip-pull)
@@ -141,6 +171,62 @@ dc() {
   docker compose "$@"
 }
 
+validate_args() {
+  if [[ -n "$TARGET_DB_URL" && -z "$MIGRATE_SQLITE" ]]; then
+    die "--target-db-url requires --migrate-sqlite"
+  fi
+
+  if [[ "$TRUNCATE_TARGET" -eq 1 && -z "$MIGRATE_SQLITE" ]]; then
+    die "--truncate-target requires --migrate-sqlite"
+  fi
+
+  if [[ "$SKIP_BACKFILL" -eq 1 && -z "$MIGRATE_SQLITE" ]]; then
+    die "--skip-backfill requires --migrate-sqlite"
+  fi
+}
+
+has_service() {
+  local target="$1"
+  local service
+
+  for service in "${SERVICES[@]}"; do
+    if [[ "$service" == "$target" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+add_service_if_missing() {
+  local service="$1"
+
+  if ! has_service "$service"; then
+    SERVICES+=("$service")
+    log "Added service '$service' because backend maintenance was requested."
+  fi
+}
+
+resolve_abs_path() {
+  local input_path="$1"
+  local base_dir
+  local file_name
+
+  if [[ -z "$input_path" ]]; then
+    die "Path cannot be empty."
+  fi
+
+  if [[ "$input_path" != /* ]]; then
+    input_path="$INVOKE_CWD/$input_path"
+  fi
+
+  [[ -e "$input_path" ]] || die "Path not found: $input_path"
+
+  base_dir="$(cd "$(dirname "$input_path")" && pwd -P)"
+  file_name="$(basename "$input_path")"
+  echo "$base_dir/$file_name"
+}
+
 normalize_services() {
   if [[ ${#SERVICES[@]} -eq 0 ]]; then
     SERVICES=("backend" "frontend")
@@ -150,6 +236,10 @@ normalize_services() {
     auto|postgres|sqlite) ;;
     *) die "Invalid --backup-mode: $BACKUP_MODE" ;;
   esac
+
+  if [[ -n "$MIGRATE_SQLITE" ]]; then
+    add_service_if_missing "backend"
+  fi
 }
 
 check_repo_clean() {
@@ -244,6 +334,10 @@ backup_sqlite_db() {
     alpine sh -c "tar czf /backup/${backup_name} -C /data ."
 }
 
+service_declared() {
+  dc config --services 2>/dev/null | grep -qx "$1"
+}
+
 pull_code() {
   local before_sha
   local after_sha
@@ -272,18 +366,123 @@ build_images() {
   fi
 }
 
-restart_services() {
-  log "Restarting services: ${SERVICES[*]}"
-  dc up -d "${SERVICES[@]}"
+ensure_service_running() {
+  local service="$1"
+
+  if ! service_declared "$service"; then
+    die "Service '$service' is not declared in docker-compose.yml"
+  fi
+
+  log "Ensuring service '$service' is running"
+  dc up -d "$service"
+}
+
+wait_service_ready() {
+  local service="$1"
+  local max_retry="${2:-30}"
+  local sleep_seconds="${3:-2}"
+  local container_id
+  local status
+  local i
+
+  for ((i=1; i<=max_retry; i++)); do
+    container_id="$(dc ps -q "$service" 2>/dev/null || true)"
+    if [[ -n "$container_id" ]]; then
+      status="$(docker inspect "$container_id" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)"
+      case "$status" in
+        healthy|running)
+          log "Service '$service' is ready ($status)."
+          return 0
+          ;;
+        created|starting|restarting|"")
+          ;;
+        unhealthy|exited|dead)
+          die "Service '$service' is not healthy (status: $status)"
+          ;;
+      esac
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  die "Service '$service' did not become ready after $max_retry checks."
+}
+
+prepare_backend_maintenance() {
+  if ! has_service "backend"; then
+    return 0
+  fi
+
+  if service_declared "$POSTGRES_SERVICE"; then
+    ensure_service_running "$POSTGRES_SERVICE"
+    wait_service_ready "$POSTGRES_SERVICE" 30 2
+  else
+    log "Compose service '$POSTGRES_SERVICE' not found; assuming backend uses an external database."
+  fi
 }
 
 run_backend_migrations() {
-  if ! printf '%s\n' "${SERVICES[@]}" | grep -qx "backend"; then
+  if ! has_service "backend"; then
     return 0
   fi
 
   log "Running backend database migrations"
-  dc exec -T backend sh -lc "alembic upgrade head"
+  dc run --rm backend sh -lc "alembic upgrade head"
+}
+
+run_sqlite_import() {
+  local source_dir
+  local source_file
+  local import_cmd
+
+  [[ -n "$MIGRATE_SQLITE" ]] || return 0
+
+  source_dir="$(dirname "$MIGRATE_SQLITE")"
+  source_file="$(basename "$MIGRATE_SQLITE")"
+  import_cmd='target_url="${TARGET_DB_URL:-${DATABASE_URL:?DATABASE_URL not set in backend service}}"; '
+  import_cmd+='python3 scripts/migrate_sqlite_to_postgres.py '
+  import_cmd+='--source-sqlite "/migration-src/${MIGRATION_SOURCE_FILE}" '
+  import_cmd+='--target-url "$target_url"'
+
+  if [[ "$TRUNCATE_TARGET" -eq 1 ]]; then
+    import_cmd+=' --truncate-target'
+  fi
+
+  log "Importing SQLite data from '$MIGRATE_SQLITE'"
+  dc run --rm \
+    -e TARGET_DB_URL="${TARGET_DB_URL}" \
+    -e MIGRATION_SOURCE_FILE="${source_file}" \
+    -v "${source_dir}:/migration-src:ro" \
+    backend sh -lc "$import_cmd"
+}
+
+run_embedding_backfill() {
+  if [[ -z "$MIGRATE_SQLITE" ]]; then
+    return 0
+  fi
+
+  if [[ "$SKIP_BACKFILL" -eq 1 ]]; then
+    log "Skip embedding backfill (requested)."
+    return 0
+  fi
+
+  log "Running embedding backfill"
+  dc run --rm backend sh -lc "python3 scripts/backfill_model_card_embeddings.py"
+}
+
+run_backend_maintenance() {
+  if ! has_service "backend"; then
+    return 0
+  fi
+
+  prepare_backend_maintenance
+  run_backend_migrations
+  run_sqlite_import
+  run_embedding_backfill
+}
+
+restart_services() {
+  log "Restarting services: ${SERVICES[*]}"
+  dc up -d "${SERVICES[@]}"
 }
 
 wait_backend_health() {
@@ -323,6 +522,13 @@ main() {
   require_cmd docker
 
   parse_args "$@"
+  validate_args
+
+  if [[ -n "$MIGRATE_SQLITE" ]]; then
+    MIGRATE_SQLITE="$(resolve_abs_path "$MIGRATE_SQLITE")"
+    [[ -f "$MIGRATE_SQLITE" ]] || die "SQLite source file not found: $MIGRATE_SQLITE"
+  fi
+
   normalize_services
 
   BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/backups}"
@@ -339,8 +545,8 @@ main() {
   backup_db
   pull_code
   build_images
+  run_backend_maintenance
   restart_services
-  run_backend_migrations
   wait_backend_health
   show_summary
   log "Deploy finished successfully."
