@@ -23,7 +23,8 @@ async def test_sql_injection_problem_title(client, auth_headers):
         headers=auth_headers,
         json={"title": "'; DROP TABLE problems; --", "description": "Test"}
     )
-    assert response.status_code in [200, 400]
+    # SQLAlchemy ORM protects against SQL injection, should create successfully
+    assert response.status_code == 201
 
     # Verify table still exists
     list_response = await client.get("/api/problems/", headers=auth_headers)
@@ -37,4 +38,5 @@ async def test_xss_in_problem_description(client, auth_headers):
         headers=auth_headers,
         json={"title": "Test", "description": "<script>alert('XSS')</script>"}
     )
-    assert response.status_code == 200
+    # API accepts input, frontend should sanitize
+    assert response.status_code == 201

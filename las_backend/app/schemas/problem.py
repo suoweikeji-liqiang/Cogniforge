@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 class ProblemBase(BaseModel):
-    title: str = Field(..., max_length=500)
+    title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = None
     associated_concepts: List[str] = Field(default_factory=list)
 

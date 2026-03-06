@@ -6,7 +6,13 @@ from typing import Optional
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from dotenv import load_dotenv
 
+
+# Load test.env if exists for real LLM tests
+test_env_path = Path(__file__).parent.parent / "test.env"
+if test_env_path.exists():
+    load_dotenv(test_env_path)
 
 _tmp_db = tempfile.NamedTemporaryFile(prefix="cogniforge-test-", suffix=".db", delete=False)
 os.environ["DATABASE_FILE"] = _tmp_db.name

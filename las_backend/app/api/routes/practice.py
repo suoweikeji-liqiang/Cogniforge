@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
 from uuid import UUID
 from typing import List
+import asyncio
 
 from app.core.database import get_db
 from app.models.entities.user import (
@@ -254,17 +255,22 @@ async def generate_review(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    content = await review_service.generate_review_content(
-        db=db,
-        user_id=str(current_user.id),
-        review_type=data.review_type,
-        period=data.period,
-    )
-    return {
-        "review_type": data.review_type,
-        "period": data.period,
-        "content": content,
-    }
+    try:
+        content = await review_service.generate_review_content(
+            db=db,
+            user_id=str(current_user.id),
+            review_type=data.review_type,
+            period=data.period,
+        )
+        return {
+            "review_type": data.review_type,
+            "period": data.period,
+            "content": content,
+        }
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=503, detail="Review generation timed out")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate review: {str(e)}")
 
 
 @router_reviews.get("/", response_model=List[ReviewResponse])
