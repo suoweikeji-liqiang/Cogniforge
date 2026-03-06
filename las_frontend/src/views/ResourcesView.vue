@@ -153,11 +153,7 @@ watch(searchQuery, () => {
 .ai-summary strong { color: var(--primary); display: block; margin-bottom: 0.5rem; font-size: 0.85rem; }
 .ai-summary p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
 .resource-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
-.btn-primary { background: var(--primary); color: var(--bg-dark); border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.btn-primary:disabled { opacity: 0.5; }
-.btn-secondary { background: var(--bg-card); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; }
-.btn-small { font-size: 0.8rem; padding: 0.35rem 0.75rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); cursor: pointer; }
-.btn-small:disabled { opacity: 0.5; }
+.btn-small { font-size: 0.8rem; padding: 0.35rem 0.75rem; }
 .btn-danger { color: #ef4444; border-color: #ef4444; }
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
 @media (max-width: 768px) {

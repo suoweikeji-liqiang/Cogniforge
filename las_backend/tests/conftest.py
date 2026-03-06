@@ -96,3 +96,70 @@ async def client():
 async def db_session():
     async with AsyncSessionLocal() as session:
         yield session
+
+
+@pytest_asyncio.fixture
+async def test_user(db_session):
+    from app.models.entities.user import User
+    from app.core.security import get_password_hash
+
+    user = User(
+        email="test@example.com",
+        username="testuser",
+        hashed_password=get_password_hash("password"),
+        role="user"
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    yield user
+    # Keep session open until test completes
+
+
+@pytest_asyncio.fixture
+async def admin_user(db_session):
+    from app.models.entities.user import User
+    from app.core.security import get_password_hash
+
+    user = User(
+        email="admin@example.com",
+        username="admin",
+        hashed_password=get_password_hash("password"),
+        role="admin"
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def auth_token(client, test_user):
+    response = await client.post("/api/auth/login", data={
+        "username": "testuser",  # Use username, not email
+        "password": "password"
+    })
+    assert response.status_code == 200, f"Login failed: {response.status_code} - {response.text}"
+    data = response.json()
+    return data["access_token"]
+
+
+@pytest_asyncio.fixture
+async def auth_headers(auth_token):
+    return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest_asyncio.fixture
+async def test_problem(db_session, test_user):
+    from app.models.entities.user import Problem
+
+    problem = Problem(
+        user_id=test_user.id,
+        title="Test Problem",
+        description="Test description",
+        status="new"
+    )
+    db_session.add(problem)
+    await db_session.commit()
+    await db_session.refresh(problem)
+    return problem

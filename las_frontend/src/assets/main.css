@@ -54,7 +54,13 @@ input:focus, textarea:focus, select:focus {
   border: none;
   cursor: pointer;
   font-weight: 500;
+  font-size: 0.95rem;
   transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-primary {
@@ -62,7 +68,7 @@ input:focus, textarea:focus, select:focus {
   color: var(--bg-dark);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: var(--primary-dark);
 }
 
@@ -70,6 +76,10 @@ input:focus, textarea:focus, select:focus {
   background: var(--bg-card);
   color: var(--text);
   border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--primary);
 }
 
 .card {

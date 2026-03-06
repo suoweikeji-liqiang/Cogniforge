@@ -123,8 +123,6 @@ onUnmounted(() => {
 .tag-field { width: 120px; flex: none; }
 .tag { font-size: 0.75rem; padding: 0.2rem 0.5rem; background: var(--primary); color: var(--bg-dark); border-radius: 4px; cursor: pointer; }
 .input-actions { display: flex; gap: 0.5rem; }
-.btn-primary { background: var(--primary); color: var(--bg-dark); border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.btn-primary:disabled { opacity: 0.5; }
 .btn-voice { background: var(--bg-dark); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; }
 .btn-voice.recording { border-color: #ef4444; color: #ef4444; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
