@@ -169,6 +169,9 @@
     "startLearning": "Start a new learning journey",
     "modelLibrary": "Model Library",
     "browseModels": "Browse your knowledge models",
+    "exploreInWorkspace": "Explore in Workspace",
+    "exploreInWorkspaceDescription": "Ask inside ProblemDetail for \"{title}\" so exploration stays tied to the learning path.",
+    "exploreInWorkspaceFallback": "Start from a problem so concept exploration stays attached to a real learning turn.",
     "aiChat": "AI Chat",
     "chatAssistant": "Interact with learning assistant",
     "practiceTest": "Practice",
@@ -448,7 +451,11 @@
     "typeMessage": "Type your message...",
     "send": "Send",
     "noMessages": "No messages yet. Start chatting!",
-    "conversations": "Conversations"
+    "conversations": "Conversations",
+    "legacyTitle": "Standalone chat is now a secondary surface",
+    "legacyMessage": "Use ProblemDetail exploration for concept questions you want to keep attached to a problem, its turns, and its learning paths.",
+    "goToProblems": "Go to Problems",
+    "openLinkedProblem": "Open Linked Problem"
   },
   "evolution": {
     "title": "Evolution Timeline",

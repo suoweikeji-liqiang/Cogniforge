@@ -169,6 +169,9 @@
     "startLearning": "开始新的学习之旅",
     "modelLibrary": "模型库",
     "browseModels": "浏览您的知识模型",
+    "exploreInWorkspace": "在工作区中探索",
+    "exploreInWorkspaceDescription": "围绕“{title}”在 ProblemDetail 中提问，让探索始终挂在学习路径上。",
+    "exploreInWorkspaceFallback": "先从一个问题开始，让概念探索附着在真实学习回合里。",
     "aiChat": "AI 对话",
     "chatAssistant": "与学习助手交流",
     "practiceTest": "练习",
@@ -448,7 +451,11 @@
     "typeMessage": "输入您的消息...",
     "send": "发送",
     "noMessages": "暂无消息。开始聊天吧！",
-    "conversations": "对话列表"
+    "conversations": "对话列表",
+    "legacyTitle": "独立对话已降级为次级入口",
+    "legacyMessage": "如果你的问题需要保留在问题上下文、学习回合和学习路径里，请优先在 ProblemDetail 的探索模式中提问。",
+    "goToProblems": "前往问题列表",
+    "openLinkedProblem": "打开关联问题"
   },
   "evolution": {
     "title": "认知演化时间线",

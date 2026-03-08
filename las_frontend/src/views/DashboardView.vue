@@ -143,9 +143,9 @@
           <h3>{{ t('dashboard.modelLibrary') }}</h3>
           <p>{{ t('dashboard.browseModels') }}</p>
         </router-link>
-        <router-link to="/chat" class="action-card">
-          <h3>{{ t('dashboard.aiChat') }}</h3>
-          <p>{{ t('dashboard.chatAssistant') }}</p>
+        <router-link :to="explorationAction.to" class="action-card" data-testid="dashboard-exploration-action">
+          <h3>{{ explorationAction.title }}</h3>
+          <p>{{ explorationAction.description }}</p>
         </router-link>
         <router-link to="/practice" class="action-card">
           <h3>{{ t('dashboard.practiceTest') }}</h3>
@@ -342,6 +342,24 @@ const focusCard = computed(() => {
     cta: t('dashboard.newProblem'),
     to: '/problems',
     tone: 'tone-primary',
+  }
+})
+
+const explorationAction = computed(() => {
+  if (recentProblems.value.length > 0) {
+    return {
+      to: `/problems/${recentProblems.value[0].id}`,
+      title: t('dashboard.exploreInWorkspace'),
+      description: t('dashboard.exploreInWorkspaceDescription', {
+        title: recentProblems.value[0].title,
+      }),
+    }
+  }
+
+  return {
+    to: '/problems',
+    title: t('dashboard.exploreInWorkspace'),
+    description: t('dashboard.exploreInWorkspaceFallback'),
   }
 })
 

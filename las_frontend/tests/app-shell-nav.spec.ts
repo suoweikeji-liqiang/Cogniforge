@@ -56,4 +56,15 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(secondaryNav.getByTestId('secondary-nav-item-srs-review')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-practice')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-chat')).toBeVisible()
+  await expect(page.locator('.actions-grid a[href="/chat"]')).toHaveCount(0)
+  await expect(page.getByTestId('dashboard-exploration-action')).toHaveAttribute('href', /\/problems/)
+})
+
+test('standalone chat is marked as a secondary legacy surface', async ({ page, request }) => {
+  await authenticate(page, request)
+  await page.goto('/chat')
+
+  await expect(page.getByTestId('legacy-chat-banner')).toBeVisible()
+  await expect(page.getByText(/secondary surface/i)).toBeVisible()
+  await expect(page.getByRole('link', { name: /Go to Problems/i })).toBeVisible()
 })
