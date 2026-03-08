@@ -19,8 +19,11 @@ async def test_llm_timeout_triggers_fallback(client: AsyncClient, auth_headers: 
     )
     problem_id = problem_response.json()["id"]
 
-    with patch("app.api.routes.problems.model_os_service.generate_feedback_structured") as mock_llm:
-        mock_llm.side_effect = asyncio.TimeoutError()
+    async def timeout_coroutine(*args, **kwargs):
+        raise asyncio.TimeoutError()
+
+    with patch("app.services.model_os_service.model_os_service.generate_feedback_structured") as mock_llm:
+        mock_llm.side_effect = timeout_coroutine
 
         response = await client.post(
             f"/api/problems/{problem_id}/responses",
