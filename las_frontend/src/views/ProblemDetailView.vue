@@ -9,6 +9,7 @@
         <p>{{ problem.description }}</p>
         <div class="problem-meta">
           <span class="status" :class="problem.status">{{ problem.status }}</span>
+          <span class="mode-badge">{{ t('problemDetail.currentMode') }}: {{ formatLearningMode(learningMode) }}</span>
           <span v-if="totalSteps" class="progress-text">
             {{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps }}
           </span>
@@ -16,6 +17,33 @@
       </div>
 
       <div class="problem-content">
+        <section class="card mode-switch-section">
+          <h2>{{ t('problemDetail.modeSwitchTitle') }}</h2>
+          <p class="section-subtitle">
+            {{ learningMode === 'socratic' ? t('problemDetail.modeSocraticHint') : t('problemDetail.modeExplorationHint') }}
+          </p>
+          <div class="workspace-mode-toggle">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: learningMode === 'socratic' }"
+              :disabled="switchingMode || submitting || askingQuestion"
+              @click="setLearningMode('socratic')"
+            >
+              {{ t('problemDetail.modeSocratic') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: learningMode === 'exploration' }"
+              :disabled="switchingMode || submitting || askingQuestion"
+              @click="setLearningMode('exploration')"
+            >
+              {{ t('problemDetail.modeExploration') }}
+            </button>
+          </div>
+        </section>
+
         <section class="card current-step-section">
           <h2>{{ t('problemDetail.currentStepTitle') }}</h2>
           <div v-if="totalSteps" class="progress-overview">
@@ -75,7 +103,7 @@
           </details>
         </section>
 
-        <section class="card responses-section">
+        <section v-if="learningMode === 'socratic'" class="card responses-section">
           <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
           <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
 
@@ -116,6 +144,9 @@
 
           <div v-if="latestFeedback" class="system-feedback">
             <h3>{{ t('problemDetail.latestFeedbackTitle') }}</h3>
+            <p class="mode-line">
+              <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(latestResponse?.learning_mode) }}
+            </p>
             <p v-if="latestFeedback.correctness">
               <strong>{{ t('feedback.correctness') }}:</strong> {{ latestFeedback.correctness }}
             </p>
@@ -160,6 +191,9 @@
             <div class="responses-list">
               <div v-for="response in responses" :key="response.id" class="response-item">
                 <div class="user-response">
+                  <p class="mode-line">
+                    <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
+                  </p>
                   <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
                   <p>{{ response.user_response }}</p>
                 </div>
@@ -248,7 +282,7 @@
           </div>
         </section>
 
-        <section class="card qa-section">
+        <section v-if="learningMode === 'exploration'" class="card qa-section">
           <h2>{{ t('problemDetail.askTitle') }}</h2>
           <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
 
@@ -290,6 +324,9 @@
 
           <div v-if="latestQA" class="qa-latest">
             <h3>{{ t('problemDetail.latestAnswerTitle') }}</h3>
+            <p class="mode-line">
+              <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(latestQA.learning_mode) }}
+            </p>
             <p class="qa-meta">{{ t('problemDetail.stepIndicator', { current: latestQA.step_index + 1, total: totalSteps || latestQA.step_index + 1 }) }} · {{ latestQA.step_concept }}</p>
             <div class="qa-block">
               <strong>{{ t('problemDetail.questionLabel') }}</strong>
@@ -322,6 +359,9 @@
             <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
             <div class="responses-list">
               <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
+                <p class="mode-line">
+                  <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
+                </p>
                 <div class="qa-block">
                   <strong>{{ t('problemDetail.questionLabel') }}</strong>
                   <p>{{ item.question }}</p>
@@ -351,9 +391,11 @@ const route = useRoute()
 const problem = ref<any>(null)
 const learningPath = ref<any>(null)
 const responses = ref<any[]>([])
+const learningMode = ref<'socratic' | 'exploration'>('socratic')
 const loading = ref(true)
 const submitting = ref(false)
 const updatingPath = ref(false)
+const switchingMode = ref(false)
 const hintLoading = ref(false)
 const responseText = ref('')
 const autoAdvanceMessage = ref('')
@@ -395,6 +437,43 @@ const formatConfidence = (value: number | string | undefined | null) => {
   return `${percent}%`
 }
 
+const formatLearningMode = (mode: string | undefined | null) => {
+  return mode === 'exploration'
+    ? t('problemDetail.modeExploration')
+    : t('problemDetail.modeSocratic')
+}
+
+const normalizeExplorationTurn = (turn: any) => ({
+  turn_id: turn.turn_id || turn.id || null,
+  learning_mode: turn.learning_mode || 'exploration',
+  mode_metadata: turn.mode_metadata || {},
+  question: turn.question ?? turn.user_text ?? '',
+  answer: turn.answer ?? turn.assistant_text ?? '',
+  answer_mode: turn.answer_mode ?? turn.mode_metadata?.answer_mode ?? 'direct',
+  step_index: Number(turn.step_index ?? turn.mode_metadata?.step_index ?? 0),
+  step_concept: turn.step_concept ?? turn.mode_metadata?.step_concept ?? problem.value?.title ?? '',
+  suggested_next_focus: turn.suggested_next_focus ?? turn.mode_metadata?.suggested_next_focus ?? null,
+  accepted_concepts: turn.accepted_concepts ?? turn.mode_metadata?.accepted_concepts ?? [],
+  pending_concepts: turn.pending_concepts ?? turn.mode_metadata?.pending_concepts ?? [],
+  trace_id: turn.trace_id,
+  llm_calls: turn.llm_calls,
+  llm_latency_ms: turn.llm_latency_ms,
+  fallback_reason: turn.fallback_reason,
+  created_at: turn.created_at,
+})
+
+const fetchExplorationTurns = async () => {
+  try {
+    const response = await api.get(`/problems/${route.params.id}/turns`, {
+      params: { learning_mode: 'exploration' },
+    })
+    qaHistory.value = (response.data || []).map(normalizeExplorationTurn)
+  } catch (e) {
+    console.error('Failed to fetch exploration turns:', e)
+    qaHistory.value = []
+  }
+}
+
 const fetchConceptCandidates = async () => {
   candidateLoading.value = true
   try {
@@ -415,21 +494,49 @@ const fetchLearningPath = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, responsesRes, candidatesRes] = await Promise.all([
+    const [problemRes, pathRes, responsesRes, candidatesRes, turnsRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/concept-candidates`).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/turns`, {
+        params: { learning_mode: 'exploration' },
+      }).catch(() => ({ data: [] })),
     ])
 
     problem.value = problemRes.data
+    learningMode.value = problemRes.data?.learning_mode || 'socratic'
     learningPath.value = pathRes.data
     responses.value = responsesRes.data
     conceptCandidates.value = candidatesRes.data || []
+    qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
     loading.value = false
+  }
+}
+
+const setLearningMode = async (mode: 'socratic' | 'exploration') => {
+  if (switchingMode.value || learningMode.value === mode) return
+
+  const previousMode = learningMode.value
+  learningMode.value = mode
+  if (problem.value) {
+    problem.value.learning_mode = mode
+  }
+
+  switchingMode.value = true
+  try {
+    await api.put(`/problems/${route.params.id}`, { learning_mode: mode })
+  } catch (e) {
+    console.error('Failed to switch learning mode:', e)
+    learningMode.value = previousMode
+    if (problem.value) {
+      problem.value.learning_mode = previousMode
+    }
+  } finally {
+    switchingMode.value = false
   }
 }
 
@@ -440,12 +547,14 @@ const submitResponse = async () => {
     const response = await api.post(`/problems/${route.params.id}/responses`, {
       problem_id: route.params.id,
       user_response: responseText.value,
+      learning_mode: learningMode.value,
     })
     responses.value.push(response.data)
     await Promise.all([
       fetchConceptCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
     responseText.value = ''
@@ -547,15 +656,17 @@ const askLearningQuestion = async () => {
 
   askingQuestion.value = true
   try {
-    const response = await api.post(`/problems/${route.params.id}/ask`, {
+    await api.post(`/problems/${route.params.id}/ask`, {
       question: learningQuestion.value.trim(),
+      learning_mode: learningMode.value,
       answer_mode: answerMode.value,
     })
-    qaHistory.value.unshift(response.data)
     await Promise.all([
       fetchConceptCandidates(),
+      fetchExplorationTurns(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
     learningQuestion.value = ''
@@ -574,6 +685,7 @@ const acceptCandidate = async (candidateId: string) => {
       fetchConceptCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
   } catch (e) {
@@ -606,6 +718,7 @@ const rollbackConcept = async (candidateId: string, conceptText: string) => {
       fetchConceptCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
   } catch (e) {
@@ -655,9 +768,29 @@ onMounted(fetchProblem)
   margin-top: 0.75rem;
 }
 
+.mode-badge {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.1);
+  color: #bfdbfe;
+}
+
 .problem-content {
   display: grid;
   gap: 1.5rem;
+}
+
+.workspace-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.workspace-mode-toggle .btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .card h2 {
@@ -875,6 +1008,12 @@ onMounted(fetchProblem)
 .qa-focus-line {
   margin-top: 0.55rem;
   color: var(--text-muted);
+}
+
+.mode-line {
+  margin-bottom: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 .system-feedback {

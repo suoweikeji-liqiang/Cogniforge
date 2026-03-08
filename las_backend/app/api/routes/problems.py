@@ -15,6 +15,7 @@ from app.models.entities.user import (
     Problem,
     LearningPath,
     ProblemResponse as ProblemResponseModel,
+    ProblemTurn,
     ProblemMasteryEvent,
     ProblemConceptCandidate,
     LearningEvent,
@@ -34,6 +35,7 @@ from app.schemas.problem import (
     LearningStepHintResponse,
     LearningQuestionRequest,
     LearningQuestionResponse,
+    ProblemTurnResponse,
     ProblemConceptCandidateResponse,
     ProblemConceptCandidateActionResponse,
     ProblemConceptRollbackRequest,
@@ -107,6 +109,13 @@ def _normalize_answer_mode(raw_mode: Optional[str]) -> str:
     mode = (raw_mode or "direct").strip().lower()
     if mode not in {"direct", "guided"}:
         return "direct"
+    return mode
+
+
+def _normalize_learning_mode(raw_mode: Optional[str], default: str = "socratic") -> str:
+    mode = (raw_mode or default).strip().lower()
+    if mode not in {"socratic", "exploration"}:
+        return default
     return mode
 
 
@@ -304,6 +313,8 @@ async def _register_problem_concept_candidates(
     *,
     user_id: str,
     problem: Problem,
+    learning_mode: str,
+    source_turn_id: Optional[str],
     inferred_concepts: List[str],
     source: str,
     anchor_concept: str,
@@ -366,6 +377,8 @@ async def _register_problem_concept_candidates(
                 concept_text=concept,
                 normalized_text=normalized,
                 source=source,
+                learning_mode=learning_mode,
+                source_turn_id=source_turn_id,
                 confidence=confidence,
                 status=status,
                 evidence_snippet=evidence_snippet[:500] or None,
@@ -414,6 +427,7 @@ async def _log_learning_event(
     user_id: str,
     problem_id: Optional[str],
     event_type: str,
+    learning_mode: Optional[str],
     trace_id: Optional[str],
     payload: dict,
 ) -> None:
@@ -422,6 +436,7 @@ async def _log_learning_event(
             user_id=user_id,
             problem_id=problem_id,
             event_type=event_type,
+            learning_mode=learning_mode,
             trace_id=trace_id,
             payload_json=payload or {},
         )
@@ -446,6 +461,7 @@ async def create_problem(
         title=problem_data.title,
         description=problem_data.description,
         associated_concepts=associated_concepts,
+        learning_mode=_normalize_learning_mode(problem_data.learning_mode, "socratic"),
         embedding=model_os_service.generate_embedding(
             model_os_service.build_problem_embedding_text(
                 title=problem_data.title,
@@ -579,6 +595,8 @@ async def update_problem(
         problem.description = problem_data.description
     if problem_data.associated_concepts:
         problem.associated_concepts = problem_data.associated_concepts
+    if problem_data.learning_mode:
+        problem.learning_mode = _normalize_learning_mode(problem_data.learning_mode, problem.learning_mode or "socratic")
     if problem_data.status:
         problem.status = problem_data.status
     model_os_service.refresh_problem_embedding(problem)
@@ -628,6 +646,10 @@ async def create_response(
     problem = result.scalar_one_or_none()
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
+    learning_mode = _normalize_learning_mode(response_data.learning_mode, problem.learning_mode or "socratic")
+    if learning_mode != "socratic":
+        raise HTTPException(status_code=400, detail="The /responses route only supports socratic mode")
+    problem.learning_mode = learning_mode
 
     learning_path_result = await db.execute(
         select(LearningPath).where(LearningPath.problem_id == str(problem_id))
@@ -750,11 +772,31 @@ async def create_response(
     )
     inferred_concepts = model_os_service.normalize_concepts(inferred_concepts or [], limit=10)
 
+    mode_metadata = {
+        "turn_source": "response",
+        "step_index": current_step_index,
+        "step_concept": step_concept,
+        "step_description": step_description,
+    }
+    db_turn = ProblemTurn(
+        user_id=str(current_user.id),
+        problem_id=str(problem_id),
+        learning_mode=learning_mode,
+        step_index=current_step_index,
+        user_text=response_data.user_response,
+        assistant_text=None,
+        mode_metadata=mode_metadata,
+    )
+    db.add(db_turn)
+    await db.flush()
+
     evidence_snippet = _build_concept_evidence_snippet(response_data.user_response, step_concept)
     accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
         db=db,
         user_id=str(current_user.id),
         problem=problem,
+        learning_mode=learning_mode,
+        source_turn_id=str(db_turn.id),
         inferred_concepts=inferred_concepts + [step_concept],
         source="response",
         anchor_concept=step_concept,
@@ -818,10 +860,23 @@ async def create_response(
             f"{structured_feedback.get('decision_reason', '')} | {v2_decision_reason}".strip(" |")
         )
 
+    mode_metadata = {
+        **mode_metadata,
+        "accepted_concepts": accepted_concepts,
+        "pending_concepts": pending_concepts,
+        "auto_advanced": auto_advanced,
+        "new_current_step": new_current_step,
+    }
+    formatted_feedback = model_os_service.format_feedback_text(structured_feedback)
+    db_turn.assistant_text = formatted_feedback
+    db_turn.mode_metadata = mode_metadata
+
     db_response = ProblemResponseModel(
         problem_id=str(problem_id),
         user_response=response_data.user_response,
-        system_feedback=model_os_service.format_feedback_text(structured_feedback),
+        system_feedback=formatted_feedback,
+        learning_mode=learning_mode,
+        mode_metadata=mode_metadata,
     )
     db.add(db_response)
     await db.flush()
@@ -844,6 +899,7 @@ async def create_response(
         user_id=str(current_user.id),
         problem_id=str(problem_id),
         event_type="problem_response_evaluated",
+        learning_mode=learning_mode,
         trace_id=trace_id,
         payload={
             "step_index": current_step_index,
@@ -864,6 +920,9 @@ async def create_response(
     return {
         "id": db_response.id,
         "problem_id": db_response.problem_id,
+        "turn_id": db_turn.id,
+        "learning_mode": learning_mode,
+        "mode_metadata": mode_metadata,
         "user_response": db_response.user_response,
         "system_feedback": db_response.system_feedback,
         "structured_feedback": structured_feedback,
@@ -906,12 +965,48 @@ async def list_responses(
         responses.append({
             "id": response.id,
             "problem_id": response.problem_id,
+            "turn_id": None,
+            "learning_mode": _normalize_learning_mode(getattr(response, "learning_mode", None), "socratic"),
+            "mode_metadata": getattr(response, "mode_metadata", None) or {},
             "user_response": response.user_response,
             "system_feedback": response.system_feedback,
             "structured_feedback": model_os_service.parse_feedback_text(response.system_feedback),
             "created_at": response.created_at,
         })
     return responses
+
+
+@router.get("/{problem_id}/turns", response_model=List[ProblemTurnResponse])
+async def list_problem_turns(
+    problem_id: UUID,
+    learning_mode: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    if not problem_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    query = (
+        select(ProblemTurn)
+        .where(
+            ProblemTurn.problem_id == str(problem_id),
+            ProblemTurn.user_id == str(current_user.id),
+        )
+        .order_by(ProblemTurn.created_at.desc())
+    )
+    if learning_mode:
+        query = query.where(
+            ProblemTurn.learning_mode == _normalize_learning_mode(learning_mode, "socratic")
+        )
+
+    result = await db.execute(query)
+    return list(result.scalars().all())
 
 
 @router.get("/{problem_id}/concept-candidates", response_model=List[ProblemConceptCandidateResponse])
@@ -1030,6 +1125,7 @@ async def accept_problem_concept_candidate(
         user_id=str(current_user.id),
         problem_id=str(problem.id),
         event_type="concept_candidate_accepted",
+        learning_mode=candidate.learning_mode,
         trace_id=trace_id,
         payload={
             "candidate_id": str(candidate.id),
@@ -1078,6 +1174,7 @@ async def reject_problem_concept_candidate(
         user_id=str(current_user.id),
         problem_id=str(problem_id),
         event_type="concept_candidate_rejected",
+        learning_mode=candidate.learning_mode,
         trace_id=trace_id,
         payload={
             "candidate_id": str(candidate.id),
@@ -1154,6 +1251,7 @@ async def rollback_problem_concept(
         user_id=str(current_user.id),
         problem_id=str(problem.id),
         event_type="concept_rolled_back",
+        learning_mode=problem.learning_mode,
         trace_id=trace_id,
         payload={
             "concept_text": payload.concept_text,
@@ -1252,6 +1350,10 @@ async def ask_learning_question(
     problem = problem_result.scalar_one_or_none()
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
+    learning_mode = _normalize_learning_mode(payload.learning_mode, problem.learning_mode or "exploration")
+    if learning_mode != "exploration":
+        raise HTTPException(status_code=400, detail="The /ask route only supports exploration mode")
+    problem.learning_mode = learning_mode
 
     path_result = await db.execute(
         select(LearningPath).where(LearningPath.problem_id == str(problem_id))
@@ -1361,11 +1463,32 @@ Learner question: {payload.question}
         low_priority=True,
     )
 
+    mode_metadata = {
+        "turn_source": "ask",
+        "step_index": step_index,
+        "step_concept": step_concept,
+        "step_description": step_description,
+        "answer_mode": mode,
+    }
+    db_turn = ProblemTurn(
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        learning_mode=learning_mode,
+        step_index=step_index,
+        user_text=payload.question,
+        assistant_text=answer,
+        mode_metadata=mode_metadata,
+    )
+    db.add(db_turn)
+    await db.flush()
+
     evidence_snippet = _build_concept_evidence_snippet(payload.question, answer)
     accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
         db=db,
         user_id=str(current_user.id),
         problem=problem,
+        learning_mode=learning_mode,
+        source_turn_id=str(db_turn.id),
         inferred_concepts=ask_concepts + [step_concept],
         source="ask",
         anchor_concept=step_concept,
@@ -1374,12 +1497,20 @@ Learner question: {payload.question}
         evidence_snippet=evidence_snippet,
     )
     suggested_next_focus = f"Use your question to refine one boundary of '{step_concept}'."
+    mode_metadata = {
+        **mode_metadata,
+        "accepted_concepts": accepted_concepts,
+        "pending_concepts": pending_concepts,
+        "suggested_next_focus": suggested_next_focus,
+    }
+    db_turn.mode_metadata = mode_metadata
 
     await _log_learning_event(
         db=db,
         user_id=str(current_user.id),
         problem_id=str(problem.id),
         event_type="problem_inline_qa",
+        learning_mode=learning_mode,
         trace_id=trace_id,
         payload={
             "step_index": step_index,
@@ -1394,6 +1525,9 @@ Learner question: {payload.question}
     await db.commit()
 
     return {
+        "turn_id": db_turn.id,
+        "learning_mode": learning_mode,
+        "mode_metadata": mode_metadata,
         "question": payload.question,
         "answer": answer,
         "answer_mode": mode,

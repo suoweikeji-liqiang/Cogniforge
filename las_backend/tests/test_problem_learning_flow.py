@@ -49,6 +49,8 @@ async def test_problem_response_records_mastery_and_events(client, db_session):
     )
     assert response.status_code == 200
     body = response.json()
+    assert body["learning_mode"] == "socratic"
+    assert body["mode_metadata"]["turn_source"] == "response"
     assert body["trace_id"]
     assert body["llm_calls"] >= 1
     assert "mastery_score" in body["structured_feedback"]
@@ -68,7 +70,102 @@ async def test_problem_response_records_mastery_and_events(client, db_session):
             LearningEvent.event_type == "problem_response_evaluated",
         )
     )
-    assert event_result.scalar_one_or_none() is not None
+    event = event_result.scalar_one_or_none()
+    assert event is not None
+    assert event.learning_mode == "socratic"
+
+
+@pytest.mark.asyncio
+async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client, db_session):
+    from app.models.entities.user import ProblemTurn
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Mode switch")
+
+    update_response = await client.put(
+        f"/api/problems/{problem['id']}",
+        json={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["learning_mode"] == "exploration"
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What concept should I study next?",
+            "learning_mode": "exploration",
+            "answer_mode": "guided",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    ask_body = ask_response.json()
+    assert ask_body["learning_mode"] == "exploration"
+    assert ask_body["mode_metadata"]["turn_source"] == "ask"
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={
+            "problem_id": problem["id"],
+            "user_response": "Here is my attempted answer.",
+            "learning_mode": "socratic",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    response_body = response.json()
+    assert response_body["learning_mode"] == "socratic"
+
+    turns_response = await client.get(
+        f"/api/problems/{problem['id']}/turns",
+        headers=headers,
+    )
+    assert turns_response.status_code == 200
+    turns = turns_response.json()
+    assert len(turns) >= 2
+    assert any(item["learning_mode"] == "exploration" for item in turns)
+    assert any(item["learning_mode"] == "socratic" for item in turns)
+
+    exploration_turns = await client.get(
+        f"/api/problems/{problem['id']}/turns",
+        params={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert exploration_turns.status_code == 200
+    assert all(item["learning_mode"] == "exploration" for item in exploration_turns.json())
+
+    turn_rows = await db_session.execute(
+        select(ProblemTurn).where(ProblemTurn.problem_id == problem["id"])
+    )
+    stored_turns = turn_rows.scalars().all()
+    assert len(stored_turns) >= 2
+    assert any(turn.learning_mode == "exploration" for turn in stored_turns)
+    assert any(turn.learning_mode == "socratic" for turn in stored_turns)
+
+
+@pytest.mark.asyncio
+async def test_learning_step_hint_still_works_after_mode_switch(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Hint mode switch")
+
+    update_response = await client.put(
+        f"/api/problems/{problem['id']}",
+        json={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+
+    hint_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path/hint",
+        headers=headers,
+    )
+    assert hint_response.status_code == 200
+    hint_body = hint_response.json()
+    assert "step_index" in hint_body
+    assert "structured_hint" in hint_body
 
 
 @pytest.mark.asyncio
@@ -200,6 +297,8 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
     )
     assert ask_response.status_code == 200
     ask_body = ask_response.json()
+    assert ask_body["learning_mode"] == "exploration"
+    assert ask_body["mode_metadata"]["turn_source"] == "ask"
     assert ask_body["trace_id"]
     assert ask_body["llm_calls"] >= 1
     assert "suggested_next_focus" in ask_body
@@ -214,7 +313,9 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
             LearningEvent.event_type == "problem_inline_qa",
         )
     )
-    assert events_result.scalar_one_or_none() is not None
+    event = events_result.scalar_one_or_none()
+    assert event is not None
+    assert event.learning_mode == "exploration"
 
     candidates_response = await client.get(
         f"/api/problems/{problem['id']}/concept-candidates",
@@ -222,7 +323,12 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
         headers=headers,
     )
     assert candidates_response.status_code == 200
-    assert any(item["source"] == "ask" for item in candidates_response.json())
+    assert any(
+        item["source"] == "ask"
+        and item["learning_mode"] == "exploration"
+        and item["source_turn_id"] is not None
+        for item in candidates_response.json()
+    )
 
 
 @pytest.mark.asyncio

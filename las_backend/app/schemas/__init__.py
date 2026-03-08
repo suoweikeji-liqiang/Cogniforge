@@ -13,6 +13,7 @@ from app.schemas.problem import (
     ProblemResponse,
     ProblemResponseCreate,
     ProblemResponseResponse,
+    ProblemTurnResponse,
     LearningPathStep,
     LearningPathResponse,
     LearningStepHintResponse,

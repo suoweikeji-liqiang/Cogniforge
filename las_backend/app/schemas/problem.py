@@ -1,13 +1,16 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from uuid import UUID
 from datetime import datetime
+
+LearningMode = Literal["socratic", "exploration"]
 
 
 class ProblemBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = None
     associated_concepts: List[str] = Field(default_factory=list)
+    learning_mode: LearningMode = "socratic"
 
 
 class ProblemCreate(ProblemBase):
@@ -18,6 +21,7 @@ class ProblemUpdate(BaseModel):
     title: Optional[str] = Field(None, max_length=500)
     description: Optional[str] = None
     associated_concepts: Optional[List[str]] = None
+    learning_mode: Optional[LearningMode] = None
     status: Optional[str] = None
 
 
@@ -29,6 +33,7 @@ class ProblemResponse(BaseModel):
     title: str
     description: Optional[str]
     associated_concepts: List[str]
+    learning_mode: LearningMode
     status: str
     created_at: datetime
     updated_at: datetime
@@ -37,6 +42,7 @@ class ProblemResponse(BaseModel):
 class ProblemResponseCreate(BaseModel):
     problem_id: UUID
     user_response: str
+    learning_mode: LearningMode = "socratic"
 
 
 class ProblemResponseResponse(BaseModel):
@@ -44,6 +50,9 @@ class ProblemResponseResponse(BaseModel):
 
     id: UUID
     problem_id: UUID
+    turn_id: Optional[UUID] = None
+    learning_mode: LearningMode
+    mode_metadata: Dict[str, Any] = Field(default_factory=dict)
     user_response: str
     system_feedback: Optional[str]
     structured_feedback: Optional[dict] = None
@@ -89,10 +98,14 @@ class LearningStepHintResponse(BaseModel):
 
 class LearningQuestionRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
+    learning_mode: LearningMode = "exploration"
     answer_mode: str = Field(default="direct")
 
 
 class LearningQuestionResponse(BaseModel):
+    turn_id: Optional[UUID] = None
+    learning_mode: LearningMode
+    mode_metadata: Dict[str, Any] = Field(default_factory=dict)
     question: str
     answer: str
     answer_mode: str
@@ -114,10 +127,25 @@ class ProblemConceptCandidateResponse(BaseModel):
     problem_id: UUID
     concept_text: str
     source: str
+    learning_mode: LearningMode
+    source_turn_id: Optional[UUID] = None
     confidence: float
     status: str
     evidence_snippet: Optional[str] = None
     reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class ProblemTurnResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    problem_id: UUID
+    learning_mode: LearningMode
+    step_index: Optional[int] = None
+    user_text: Optional[str] = None
+    assistant_text: Optional[str] = None
+    mode_metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
 
