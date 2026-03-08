@@ -142,156 +142,108 @@
         <section v-if="learningMode === 'socratic'" class="card responses-section">
           <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
           <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
+          <div class="workspace-stage">
+            <div class="workspace-main-column">
 
-          <div v-if="socraticQuestion" class="socratic-question-panel">
-            <div class="question-head">
-              <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
-              <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
-            </div>
-            <p class="question-copy">{{ socraticQuestion.question }}</p>
-          </div>
-
-          <form @submit.prevent="submitResponse" class="response-form">
-            <div class="form-group">
-              <label>{{ t('problemDetail.progressInputLabel') }}</label>
-              <textarea
-                v-model="responseText"
-                rows="5"
-                :placeholder="t('problemDetail.progressInputPlaceholder')"
-                required
-              ></textarea>
-            </div>
-            <div class="response-actions">
-              <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
-                {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
-              </button>
-              <button type="submit" class="btn btn-primary" :disabled="submitting">
-                {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
-              </button>
-            </div>
-          </form>
-          <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
-          <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
-            <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
-              {{ t('problemDetail.undoAutoAdvance') }}
-            </button>
-          </div>
-
-          <div v-if="stepHint" class="hint-panel">
-            <h3>{{ t('problemDetail.hintTitle') }}</h3>
-            <p v-if="stepHint.focus"><strong>{{ t('problemDetail.hintFocus') }}:</strong> {{ stepHint.focus }}</p>
-            <ul v-if="stepHint.next_actions?.length">
-              <li v-for="(item, idx) in stepHint.next_actions" :key="`${idx}-${item}`">{{ item }}</li>
-            </ul>
-            <p v-if="stepHint.starter"><strong>{{ t('problemDetail.hintStarter') }}:</strong> {{ stepHint.starter }}</p>
-          </div>
-
-          <div v-if="latestFeedback" class="system-feedback">
-            <h3>{{ t('problemDetail.latestFeedbackTitle') }}</h3>
-            <p class="mode-line">
-              <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(latestResponse?.learning_mode) }}
-            </p>
-            <p v-if="latestResponse?.question_kind" class="mode-line">
-              <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(latestResponse.question_kind) }}
-            </p>
-            <p v-if="latestResponse?.socratic_question" class="mode-line">
-              <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ latestResponse.socratic_question }}
-            </p>
-            <p v-if="latestFeedback.correctness">
-              <strong>{{ t('feedback.correctness') }}:</strong> {{ latestFeedback.correctness }}
-            </p>
-            <p v-if="latestFeedback.mastery_score !== undefined">
-              <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ latestFeedback.mastery_score }}
-              · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(latestFeedback.confidence) }}
-              · <strong>{{ t('problemDetail.passStage') }}:</strong>
-              {{ latestFeedback.pass_stage ? t('problemDetail.passStageYes') : t('problemDetail.passStageNo') }}
-            </p>
-            <p v-if="latestFeedback.misconceptions?.length">
-              <strong>{{ t('feedback.misconceptions') }}:</strong> {{ latestFeedback.misconceptions.join(' / ') }}
-            </p>
-            <p v-if="latestFeedback.suggestions?.length">
-              <strong>{{ t('feedback.suggestions') }}:</strong> {{ latestFeedback.suggestions.join(' / ') }}
-            </p>
-            <p v-if="latestFeedback.next_question">
-              <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ latestFeedback.next_question }}
-            </p>
-            <p v-if="latestFeedback.decision_reason">
-              <strong>{{ t('problemDetail.decisionReason') }}:</strong> {{ latestFeedback.decision_reason }}
-            </p>
-            <p v-if="latestResponse?.decision" class="mode-line">
-              <strong>{{ t('problemDetail.progressionDecision') }}:</strong>
-              {{ latestResponse.decision.advance ? t('problemDetail.advanceYes') : t('problemDetail.advanceNo') }}
-              · {{ latestResponse.decision.progression_ran ? t('problemDetail.progressionRan') : t('problemDetail.progressionSkipped') }}
-            </p>
-            <p v-if="latestResponse?.follow_up?.needed && latestResponse?.follow_up?.question" class="mode-line">
-              <strong>{{ t('problemDetail.followUpQuestion') }}:</strong>
-              {{ latestResponse.follow_up.question }}
-            </p>
-            <p v-if="latestResponse?.accepted_concepts?.length" class="new-concepts-line">
-              <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong>
-              {{ latestResponse.accepted_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestResponse?.pending_concepts?.length" class="pending-concepts-line">
-              <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong>
-              {{ latestResponse.pending_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestResponse?.trace_id || latestResponse?.llm_calls !== undefined" class="ops-meta-line">
-              <strong>{{ t('problemDetail.traceId') }}:</strong> {{ latestResponse?.trace_id || '-' }}
-              · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ latestResponse?.llm_calls ?? '-' }}
-              · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ latestResponse?.llm_latency_ms ?? '-' }}
-            </p>
-            <p v-if="latestResponse?.fallback_reason" class="ops-fallback-line">
-              <strong>{{ t('problemDetail.fallbackReason') }}:</strong> {{ latestResponse.fallback_reason }}
-            </p>
-          </div>
-
-          <details v-if="responses.length" class="history-panel">
-            <summary>{{ t('problemDetail.historyTitle', { count: responses.length }) }}</summary>
-            <div class="responses-list">
-              <div v-for="response in responses" :key="response.id" class="response-item">
-                <div class="user-response">
-                  <p class="mode-line">
-                    <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
-                  </p>
-                  <p v-if="response.question_kind" class="mode-line">
-                    <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(response.question_kind) }}
-                  </p>
-                  <p v-if="response.socratic_question" class="mode-line">
-                    <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ response.socratic_question }}
-                  </p>
-                  <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
-                  <p>{{ response.user_response }}</p>
+              <div v-if="socraticQuestion" class="socratic-question-panel">
+                <div class="question-head">
+                  <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
+                  <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
                 </div>
-                <div v-if="response.structured_feedback" class="history-feedback">
-                  <p v-if="response.structured_feedback.correctness">
-                    <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
-                  </p>
-                  <p v-if="response.structured_feedback.mastery_score !== undefined">
-                    <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
-                    · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
-                  </p>
-                  <p v-if="response.structured_feedback.suggestions?.length">
-                    <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
-                  </p>
-                  <p v-if="response.structured_feedback.next_question">
-                    <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
-                  </p>
-                  <p v-if="response.accepted_concepts?.length">
-                    <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.accepted_concepts.join(' / ') }}
-                  </p>
-                  <p v-if="response.pending_concepts?.length">
-                    <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ response.pending_concepts.join(' / ') }}
-                  </p>
-                  <p v-if="response.trace_id || response.llm_calls !== undefined" class="ops-meta-line">
-                    <strong>{{ t('problemDetail.traceId') }}:</strong> {{ response.trace_id || '-' }}
-                    · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ response.llm_calls ?? '-' }}
-                    · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ response.llm_latency_ms ?? '-' }}
-                  </p>
-                </div>
+                <p class="question-copy">{{ socraticQuestion.question }}</p>
               </div>
+
+              <form @submit.prevent="submitResponse" class="response-form">
+                <div class="form-group">
+                  <label>{{ t('problemDetail.progressInputLabel') }}</label>
+                  <textarea
+                    v-model="responseText"
+                    rows="5"
+                    :placeholder="t('problemDetail.progressInputPlaceholder')"
+                    required
+                  ></textarea>
+                </div>
+                <div class="response-actions">
+                  <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
+                    {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
+                  </button>
+                  <button type="submit" class="btn btn-primary" :disabled="submitting">
+                    {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
+                  </button>
+                </div>
+              </form>
+              <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
+              <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
+                <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
+                  {{ t('problemDetail.undoAutoAdvance') }}
+                </button>
+              </div>
+
+              <div v-if="stepHint" class="hint-panel">
+                <h3>{{ t('problemDetail.hintTitle') }}</h3>
+                <p v-if="stepHint.focus"><strong>{{ t('problemDetail.hintFocus') }}:</strong> {{ stepHint.focus }}</p>
+                <ul v-if="stepHint.next_actions?.length">
+                  <li v-for="(item, idx) in stepHint.next_actions" :key="`${idx}-${item}`">{{ item }}</li>
+                </ul>
+                <p v-if="stepHint.starter"><strong>{{ t('problemDetail.hintStarter') }}:</strong> {{ stepHint.starter }}</p>
+              </div>
+
+              <details v-if="responses.length" class="history-panel">
+                <summary>{{ t('problemDetail.historyTitle', { count: responses.length }) }}</summary>
+                <div class="responses-list">
+                  <div v-for="response in responses" :key="response.id" class="response-item">
+                    <div class="user-response">
+                      <p class="mode-line">
+                        <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
+                      </p>
+                      <p v-if="response.question_kind" class="mode-line">
+                        <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(response.question_kind) }}
+                      </p>
+                      <p v-if="response.socratic_question" class="mode-line">
+                        <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ response.socratic_question }}
+                      </p>
+                      <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
+                      <p>{{ response.user_response }}</p>
+                    </div>
+                    <div v-if="response.structured_feedback" class="history-feedback">
+                      <p v-if="response.structured_feedback.correctness">
+                        <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
+                      </p>
+                      <p v-if="response.structured_feedback.mastery_score !== undefined">
+                        <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
+                        · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
+                      </p>
+                      <p v-if="response.structured_feedback.suggestions?.length">
+                        <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
+                      </p>
+                      <p v-if="response.structured_feedback.next_question">
+                        <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
+                      </p>
+                      <p v-if="response.accepted_concepts?.length">
+                        <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.accepted_concepts.join(' / ') }}
+                      </p>
+                      <p v-if="response.pending_concepts?.length">
+                        <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ response.pending_concepts.join(' / ') }}
+                      </p>
+                      <p v-if="response.trace_id || response.llm_calls !== undefined" class="ops-meta-line">
+                        <strong>{{ t('problemDetail.traceId') }}:</strong> {{ response.trace_id || '-' }}
+                        · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ response.llm_calls ?? '-' }}
+                        · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ response.llm_latency_ms ?? '-' }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
             </div>
-          </details>
-          <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
+            <ProblemTurnOutcomePanel
+              class="workspace-side-column"
+              :learning-mode="learningMode"
+              :latest-response="latestResponse"
+              :latest-feedback="latestFeedback"
+              :latest-qa="latestQA"
+            />
+          </div>
         </section>
 
         <section class="card concept-governance-section">
@@ -416,132 +368,75 @@
         <section v-if="learningMode === 'exploration'" class="card qa-section">
           <h2>{{ t('problemDetail.askTitle') }}</h2>
           <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
+          <div class="workspace-stage">
+            <div class="workspace-main-column">
 
-          <div class="ask-mode-toggle">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :class="{ active: answerMode === 'direct' }"
-              :disabled="askingQuestion"
-              @click="answerMode = 'direct'"
-            >
-              {{ t('problemDetail.askModeDirect') }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :class="{ active: answerMode === 'guided' }"
-              :disabled="askingQuestion"
-              @click="answerMode = 'guided'"
-            >
-              {{ t('problemDetail.askModeGuided') }}
-            </button>
-          </div>
-
-          <form @submit.prevent="askLearningQuestion" class="response-form">
-            <div class="form-group">
-              <label>{{ t('problemDetail.askInputLabel') }}</label>
-              <textarea
-                v-model="learningQuestion"
-                rows="3"
-                :placeholder="t('problemDetail.askInputPlaceholder')"
-                required
-              ></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()">
-              {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
-            </button>
-          </form>
-
-          <div v-if="latestQA" class="qa-latest">
-            <h3>{{ t('problemDetail.latestAnswerTitle') }}</h3>
-            <p class="mode-line">
-              <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(latestQA.learning_mode) }}
-            </p>
-            <p v-if="latestQA.answer_type" class="mode-line">
-              <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(latestQA.answer_type) }}
-            </p>
-            <p class="qa-meta">{{ t('problemDetail.stepIndicator', { current: latestQA.step_index + 1, total: totalSteps || latestQA.step_index + 1 }) }} · {{ latestQA.step_concept }}</p>
-            <div class="qa-block">
-              <strong>{{ t('problemDetail.questionLabel') }}</strong>
-              <p>{{ latestQA.question }}</p>
-            </div>
-            <div class="qa-block">
-              <strong>{{ t('problemDetail.answerLabel') }}</strong>
-              <p>{{ latestQA.answer }}</p>
-            </div>
-            <p v-if="latestQA.suggested_next_focus" class="qa-focus-line">
-              <strong>{{ t('problemDetail.suggestedNextFocus') }}:</strong> {{ latestQA.suggested_next_focus }}
-            </p>
-            <p v-if="latestQA.answered_concepts?.length" class="mode-line">
-              <strong>{{ t('problemDetail.answeredConcepts') }}:</strong> {{ latestQA.answered_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestQA.related_concepts?.length" class="mode-line">
-              <strong>{{ t('problemDetail.relatedConcepts') }}:</strong> {{ latestQA.related_concepts.join(' / ') }}
-            </p>
-            <div v-if="latestQA.next_learning_actions?.length" class="qa-actions-block">
-              <strong>{{ t('problemDetail.nextLearningActions') }}</strong>
-              <ul>
-                <li v-for="(action, index) in latestQA.next_learning_actions" :key="`${index}-${action}`">{{ action }}</li>
-              </ul>
-            </div>
-            <div v-if="latestQA.path_suggestions?.length" class="qa-actions-block">
-              <strong>{{ t('problemDetail.pathSuggestions') }}</strong>
-              <div class="path-suggestion-list">
-                <div
-                  v-for="(suggestion, index) in latestQA.path_suggestions"
-                  :key="`${index}-${suggestion.title}`"
-                  class="path-suggestion-item"
+              <div class="ask-mode-toggle">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :class="{ active: answerMode === 'direct' }"
+                  :disabled="askingQuestion"
+                  @click="answerMode = 'direct'"
                 >
-                  <div class="path-suggestion-head">
-                    <span class="question-kind-badge">{{ formatPathSuggestionType(suggestion.type) }}</span>
-                    <strong>{{ suggestion.title }}</strong>
-                  </div>
-                  <p v-if="suggestion.reason">{{ suggestion.reason }}</p>
-                </div>
+                  {{ t('problemDetail.askModeDirect') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :class="{ active: answerMode === 'guided' }"
+                  :disabled="askingQuestion"
+                  @click="answerMode = 'guided'"
+                >
+                  {{ t('problemDetail.askModeGuided') }}
+                </button>
               </div>
-            </div>
-            <p class="mode-line">
-              <strong>{{ t('problemDetail.returnToMainPath') }}:</strong>
-              {{ latestQA.return_to_main_path_hint ? t('problemDetail.returnToMainPathYes') : t('problemDetail.returnToMainPathNo') }}
-            </p>
-            <p v-if="latestQA.accepted_concepts?.length" class="new-concepts-line">
-              <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ latestQA.accepted_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestQA.pending_concepts?.length" class="pending-concepts-line">
-              <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ latestQA.pending_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestQA.trace_id || latestQA.llm_calls !== undefined" class="ops-meta-line">
-              <strong>{{ t('problemDetail.traceId') }}:</strong> {{ latestQA.trace_id || '-' }}
-              · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ latestQA.llm_calls ?? '-' }}
-              · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ latestQA.llm_latency_ms ?? '-' }}
-            </p>
-            <p v-if="latestQA.fallback_reason" class="ops-fallback-line">
-              <strong>{{ t('problemDetail.fallbackReason') }}:</strong> {{ latestQA.fallback_reason }}
-            </p>
-          </div>
 
-          <details v-if="qaHistory.length" class="history-panel">
-            <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
-            <div class="responses-list">
-              <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
-                <p class="mode-line">
-                  <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
-                </p>
-                <p v-if="item.answer_type" class="mode-line">
-                  <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(item.answer_type) }}
-                </p>
-                <div class="qa-block">
-                  <strong>{{ t('problemDetail.questionLabel') }}</strong>
-                  <p>{{ item.question }}</p>
+              <form @submit.prevent="askLearningQuestion" class="response-form">
+                <div class="form-group">
+                  <label>{{ t('problemDetail.askInputLabel') }}</label>
+                  <textarea
+                    v-model="learningQuestion"
+                    rows="3"
+                    :placeholder="t('problemDetail.askInputPlaceholder')"
+                    required
+                  ></textarea>
                 </div>
-                <div class="qa-block">
-                  <strong>{{ t('problemDetail.answerLabel') }}</strong>
-                  <p>{{ item.answer }}</p>
+                <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()">
+                  {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
+                </button>
+              </form>
+
+              <details v-if="qaHistory.length" class="history-panel">
+                <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
+                <div class="responses-list">
+                  <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
+                    <p class="mode-line">
+                      <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
+                    </p>
+                    <p v-if="item.answer_type" class="mode-line">
+                      <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(item.answer_type) }}
+                    </p>
+                    <div class="qa-block">
+                      <strong>{{ t('problemDetail.questionLabel') }}</strong>
+                      <p>{{ item.question }}</p>
+                    </div>
+                    <div class="qa-block">
+                      <strong>{{ t('problemDetail.answerLabel') }}</strong>
+                      <p>{{ item.answer }}</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </details>
             </div>
-          </details>
+            <ProblemTurnOutcomePanel
+              class="workspace-side-column"
+              :learning-mode="learningMode"
+              :latest-response="latestResponse"
+              :latest-feedback="latestFeedback"
+              :latest-qa="latestQA"
+            />
+          </div>
         </section>
       </div>
     </template>
@@ -553,6 +448,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -670,6 +566,7 @@ const normalizeExplorationTurn = (turn: any) => ({
   answered_concepts: turn.answered_concepts ?? turn.mode_metadata?.answered_concepts ?? [],
   related_concepts: turn.related_concepts ?? turn.mode_metadata?.related_concepts ?? [],
   derived_candidates: turn.derived_candidates ?? turn.mode_metadata?.derived_candidates ?? [],
+  derived_path_candidates: turn.derived_path_candidates ?? turn.mode_metadata?.derived_path_candidates ?? [],
   next_learning_actions: turn.next_learning_actions ?? turn.mode_metadata?.next_learning_actions ?? [],
   path_suggestions: turn.path_suggestions ?? turn.mode_metadata?.path_suggestions ?? [],
   return_to_main_path_hint: turn.return_to_main_path_hint ?? turn.mode_metadata?.return_to_main_path_hint ?? true,
@@ -1107,6 +1004,19 @@ onMounted(fetchProblem)
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.workspace-stage {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-main-column {
+  min-width: 0;
+}
+
+.workspace-side-column {
+  min-width: 0;
 }
 
 .workspace-mode-toggle .btn.active {
@@ -1567,6 +1477,13 @@ onMounted(fetchProblem)
 .candidate-dismissed {
   border-color: rgba(148, 163, 184, 0.28);
   opacity: 0.8;
+}
+
+@media (min-width: 980px) {
+  .workspace-stage {
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+    align-items: start;
+  }
 }
 
 .status {
