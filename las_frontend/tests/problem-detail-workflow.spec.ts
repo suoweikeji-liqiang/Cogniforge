@@ -126,6 +126,10 @@ test.describe('ProblemDetail main workflow', () => {
 
     await page.getByTestId('accept-derived-concept').first().click()
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
+    await page.getByTestId('promote-derived-concept').first().click()
+    await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()
+    await page.getByTestId('schedule-derived-concept-review').first().click()
+    await expect(page.getByTestId('derived-concept-review-scheduled').first()).toBeVisible()
 
     await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
     await expect(page.getByTestId('path-candidate-card').first()).toBeVisible()

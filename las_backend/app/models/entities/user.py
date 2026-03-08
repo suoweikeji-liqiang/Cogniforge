@@ -216,6 +216,7 @@ class ProblemConceptCandidate(Base):
     confidence = Column(Float, nullable=False, default=0.0)
     status = Column(String(20), nullable=False, default="pending", index=True)
     merged_into_concept = Column(String(120), nullable=True)
+    linked_model_card_id = Column(String(36), ForeignKey("model_cards.id"), nullable=True, index=True)
     evidence_snippet = Column(Text, nullable=True)
     reviewer_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -225,6 +226,7 @@ class ProblemConceptCandidate(Base):
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     problem = relationship("Problem", back_populates="concept_candidates")
     source_turn = relationship("ProblemTurn")
+    linked_model_card = relationship("ModelCard")
 
 
 class ProblemPathCandidate(Base):

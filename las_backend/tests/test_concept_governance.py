@@ -8,7 +8,14 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.entities.user import ConceptAlias, Problem, ProblemConceptCandidate, ProblemTurn
+from app.models.entities.user import (
+    ConceptAlias,
+    ModelCard,
+    Problem,
+    ProblemConceptCandidate,
+    ProblemTurn,
+    ReviewSchedule,
+)
 
 
 @pytest.mark.asyncio
@@ -105,6 +112,73 @@ async def test_accept_concept_candidate(client: AsyncClient, auth_headers: dict,
 
     await db_session.refresh(problem)
     assert "new concept" in problem.associated_concepts
+
+
+@pytest.mark.asyncio
+async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_review(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session: AsyncSession,
+    test_user,
+):
+    problem = Problem(
+        user_id=str(test_user.id),
+        title="Test Problem",
+        associated_concepts=["existing concept"],
+    )
+    db_session.add(problem)
+    await db_session.flush()
+
+    candidate = ProblemConceptCandidate(
+        user_id=str(test_user.id),
+        problem_id=str(problem.id),
+        concept_text="precision threshold",
+        normalized_text="precision threshold",
+        source="response",
+        learning_mode="socratic",
+        confidence=0.81,
+        status="accepted",
+        evidence_snippet="Precision changes with the decision threshold.",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+
+    promote_response = await client.post(
+        f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/promote",
+        headers=auth_headers,
+    )
+    assert promote_response.status_code == 200
+    promote_data = promote_response.json()
+    assert promote_data["candidate"]["linked_model_card_id"] is not None
+    assert promote_data["model_card"]["title"] == "precision threshold"
+    assert promote_data["created_model_card"] is True
+    assert promote_data["review_scheduled"] is False
+
+    model_card_result = await db_session.execute(
+        select(ModelCard).where(ModelCard.id == promote_data["model_card"]["id"])
+    )
+    model_card = model_card_result.scalar_one_or_none()
+    assert model_card is not None
+    assert "Promoted from problem: Test Problem" in (model_card.user_notes or "")
+
+    schedule_response = await client.post(
+        f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/schedule-review",
+        headers=auth_headers,
+    )
+    assert schedule_response.status_code == 200
+    schedule_data = schedule_response.json()
+    assert schedule_data["candidate"]["linked_model_card_id"] == promote_data["model_card"]["id"]
+    assert schedule_data["review_scheduled"] is True
+    assert schedule_data["next_review_at"] is not None
+
+    schedule_result = await db_session.execute(
+        select(ReviewSchedule).where(
+            ReviewSchedule.user_id == str(test_user.id),
+            ReviewSchedule.model_card_id == promote_data["model_card"]["id"],
+        )
+    )
+    review_schedule = schedule_result.scalar_one_or_none()
+    assert review_schedule is not None
 
 
 @pytest.mark.asyncio

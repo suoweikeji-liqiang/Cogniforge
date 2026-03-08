@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any, Literal
 from uuid import UUID
 from datetime import datetime
+from app.schemas.model_card import ModelCardResponse
 
 LearningMode = Literal["socratic", "exploration"]
 SocraticQuestionKind = Literal["probe", "checkpoint"]
@@ -250,6 +251,7 @@ class ProblemConceptCandidateResponse(BaseModel):
     confidence: float
     status: ConceptCandidateStatus
     merged_into_concept: Optional[str] = None
+    linked_model_card_id: Optional[UUID] = None
     evidence_snippet: Optional[str] = None
     source_turn_preview: Optional[str] = None
     source_turn_created_at: Optional[datetime] = None
@@ -273,6 +275,15 @@ class ProblemTurnResponse(BaseModel):
 class ProblemConceptCandidateActionResponse(BaseModel):
     candidate: ProblemConceptCandidateResponse
     accepted_concepts: List[str] = Field(default_factory=list)
+    trace_id: Optional[str] = None
+
+
+class ProblemConceptCandidateHandoffResponse(BaseModel):
+    candidate: ProblemConceptCandidateResponse
+    model_card: ModelCardResponse
+    created_model_card: bool = False
+    review_scheduled: bool = False
+    next_review_at: Optional[datetime] = None
     trace_id: Optional[str] = None
 
 

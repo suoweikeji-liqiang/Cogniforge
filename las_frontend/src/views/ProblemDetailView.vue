@@ -255,11 +255,16 @@
                 :current-turn-id="activeConceptTurnId"
                 :merge-targets="conceptMergeTargets"
                 :action-pending-id="candidateSubmittingId"
+                :handoff-pending-id="handoffSubmittingId"
+                :scheduled-model-card-ids="scheduledModelCardIds"
                 @accept="acceptCandidate"
                 @reject="rejectCandidate"
                 @postpone="postponeCandidate"
                 @merge="mergeCandidate"
                 @rollback="rollbackConcept"
+                @promote="promoteCandidateToModelCard"
+                @open-card="openModelCard"
+                @schedule-review="scheduleCandidateReview"
               />
             </div>
           </div>
@@ -416,11 +421,16 @@
                 :current-turn-id="activeConceptTurnId"
                 :merge-targets="conceptMergeTargets"
                 :action-pending-id="candidateSubmittingId"
+                :handoff-pending-id="handoffSubmittingId"
+                :scheduled-model-card-ids="scheduledModelCardIds"
                 @accept="acceptCandidate"
                 @reject="rejectCandidate"
                 @postpone="postponeCandidate"
                 @merge="mergeCandidate"
                 @rollback="rollbackConcept"
+                @promote="promoteCandidateToModelCard"
+                @open-card="openModelCard"
+                @schedule-review="scheduleCandidateReview"
               />
             </div>
           </div>
@@ -432,7 +442,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
@@ -440,6 +450,7 @@ import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemD
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 const problem = ref<any>(null)
 const learningPath = ref<any>(null)
@@ -465,8 +476,10 @@ const conceptCandidates = ref<any[]>([])
 const pathCandidates = ref<any[]>([])
 const candidateLoading = ref(false)
 const candidateSubmittingId = ref<string | null>(null)
+const handoffSubmittingId = ref<string | null>(null)
 const pathCandidateLoading = ref(false)
 const pathCandidateSubmittingId = ref<string | null>(null)
+const scheduledModelCardIds = ref<string[]>([])
 const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
@@ -639,6 +652,16 @@ const fetchPathCandidates = async () => {
   }
 }
 
+const fetchReviewSchedules = async () => {
+  try {
+    const response = await api.get('/srs/schedules')
+    scheduledModelCardIds.value = (response.data || []).map((schedule: any) => String(schedule.model_card_id))
+  } catch (e) {
+    console.error('Failed to fetch review schedules:', e)
+    scheduledModelCardIds.value = []
+  }
+}
+
 const fetchLearningPath = async () => {
   const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
   learningPath.value = pathRes.data
@@ -651,7 +674,7 @@ const fetchLearningPaths = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes] = await Promise.all([
+    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes, schedulesRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
@@ -662,6 +685,7 @@ const fetchProblem = async () => {
         params: { learning_mode: 'exploration' },
       }).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/socratic-question`).catch(() => ({ data: null })),
+      api.get('/srs/schedules').catch(() => ({ data: [] })),
     ])
 
     problem.value = problemRes.data
@@ -673,6 +697,7 @@ const fetchProblem = async () => {
     pathCandidates.value = pathCandidatesRes.data || []
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
     socraticQuestion.value = socraticRes.data || null
+    scheduledModelCardIds.value = (schedulesRes.data || []).map((schedule: any) => String(schedule.model_card_id))
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -932,6 +957,41 @@ const rollbackConcept = async ({ candidateId, conceptText }: { candidateId: stri
     console.error('Failed to rollback concept:', e)
   } finally {
     candidateSubmittingId.value = null
+  }
+}
+
+const promoteCandidateToModelCard = async (candidateId: string) => {
+  handoffSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/promote`)
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to promote concept candidate to model card:', e)
+  } finally {
+    handoffSubmittingId.value = null
+  }
+}
+
+const openModelCard = (modelCardId: string) => {
+  if (!modelCardId) return
+  router.push(`/model-cards/${modelCardId}`)
+}
+
+const scheduleCandidateReview = async (candidateId: string) => {
+  handoffSubmittingId.value = candidateId
+  try {
+    const response = await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/schedule-review`)
+    const modelCardId = String(response.data?.model_card?.id || '')
+    if (modelCardId && !scheduledModelCardIds.value.includes(modelCardId)) {
+      scheduledModelCardIds.value = [...scheduledModelCardIds.value, modelCardId]
+    } else if (!modelCardId) {
+      await fetchReviewSchedules()
+    }
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to schedule concept candidate review:', e)
+  } finally {
+    handoffSubmittingId.value = null
   }
 }
 
