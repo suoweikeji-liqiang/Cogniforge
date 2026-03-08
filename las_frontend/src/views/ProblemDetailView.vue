@@ -311,6 +311,72 @@
           </div>
         </section>
 
+        <section class="card concept-governance-section">
+          <h2>{{ t('problemDetail.pathCandidatesTitle') }}</h2>
+          <p class="section-subtitle">{{ t('problemDetail.pathCandidatesSubtitle') }}</p>
+
+          <div v-if="pathCandidateLoading" class="loading">{{ t('common.loading') }}</div>
+          <p v-else-if="!pathCandidates.length" class="empty">{{ t('problemDetail.noPathCandidates') }}</p>
+          <div v-else class="candidate-list">
+            <div
+              v-for="candidate in pathCandidates"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="`candidate-${candidate.status}`"
+            >
+              <div class="candidate-head">
+                <strong>{{ candidate.title }}</strong>
+                <span class="candidate-status">{{ formatPathCandidateStatus(candidate.status) }}</span>
+                <span class="candidate-source">{{ formatLearningMode(candidate.learning_mode) }}</span>
+                <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
+              </div>
+              <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
+              <p class="mode-line">
+                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+              </p>
+              <p v-if="candidate.selected_insertion" class="mode-line">
+                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.selected_insertion) }}
+              </p>
+              <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  @click="decidePathCandidate(candidate.id, 'insert_before_current_main')"
+                >
+                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  @click="decidePathCandidate(candidate.id, 'save_as_side_branch')"
+                >
+                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  @click="decidePathCandidate(candidate.id, 'bookmark_for_later')"
+                >
+                  {{ t('problemDetail.pathCandidateBookmark') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  @click="decidePathCandidate(candidate.id, 'dismiss')"
+                >
+                  {{ t('problemDetail.pathCandidateDismiss') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section v-if="learningMode === 'exploration'" class="card qa-section">
           <h2>{{ t('problemDetail.askTitle') }}</h2>
           <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
@@ -475,8 +541,11 @@ const askingQuestion = ref(false)
 const answerMode = ref<'direct' | 'guided'>('direct')
 const qaHistory = ref<any[]>([])
 const conceptCandidates = ref<any[]>([])
+const pathCandidates = ref<any[]>([])
 const candidateLoading = ref(false)
 const candidateSubmittingId = ref<string | null>(null)
+const pathCandidateLoading = ref(false)
+const pathCandidateSubmittingId = ref<string | null>(null)
 const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
@@ -530,6 +599,19 @@ const formatPathSuggestionType = (pathType: string | undefined | null) => {
   if (pathType === 'prerequisite') return t('problemDetail.pathSuggestionPrerequisite')
   if (pathType === 'comparison_path') return t('problemDetail.pathSuggestionComparisonPath')
   return t('problemDetail.pathSuggestionBranchDeepDive')
+}
+
+const formatPathCandidateStatus = (status: string | undefined | null) => {
+  if (status === 'planned') return t('problemDetail.pathCandidateStatusPlanned')
+  if (status === 'bookmarked') return t('problemDetail.pathCandidateStatusBookmarked')
+  if (status === 'dismissed') return t('problemDetail.pathCandidateStatusDismissed')
+  return t('problemDetail.pathCandidateStatusPending')
+}
+
+const formatInsertionBehavior = (action: string | undefined | null) => {
+  if (action === 'insert_before_current_main') return t('problemDetail.insertionInsertBeforeCurrentMain')
+  if (action === 'save_as_side_branch') return t('problemDetail.insertionSaveAsSideBranch')
+  return t('problemDetail.insertionBookmarkForLater')
 }
 
 const normalizeExplorationTurn = (turn: any) => ({
@@ -593,6 +675,19 @@ const fetchConceptCandidates = async () => {
   }
 }
 
+const fetchPathCandidates = async () => {
+  pathCandidateLoading.value = true
+  try {
+    const response = await api.get(`/problems/${route.params.id}/path-candidates`)
+    pathCandidates.value = response.data || []
+  } catch (e) {
+    console.error('Failed to fetch path candidates:', e)
+    pathCandidates.value = []
+  } finally {
+    pathCandidateLoading.value = false
+  }
+}
+
 const fetchLearningPath = async () => {
   const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
   learningPath.value = pathRes.data
@@ -600,11 +695,12 @@ const fetchLearningPath = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, responsesRes, candidatesRes, turnsRes, socraticRes] = await Promise.all([
+    const [problemRes, pathRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/concept-candidates`).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/path-candidates`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/turns`, {
         params: { learning_mode: 'exploration' },
       }).catch(() => ({ data: [] })),
@@ -616,6 +712,7 @@ const fetchProblem = async () => {
     learningPath.value = pathRes.data
     responses.value = responsesRes.data
     conceptCandidates.value = candidatesRes.data || []
+    pathCandidates.value = pathCandidatesRes.data || []
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
     socraticQuestion.value = socraticRes.data || null
   } catch (e) {
@@ -665,6 +762,7 @@ const submitResponse = async () => {
     responses.value.push(response.data)
     await Promise.all([
       fetchConceptCandidates(),
+      fetchPathCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
         learningMode.value = res.data?.learning_mode || learningMode.value
@@ -780,6 +878,7 @@ const askLearningQuestion = async () => {
     })
     await Promise.all([
       fetchConceptCandidates(),
+      fetchPathCandidates(),
       fetchExplorationTurns(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
@@ -842,6 +941,18 @@ const rollbackConcept = async (candidateId: string, conceptText: string) => {
     console.error('Failed to rollback concept:', e)
   } finally {
     candidateSubmittingId.value = null
+  }
+}
+
+const decidePathCandidate = async (candidateId: string, action: string) => {
+  pathCandidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/path-candidates/${candidateId}/decide`, { action })
+    await fetchPathCandidates()
+  } catch (e) {
+    console.error('Failed to decide path candidate:', e)
+  } finally {
+    pathCandidateSubmittingId.value = null
   }
 }
 
@@ -1323,6 +1434,19 @@ onMounted(fetchProblem)
 
 .candidate-accepted {
   border-color: rgba(34, 197, 94, 0.35);
+}
+
+.candidate-planned {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.candidate-bookmarked {
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.candidate-dismissed {
+  border-color: rgba(148, 163, 184, 0.28);
+  opacity: 0.8;
 }
 
 .status {

@@ -36,6 +36,12 @@ class User(Base):
         cascade="all, delete-orphan",
         foreign_keys="ProblemConceptCandidate.user_id",
     )
+    path_candidates = relationship(
+        "ProblemPathCandidate",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="ProblemPathCandidate.user_id",
+    )
     concepts = relationship("Concept", back_populates="user", cascade="all, delete-orphan")
     learning_events = relationship("LearningEvent", back_populates="user", cascade="all, delete-orphan")
 
@@ -60,6 +66,7 @@ class Problem(Base):
     learning_path = relationship("LearningPath", back_populates="problem", uselist=False, cascade="all, delete-orphan")
     mastery_events = relationship("ProblemMasteryEvent", back_populates="problem", cascade="all, delete-orphan")
     concept_candidates = relationship("ProblemConceptCandidate", back_populates="problem", cascade="all, delete-orphan")
+    path_candidates = relationship("ProblemPathCandidate", back_populates="problem", cascade="all, delete-orphan")
     learning_events = relationship("LearningEvent", back_populates="problem", cascade="all, delete-orphan")
 
 
@@ -207,6 +214,31 @@ class ProblemConceptCandidate(Base):
     user = relationship("User", back_populates="concept_candidates", foreign_keys=[user_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     problem = relationship("Problem", back_populates="concept_candidates")
+    source_turn = relationship("ProblemTurn")
+
+
+class ProblemPathCandidate(Base):
+    __tablename__ = "problem_path_candidates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    learning_mode = Column(String(20), nullable=False, default="socratic", index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
+    step_index = Column(Integer, nullable=True)
+    path_type = Column(String(30), nullable=False, default="branch_deep_dive", index=True)
+    title = Column(String(200), nullable=False)
+    normalized_title = Column(String(200), nullable=False, index=True)
+    reason = Column(Text, nullable=True)
+    recommended_insertion = Column(String(40), nullable=False, default="save_as_side_branch")
+    selected_insertion = Column(String(40), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    evidence_snippet = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="path_candidates", foreign_keys=[user_id])
+    problem = relationship("Problem", back_populates="path_candidates")
     source_turn = relationship("ProblemTurn")
 
 

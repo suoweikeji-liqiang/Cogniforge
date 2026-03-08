@@ -14,6 +14,7 @@ from app.models.entities.user import (
     ProblemTurn,
     ProblemMasteryEvent,
     ProblemConceptCandidate,
+    ProblemPathCandidate,
     LearningEvent,
 )
 from app.models.entities.email_config import EmailConfig
@@ -36,6 +37,7 @@ __all__ = [
     "ProblemTurn",
     "ProblemMasteryEvent",
     "ProblemConceptCandidate",
+    "ProblemPathCandidate",
     "LearningEvent",
     "EmailConfig",
     "SystemSettings",

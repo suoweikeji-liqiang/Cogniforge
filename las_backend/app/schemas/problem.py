@@ -14,6 +14,12 @@ ExplorationAnswerType = Literal[
     "worked_example",
 ]
 PathSuggestionType = Literal["prerequisite", "branch_deep_dive", "comparison_path"]
+PathInsertionBehavior = Literal[
+    "insert_before_current_main",
+    "save_as_side_branch",
+    "bookmark_for_later",
+]
+PathCandidateStatus = Literal["pending", "planned", "bookmarked", "dismissed"]
 
 
 class ProblemBase(BaseModel):
@@ -76,6 +82,39 @@ class TurnFollowUpResponse(BaseModel):
     question_kind: Optional[SocraticQuestionKind] = None
 
 
+class ProblemPathCandidateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    problem_id: UUID
+    learning_mode: LearningMode
+    source_turn_id: Optional[UUID] = None
+    step_index: Optional[int] = None
+    type: PathSuggestionType
+    title: str
+    reason: Optional[str] = None
+    recommended_insertion: PathInsertionBehavior
+    selected_insertion: Optional[PathInsertionBehavior] = None
+    status: PathCandidateStatus
+    evidence_snippet: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class ProblemPathCandidateDecisionRequest(BaseModel):
+    action: Literal[
+        "insert_before_current_main",
+        "save_as_side_branch",
+        "bookmark_for_later",
+        "dismiss",
+    ]
+
+
+class ProblemPathCandidateDecisionResponse(BaseModel):
+    candidate: ProblemPathCandidateResponse
+    trace_id: Optional[str] = None
+
+
 class ProblemResponseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +136,7 @@ class ProblemResponseResponse(BaseModel):
     new_concepts: Optional[List[str]] = None
     accepted_concepts: Optional[List[str]] = None
     pending_concepts: Optional[List[str]] = None
+    derived_path_candidates: List[ProblemPathCandidateResponse] = Field(default_factory=list)
     concepts_updated: Optional[bool] = None
     trace_id: Optional[str] = None
     llm_calls: Optional[int] = None
@@ -174,6 +214,7 @@ class LearningQuestionResponse(BaseModel):
     answered_concepts: List[str] = Field(default_factory=list)
     related_concepts: List[str] = Field(default_factory=list)
     derived_candidates: List[ExplorationDerivedCandidateResponse] = Field(default_factory=list)
+    derived_path_candidates: List[ProblemPathCandidateResponse] = Field(default_factory=list)
     next_learning_actions: List[str] = Field(default_factory=list)
     path_suggestions: List[ExplorationPathSuggestionResponse] = Field(default_factory=list)
     return_to_main_path_hint: bool = True

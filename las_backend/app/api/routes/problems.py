@@ -19,6 +19,7 @@ from app.models.entities.user import (
     ProblemTurn,
     ProblemMasteryEvent,
     ProblemConceptCandidate,
+    ProblemPathCandidate,
     LearningEvent,
     Concept,
     ConceptAlias,
@@ -43,6 +44,9 @@ from app.schemas.problem import (
     ProblemTurnResponse,
     ProblemConceptCandidateResponse,
     ProblemConceptCandidateActionResponse,
+    ProblemPathCandidateResponse,
+    ProblemPathCandidateDecisionRequest,
+    ProblemPathCandidateDecisionResponse,
     ProblemConceptRollbackRequest,
     ProblemConceptRollbackResponse,
 )
@@ -867,6 +871,199 @@ async def _register_problem_concept_candidates(
     return accepted_concepts, pending_concepts
 
 
+def _default_path_insertion(path_type: str) -> str:
+    normalized = _normalize_path_suggestion_type(path_type)
+    if normalized == "prerequisite":
+        return "insert_before_current_main"
+    if normalized in {"branch_deep_dive", "comparison_path"}:
+        return "save_as_side_branch"
+    return "bookmark_for_later"
+
+
+def _normalize_path_insertion(action: Optional[str], default: str = "bookmark_for_later") -> str:
+    normalized = str(action or default).strip().lower()
+    if normalized not in {"insert_before_current_main", "save_as_side_branch", "bookmark_for_later"}:
+        return default
+    return normalized
+
+
+def _serialize_problem_path_candidate(candidate: ProblemPathCandidate) -> dict:
+    return {
+        "id": candidate.id,
+        "problem_id": candidate.problem_id,
+        "learning_mode": _normalize_learning_mode(candidate.learning_mode, "socratic"),
+        "source_turn_id": candidate.source_turn_id,
+        "step_index": candidate.step_index,
+        "type": _normalize_path_suggestion_type(candidate.path_type),
+        "title": candidate.title,
+        "reason": candidate.reason,
+        "recommended_insertion": _normalize_path_insertion(candidate.recommended_insertion),
+        "selected_insertion": (
+            _normalize_path_insertion(candidate.selected_insertion)
+            if candidate.selected_insertion
+            else None
+        ),
+        "status": str(candidate.status or "pending"),
+        "evidence_snippet": candidate.evidence_snippet,
+        "reviewed_at": candidate.reviewed_at.isoformat() if candidate.reviewed_at else None,
+        "created_at": candidate.created_at.isoformat() if candidate.created_at else None,
+    }
+
+
+async def _register_problem_path_candidates(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    problem_id: str,
+    learning_mode: str,
+    source_turn_id: str,
+    step_index: int,
+    candidate_specs: List[dict],
+    evidence_snippet: Optional[str],
+) -> List[dict]:
+    if not candidate_specs:
+        return []
+
+    existing_rows = await db.execute(
+        select(ProblemPathCandidate.path_type, ProblemPathCandidate.normalized_title)
+        .where(
+            ProblemPathCandidate.user_id == user_id,
+            ProblemPathCandidate.problem_id == problem_id,
+            ProblemPathCandidate.status.in_(["pending", "planned", "bookmarked"]),
+        )
+    )
+    existing_keys = {
+        (str(row[0] or ""), str(row[1] or ""))
+        for row in existing_rows.all()
+        if row[0] and row[1]
+    }
+
+    created: List[ProblemPathCandidate] = []
+    for spec in candidate_specs:
+        path_type = _normalize_path_suggestion_type(spec.get("type"))
+        title = re.sub(r"\s+", " ", str(spec.get("title") or "")).strip()[:200]
+        if not title:
+            continue
+        normalized_title = model_os_service.normalize_concept_key(title)
+        if not normalized_title:
+            continue
+        dedupe_key = (path_type, normalized_title)
+        if dedupe_key in existing_keys:
+            continue
+
+        recommended_insertion = _normalize_path_insertion(
+            spec.get("recommended_insertion"),
+            _default_path_insertion(path_type),
+        )
+        candidate = ProblemPathCandidate(
+            user_id=user_id,
+            problem_id=problem_id,
+            learning_mode=_normalize_learning_mode(learning_mode, "socratic"),
+            source_turn_id=source_turn_id,
+            step_index=step_index,
+            path_type=path_type,
+            title=title,
+            normalized_title=normalized_title,
+            reason=str(spec.get("reason") or "").strip() or None,
+            recommended_insertion=recommended_insertion,
+            status="pending",
+            evidence_snippet=(evidence_snippet or "")[:500] or None,
+        )
+        db.add(candidate)
+        created.append(candidate)
+        existing_keys.add(dedupe_key)
+
+    if created:
+        await db.flush()
+    return [_serialize_problem_path_candidate(item) for item in created]
+
+
+def _build_socratic_path_candidate_specs(
+    *,
+    step_concept: str,
+    question_kind: str,
+    structured_feedback: dict,
+    auto_advanced: bool,
+) -> List[dict]:
+    if auto_advanced:
+        return []
+
+    mastery_score = int(structured_feedback.get("mastery_score") or 0)
+    misconceptions = [
+        str(item).strip()
+        for item in (structured_feedback.get("misconceptions") or [])
+        if str(item).strip()
+    ]
+    suggestions = [
+        str(item).strip()
+        for item in (structured_feedback.get("suggestions") or [])
+        if str(item).strip()
+    ]
+    next_question = str(structured_feedback.get("next_question") or "").strip()
+    decision_reason = str(structured_feedback.get("decision_reason") or "").strip()
+    joined_text = " ".join([next_question, *suggestions, *misconceptions]).casefold()
+    cjk = _contains_cjk_text(step_concept, next_question, decision_reason, *misconceptions, *suggestions)
+
+    candidate_specs: List[dict] = []
+    if mastery_score < 60 or misconceptions:
+        candidate_specs.append(
+            {
+                "type": "prerequisite",
+                "title": (
+                    f"先补“{step_concept}”的前置基础"
+                    if cjk
+                    else f"Fill prerequisite foundations for '{step_concept}' first"
+                ),
+                "reason": (
+                    misconceptions[0]
+                    if misconceptions
+                    else (
+                        f"Current mastery on '{step_concept}' is not stable enough for progression."
+                        if not cjk
+                        else f"当前对“{step_concept}”的掌握还不稳定，不适合直接推进。"
+                    )
+                ),
+                "recommended_insertion": "insert_before_current_main",
+            }
+        )
+    elif question_kind == "checkpoint" and mastery_score < 85:
+        candidate_specs.append(
+            {
+                "type": "branch_deep_dive",
+                "title": (
+                    f"围绕“{step_concept}”开一条深挖支线"
+                    if cjk
+                    else f"Open a deep-dive branch for '{step_concept}'"
+                ),
+                "reason": decision_reason or (
+                    "A short side branch would help consolidate this step before progression."
+                    if not cjk
+                    else "在推进前先做一条短支线深挖，会更容易把这一步打稳。"
+                ),
+                "recommended_insertion": "save_as_side_branch",
+            }
+        )
+
+    if any(marker in joined_text for marker in ["difference", "compare", "versus", "区别", "对比"]):
+        candidate_specs.append(
+            {
+                "type": "comparison_path",
+                "title": (
+                    f"为“{step_concept}”补一条对比路径"
+                    if cjk
+                    else f"Add a comparison path around '{step_concept}'"
+                ),
+                "reason": next_question or (
+                    "Comparison-focused follow-up would likely clarify this concept boundary."
+                    if not cjk
+                    else "当前更适合通过对比来澄清这个概念的边界。"
+                ),
+                "recommended_insertion": "save_as_side_branch",
+            }
+        )
+    return candidate_specs[:2]
+
+
 async def _log_learning_event(
     db: AsyncSession,
     *,
@@ -1405,12 +1602,28 @@ async def create_response(
         question=follow_up_question,
         question_kind=next_question_kind if follow_up_needed else None,
     )
+    derived_path_candidates = await _register_problem_path_candidates(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem_id),
+        learning_mode=learning_mode,
+        source_turn_id=str(db_turn.id),
+        step_index=current_step_index,
+        candidate_specs=_build_socratic_path_candidate_specs(
+            step_concept=step_concept,
+            question_kind=question_kind,
+            structured_feedback=structured_feedback,
+            auto_advanced=auto_advanced,
+        ),
+        evidence_snippet=response_data.user_response,
+    )
 
     mode_metadata = {
         **mode_metadata,
         "evaluation": evaluation.model_dump(),
         "decision": decision.model_dump(),
         "follow_up": follow_up.model_dump(),
+        "derived_path_candidates": derived_path_candidates,
         "accepted_concepts": accepted_concepts,
         "pending_concepts": pending_concepts,
         "auto_advanced": auto_advanced,
@@ -1487,6 +1700,7 @@ async def create_response(
         "new_concepts": accepted_concepts,
         "accepted_concepts": accepted_concepts,
         "pending_concepts": pending_concepts,
+        "derived_path_candidates": derived_path_candidates,
         "concepts_updated": bool(accepted_concepts),
         "trace_id": trace_id,
         "llm_calls": llm_calls,
@@ -1534,6 +1748,7 @@ async def list_responses(
             "user_response": response.user_response,
             "system_feedback": response.system_feedback,
             "structured_feedback": model_os_service.parse_feedback_text(response.system_feedback),
+            "derived_path_candidates": (getattr(response, "mode_metadata", None) or {}).get("derived_path_candidates") or [],
             "created_at": response.created_at,
         })
     return responses
@@ -1570,6 +1785,98 @@ async def list_problem_turns(
 
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+@router.get("/{problem_id}/path-candidates", response_model=List[ProblemPathCandidateResponse])
+async def list_problem_path_candidates(
+    problem_id: UUID,
+    status: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    if not problem_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    query = (
+        select(ProblemPathCandidate)
+        .where(
+            ProblemPathCandidate.problem_id == str(problem_id),
+            ProblemPathCandidate.user_id == str(current_user.id),
+        )
+        .order_by(ProblemPathCandidate.created_at.desc())
+    )
+    if status:
+        query = query.where(ProblemPathCandidate.status == status.strip().lower())
+
+    result = await db.execute(query)
+    return [_serialize_problem_path_candidate(item) for item in result.scalars().all()]
+
+
+@router.post(
+    "/{problem_id}/path-candidates/{candidate_id}/decide",
+    response_model=ProblemPathCandidateDecisionResponse,
+)
+async def decide_problem_path_candidate(
+    problem_id: UUID,
+    candidate_id: UUID,
+    payload: ProblemPathCandidateDecisionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    trace_id = str(uuid.uuid4())
+    candidate_result = await db.execute(
+        select(ProblemPathCandidate).where(
+            ProblemPathCandidate.id == str(candidate_id),
+            ProblemPathCandidate.problem_id == str(problem_id),
+            ProblemPathCandidate.user_id == str(current_user.id),
+        )
+    )
+    candidate = candidate_result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Path candidate not found")
+
+    action = str(payload.action or "").strip().lower()
+    if action == "dismiss":
+        candidate.status = "dismissed"
+        candidate.selected_insertion = None
+    elif action == "bookmark_for_later":
+        candidate.status = "bookmarked"
+        candidate.selected_insertion = "bookmark_for_later"
+    elif action in {"insert_before_current_main", "save_as_side_branch"}:
+        candidate.status = "planned"
+        candidate.selected_insertion = _normalize_path_insertion(action)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported path candidate action")
+    candidate.reviewed_at = datetime.utcnow()
+
+    await _log_learning_event(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem_id),
+        event_type="path_candidate_decided",
+        learning_mode=candidate.learning_mode,
+        trace_id=trace_id,
+        payload={
+            "candidate_id": str(candidate.id),
+            "path_type": candidate.path_type,
+            "title": candidate.title,
+            "action": action,
+            "selected_insertion": candidate.selected_insertion,
+        },
+    )
+
+    await db.commit()
+    await db.refresh(candidate)
+    return {
+        "candidate": _serialize_problem_path_candidate(candidate),
+        "trace_id": trace_id,
+    }
 
 
 @router.get("/{problem_id}/concept-candidates", response_model=List[ProblemConceptCandidateResponse])
@@ -2096,6 +2403,24 @@ Learner question: {payload.question}
         answered_concepts=answered_concepts,
         related_concepts=related_concepts,
     )
+    derived_path_candidates = await _register_problem_path_candidates(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        learning_mode=learning_mode,
+        source_turn_id=str(db_turn.id),
+        step_index=step_index,
+        candidate_specs=[
+            {
+                "type": suggestion.get("type"),
+                "title": suggestion.get("title"),
+                "reason": suggestion.get("reason"),
+                "recommended_insertion": _default_path_insertion(str(suggestion.get("type") or "")),
+            }
+            for suggestion in path_suggestions
+        ],
+        evidence_snippet=payload.question,
+    )
     return_to_main_path_hint = not bool(path_suggestions)
     suggested_next_focus = next_learning_actions[0] if next_learning_actions else f"Use your question to refine one boundary of '{step_concept}'."
     mode_metadata = {
@@ -2104,6 +2429,7 @@ Learner question: {payload.question}
         "answered_concepts": answered_concepts,
         "related_concepts": related_concepts,
         "derived_candidates": derived_candidates,
+        "derived_path_candidates": derived_path_candidates,
         "next_learning_actions": next_learning_actions,
         "path_suggestions": path_suggestions,
         "return_to_main_path_hint": return_to_main_path_hint,
@@ -2143,6 +2469,7 @@ Learner question: {payload.question}
         "answered_concepts": answered_concepts,
         "related_concepts": related_concepts,
         "derived_candidates": derived_candidates,
+        "derived_path_candidates": derived_path_candidates,
         "next_learning_actions": next_learning_actions,
         "path_suggestions": path_suggestions,
         "return_to_main_path_hint": return_to_main_path_hint,
