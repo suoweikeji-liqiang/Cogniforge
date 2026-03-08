@@ -43,6 +43,8 @@
     "cogTest": "Cognitive Tests",
     "workspace": "Learning Workspace",
     "signedInAs": "Signed in as",
+    "tools": "Tools",
+    "experiments": "Experiments",
     "more": "More",
     "less": "Less"
   },
@@ -507,10 +509,18 @@
   },
   "graph": {
     "title": "Knowledge Graph",
+    "secondaryTitle": "Secondary Tool",
+    "secondaryHeading": "Use this to inspect structure, not to drive the main loop",
+    "secondaryMessage": "The primary learning loop stays in Problems, Review, and Model Cards. Use the graph only when you need a structural view across those assets.",
+    "openModelCards": "Open Model Cards",
     "noData": "No model cards to visualize yet"
   },
   "challenges": {
     "title": "Cognitive Challenges",
+    "secondaryTitle": "Experimental Surface",
+    "secondaryHeading": "Use this as an occasional stress test, not as the default review flow",
+    "secondaryMessage": "Main review and consolidation now live in the Review hub and ProblemDetail. Challenges remain available as a secondary way to probe edge cases.",
+    "openReviewHub": "Open Review Hub",
     "generate": "Generate Challenge",
     "yourAnswer": "Type your answer...",
     "feedback": "AI Feedback",
@@ -572,6 +582,10 @@
   },
   "cogTest": {
     "startTest": "Start Cognitive Test",
+    "secondaryTitle": "Experimental Surface",
+    "secondaryHeading": "Use this for diagnosis, not for the main learning loop",
+    "secondaryMessage": "Cognitive tests stay available as a deeper diagnostic tool, but model cards and reviews remain the primary path for consolidation and evolution.",
+    "openReviewHub": "Open Review Hub",
     "stopAndDiagnose": "Stop and Diagnose",
     "send": "Send",
     "guide": "Guide",

@@ -99,9 +99,14 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
 
   await page.getByTestId('secondary-nav-toggle').click()
   const secondaryNav = page.getByTestId('secondary-nav')
+  await expect(secondaryNav.getByTestId('secondary-nav-section-tools')).toBeVisible()
+  await expect(secondaryNav.getByTestId('secondary-nav-section-experiments')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-srs-review')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-practice')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-chat')).toBeVisible()
+  await expect(secondaryNav.getByTestId('secondary-nav-item-graph')).toBeVisible()
+  await expect(secondaryNav.getByTestId('secondary-nav-item-challenges')).toBeVisible()
+  await expect(secondaryNav.getByTestId('secondary-nav-item-cog-test')).toBeVisible()
   await expect(page.getByTestId('dashboard-focus-card')).toBeVisible()
   await expect(page.getByTestId('dashboard-problems-panel')).toBeVisible()
   await expect(page.getByTestId('dashboard-review-panel')).toBeVisible()
@@ -133,4 +138,20 @@ test('reviews page centers model-card review and evolution work', async ({ page,
   await expect(page.getByTestId('review-queue-panel')).toContainText('No due reviews right now.')
   await expect(page.getByTestId('review-model-cards-panel')).toContainText('Review Hub Card')
   await expect(page.getByTestId('review-archive-panel')).toContainText('Review archive summary')
+})
+
+test('graph, challenges, and cog test are framed as secondary surfaces', async ({ page, request }) => {
+  await authenticate(page, request)
+
+  await page.goto('/knowledge-graph')
+  await expect(page.getByTestId('graph-secondary-banner')).toBeVisible()
+  await expect(page.getByTestId('graph-secondary-banner')).toContainText(/secondary tool/i)
+
+  await page.goto('/challenges')
+  await expect(page.getByTestId('challenges-secondary-banner')).toBeVisible()
+  await expect(page.getByTestId('challenges-secondary-banner')).toContainText(/experimental surface/i)
+
+  await page.goto('/cog-test')
+  await expect(page.getByTestId('cog-test-secondary-banner')).toBeVisible()
+  await expect(page.getByTestId('cog-test-secondary-banner')).toContainText(/experimental surface/i)
 })

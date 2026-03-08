@@ -43,6 +43,8 @@
     "cogTest": "认知测试",
     "workspace": "学习工作台",
     "signedInAs": "当前用户",
+    "tools": "工具",
+    "experiments": "实验区",
     "more": "更多",
     "less": "收起"
   },
@@ -507,10 +509,18 @@
   },
   "graph": {
     "title": "知识图谱",
+    "secondaryTitle": "次级工具",
+    "secondaryHeading": "这里只用来观察结构，不负责驱动主学习环",
+    "secondaryMessage": "主学习环仍然在 Problems、Review 和 Model Cards。只有当你需要跨资产看结构关系时，再进入知识图谱。",
+    "openModelCards": "打开模型卡",
     "noData": "暂无模型卡可供可视化"
   },
   "challenges": {
     "title": "认知挑战",
+    "secondaryTitle": "实验入口",
+    "secondaryHeading": "把它当成偶发压力测试，而不是默认复习路径",
+    "secondaryMessage": "主复习和知识沉淀现在都在 Review hub 和 ProblemDetail 中。认知挑战保留为次级入口，用来探测边界和极端情况。",
+    "openReviewHub": "打开复习中心",
     "generate": "生成挑战",
     "yourAnswer": "输入你的答案...",
     "feedback": "AI 反馈",
@@ -572,6 +582,10 @@
   },
   "cogTest": {
     "startTest": "发起认知测试",
+    "secondaryTitle": "实验入口",
+    "secondaryHeading": "它更适合做诊断，而不是主学习环",
+    "secondaryMessage": "认知测试仍然可用，但它应该服务于更深的诊断；真正的沉淀、复习和演化仍然围绕模型卡与复习中心展开。",
+    "openReviewHub": "打开复习中心",
     "stopAndDiagnose": "停止并诊断",
     "send": "发送",
     "guide": "引导者",
