@@ -63,7 +63,7 @@ class Problem(Base):
     user = relationship("User", back_populates="problems")
     responses = relationship("ProblemResponse", back_populates="problem", cascade="all, delete-orphan")
     turns = relationship("ProblemTurn", back_populates="problem", cascade="all, delete-orphan")
-    learning_path = relationship("LearningPath", back_populates="problem", uselist=False, cascade="all, delete-orphan")
+    learning_paths = relationship("LearningPath", back_populates="problem", cascade="all, delete-orphan")
     mastery_events = relationship("ProblemMasteryEvent", back_populates="problem", cascade="all, delete-orphan")
     concept_candidates = relationship("ProblemConceptCandidate", back_populates="problem", cascade="all, delete-orphan")
     path_candidates = relationship("ProblemPathCandidate", back_populates="problem", cascade="all, delete-orphan")
@@ -105,13 +105,22 @@ class LearningPath(Base):
     __tablename__ = "learning_paths"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, unique=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=True)
+    kind = Column(String(20), nullable=False, default="main", index=True)
+    parent_path_id = Column(String(36), ForeignKey("learning_paths.id"), nullable=True, index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
+    return_step_id = Column(Integer, nullable=True)
+    branch_reason = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
     path_data = Column(JSON)
     current_step = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    problem = relationship("Problem", back_populates="learning_path")
+    problem = relationship("Problem", back_populates="learning_paths")
+    parent_path = relationship("LearningPath", remote_side=[id], backref="child_paths", foreign_keys=[parent_path_id])
+    source_turn = relationship("ProblemTurn", foreign_keys=[source_turn_id])
 
 
 class Concept(Base):

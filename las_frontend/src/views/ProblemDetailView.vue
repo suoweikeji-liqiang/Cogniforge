@@ -53,6 +53,42 @@
             </div>
           </div>
 
+          <div v-if="learningPath" class="path-structure-panel">
+            <div class="path-structure-head">
+              <span class="mode-badge">{{ t('problemDetail.currentPath') }}: {{ formatLearningPathKind(learningPath.kind) }}</span>
+              <span class="candidate-status">{{ learningPath.title || t('problemDetail.unnamedPath') }}</span>
+              <span
+                v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
+                class="candidate-source"
+              >
+                {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
+              </span>
+            </div>
+            <p v-if="learningPath.branch_reason" class="section-subtitle">{{ learningPath.branch_reason }}</p>
+            <div v-if="allLearningPaths.length > 1" class="path-nav-list">
+              <button
+                v-for="path in allLearningPaths"
+                :key="path.id"
+                type="button"
+                class="btn btn-secondary path-nav-button"
+                :class="{ active: path.is_active }"
+                :disabled="updatingPath"
+                @click="activateLearningPathById(path.id)"
+              >
+                {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
+              </button>
+            </div>
+            <button
+              v-if="canReturnToParent"
+              type="button"
+              class="btn btn-secondary"
+              :disabled="updatingPath"
+              @click="returnToParentPath"
+            >
+              {{ t('problemDetail.returnToParentPath') }}
+            </button>
+          </div>
+
           <div v-if="currentStep" class="step-card">
             <div class="step-number">{{ currentStepNumber }}</div>
             <div class="step-content">
@@ -523,6 +559,7 @@ const route = useRoute()
 
 const problem = ref<any>(null)
 const learningPath = ref<any>(null)
+const allLearningPaths = ref<any[]>([])
 const responses = ref<any[]>([])
 const learningMode = ref<'socratic' | 'exploration'>('socratic')
 const loading = ref(true)
@@ -551,6 +588,7 @@ const latestQA = computed(() => qaHistory.value[0] || null)
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
 const completedSteps = computed(() => learningPath.value?.current_step || 0)
 const isPathCompleted = computed(() => totalSteps.value > 0 && completedSteps.value >= totalSteps.value)
+const canReturnToParent = computed(() => Boolean(learningPath.value?.parent_path_id))
 const currentStep = computed(() => {
   if (!learningPath.value?.path_data?.length || isPathCompleted.value) return null
   return learningPath.value.path_data[completedSteps.value] || null
@@ -578,6 +616,13 @@ const formatLearningMode = (mode: string | undefined | null) => {
   return mode === 'exploration'
     ? t('problemDetail.modeExploration')
     : t('problemDetail.modeSocratic')
+}
+
+const formatLearningPathKind = (kind: string | undefined | null) => {
+  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
+  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
+  if (kind === 'branch') return t('problemDetail.pathKindBranch')
+  return t('problemDetail.pathKindMain')
 }
 
 const formatQuestionKind = (kind: string | undefined | null) => {
@@ -693,11 +738,17 @@ const fetchLearningPath = async () => {
   learningPath.value = pathRes.data
 }
 
+const fetchLearningPaths = async () => {
+  const response = await api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] }))
+  allLearningPaths.value = response.data || []
+}
+
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes] = await Promise.all([
+    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
+      api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/concept-candidates`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/path-candidates`).catch(() => ({ data: [] })),
@@ -710,6 +761,7 @@ const fetchProblem = async () => {
     problem.value = problemRes.data
     learningMode.value = problemRes.data?.learning_mode || 'socratic'
     learningPath.value = pathRes.data
+    allLearningPaths.value = pathListRes.data || []
     responses.value = responsesRes.data
     conceptCandidates.value = candidatesRes.data || []
     pathCandidates.value = pathCandidatesRes.data || []
@@ -804,6 +856,7 @@ const updateCurrentStep = async (nextStep: number) => {
       current_step: nextStep,
     })
     learningPath.value = response.data
+    await fetchLearningPaths()
     if (learningMode.value === 'socratic') {
       await fetchSocraticQuestion()
     }
@@ -948,11 +1001,51 @@ const decidePathCandidate = async (candidateId: string, action: string) => {
   pathCandidateSubmittingId.value = candidateId
   try {
     await api.post(`/problems/${route.params.id}/path-candidates/${candidateId}/decide`, { action })
-    await fetchPathCandidates()
+    await Promise.all([
+      fetchPathCandidates(),
+      fetchLearningPath(),
+      fetchLearningPaths(),
+    ])
   } catch (e) {
     console.error('Failed to decide path candidate:', e)
   } finally {
     pathCandidateSubmittingId.value = null
+  }
+}
+
+const activateLearningPathById = async (pathId: string) => {
+  if (updatingPath.value) return
+
+  updatingPath.value = true
+  try {
+    const response = await api.post(`/problems/${route.params.id}/learning-paths/${pathId}/activate`)
+    learningPath.value = response.data
+    await Promise.all([
+      fetchLearningPaths(),
+      learningMode.value === 'socratic' ? fetchSocraticQuestion() : Promise.resolve(),
+    ])
+  } catch (e) {
+    console.error('Failed to activate learning path:', e)
+  } finally {
+    updatingPath.value = false
+  }
+}
+
+const returnToParentPath = async () => {
+  if (updatingPath.value || !canReturnToParent.value) return
+
+  updatingPath.value = true
+  try {
+    const response = await api.post(`/problems/${route.params.id}/learning-path/return`)
+    learningPath.value = response.data
+    await Promise.all([
+      fetchLearningPaths(),
+      learningMode.value === 'socratic' ? fetchSocraticQuestion() : Promise.resolve(),
+    ])
+  } catch (e) {
+    console.error('Failed to return to parent learning path:', e)
+  } finally {
+    updatingPath.value = false
   }
 }
 
@@ -1103,6 +1196,33 @@ onMounted(fetchProblem)
   color: var(--primary);
   font-size: 0.875rem;
   font-weight: 600;
+}
+
+.path-structure-panel {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.path-structure-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.path-nav-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.75rem;
+}
+
+.path-nav-button.active {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .completed-panel {

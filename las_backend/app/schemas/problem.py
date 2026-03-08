@@ -20,6 +20,7 @@ PathInsertionBehavior = Literal[
     "bookmark_for_later",
 ]
 PathCandidateStatus = Literal["pending", "planned", "bookmarked", "dismissed"]
+LearningPathKind = Literal["main", "branch", "prerequisite", "comparison"]
 
 
 class ProblemBase(BaseModel):
@@ -161,6 +162,13 @@ class LearningPathResponse(BaseModel):
 
     id: UUID
     problem_id: UUID
+    title: Optional[str] = None
+    kind: LearningPathKind = "main"
+    parent_path_id: Optional[UUID] = None
+    source_turn_id: Optional[UUID] = None
+    return_step_id: Optional[int] = None
+    branch_reason: Optional[str] = None
+    is_active: bool = True
     path_data: List[LearningPathStep]
     current_step: int
 

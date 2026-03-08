@@ -71,6 +71,185 @@ def _resolve_current_step(learning_path: Optional[LearningPath]) -> tuple[int, O
     return current_step_index, step_candidate
 
 
+def _normalize_learning_path_kind(raw_kind: Optional[str], default: str = "main") -> str:
+    kind = str(raw_kind or default).strip().lower()
+    if kind not in {"main", "branch", "prerequisite", "comparison"}:
+        return default
+    return kind
+
+
+async def _load_active_learning_path(db: AsyncSession, *, problem_id: str) -> Optional[LearningPath]:
+    active_result = await db.execute(
+        select(LearningPath)
+        .where(
+            LearningPath.problem_id == problem_id,
+            LearningPath.is_active.is_(True),
+        )
+        .order_by(desc(LearningPath.updated_at), desc(LearningPath.created_at))
+        .limit(1)
+    )
+    active_path = active_result.scalar_one_or_none()
+    if active_path:
+        return active_path
+
+    main_path = await _load_main_learning_path(db, problem_id=problem_id)
+    if main_path:
+        main_path.is_active = True
+        await db.flush()
+    return main_path
+
+
+async def _load_main_learning_path(db: AsyncSession, *, problem_id: str) -> Optional[LearningPath]:
+    result = await db.execute(
+        select(LearningPath)
+        .where(
+            LearningPath.problem_id == problem_id,
+            LearningPath.kind == "main",
+        )
+        .order_by(LearningPath.created_at.asc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _set_active_learning_path(
+    db: AsyncSession,
+    *,
+    problem_id: str,
+    target_path_id: str,
+) -> Optional[LearningPath]:
+    result = await db.execute(
+        select(LearningPath).where(LearningPath.problem_id == problem_id)
+    )
+    target_path = None
+    for path in result.scalars().all():
+        is_target = path.id == target_path_id
+        path.is_active = is_target
+        if is_target:
+            target_path = path
+    if target_path is None:
+        return None
+    await db.flush()
+    return target_path
+
+
+def _renumber_learning_path_steps(path_data: List[dict]) -> List[dict]:
+    normalized_steps: List[dict] = []
+    for index, step in enumerate(path_data or []):
+        if not isinstance(step, dict):
+            continue
+        normalized_steps.append(
+            {
+                "step": index + 1,
+                "concept": str(step.get("concept") or f"Step {index + 1}").strip(),
+                "description": str(step.get("description") or "").strip(),
+                "resources": [
+                    str(resource).strip()
+                    for resource in (step.get("resources") or [])
+                    if str(resource).strip()
+                ],
+            }
+        )
+    return normalized_steps
+
+
+def _map_candidate_type_to_learning_path_kind(path_type: str) -> str:
+    normalized = _normalize_path_suggestion_type(path_type)
+    if normalized == "prerequisite":
+        return "prerequisite"
+    if normalized == "comparison_path":
+        return "comparison"
+    return "branch"
+
+
+def _build_path_steps_from_candidate(
+    candidate: ProblemPathCandidate,
+    *,
+    anchor_concept: str,
+) -> List[dict]:
+    cjk = _contains_cjk_text(candidate.title, candidate.reason, anchor_concept)
+    title = str(candidate.title or anchor_concept).strip()
+    reason = str(candidate.reason or "").strip()
+    path_type = _normalize_path_suggestion_type(candidate.path_type)
+
+    if path_type == "prerequisite":
+        steps = [
+            {
+                "concept": title,
+                "description": reason or (
+                    f"Build the missing foundation for '{anchor_concept}' before returning."
+                    if not cjk
+                    else f"先补足“{anchor_concept}”所缺的前置基础，再返回主线。"
+                ),
+                "resources": [anchor_concept],
+            },
+            {
+                "concept": (
+                    f"Reconnect {title} to {anchor_concept}"
+                    if not cjk
+                    else f"把“{title}”重新接回“{anchor_concept}”"
+                ),
+                "description": (
+                    f"Explain how '{title}' supports the original step '{anchor_concept}'."
+                    if not cjk
+                    else f"说明“{title}”如何支撑原主线步骤“{anchor_concept}”。"
+                ),
+                "resources": [title, anchor_concept],
+            },
+        ]
+    elif path_type == "comparison_path":
+        steps = [
+            {
+                "concept": title,
+                "description": reason or (
+                    f"Clarify the comparison target around '{anchor_concept}'."
+                    if not cjk
+                    else f"先澄清与“{anchor_concept}”相关的对比对象。"
+                ),
+                "resources": [anchor_concept],
+            },
+            {
+                "concept": (
+                    f"Compare {title} with {anchor_concept}"
+                    if not cjk
+                    else f"对比“{title}”与“{anchor_concept}”"
+                ),
+                "description": (
+                    f"Write side-by-side boundaries, tradeoffs, and decision cues."
+                    if not cjk
+                    else "并列写出两者的边界、取舍和使用判断信号。"
+                ),
+                "resources": [title, anchor_concept],
+            },
+        ]
+    else:
+        steps = [
+            {
+                "concept": title,
+                "description": reason or (
+                    f"Deepen the current understanding of '{anchor_concept}' with one focused branch."
+                    if not cjk
+                    else f"围绕“{anchor_concept}”开一条聚焦深挖支线。"
+                ),
+                "resources": [anchor_concept],
+            },
+            {
+                "concept": (
+                    f"Stress-test {anchor_concept}"
+                    if not cjk
+                    else f"用边界案例检验“{anchor_concept}”"
+                ),
+                "description": (
+                    f"Use one example or edge case to consolidate the branch and prepare to return."
+                    if not cjk
+                    else "用一个例子或边界案例巩固理解，并准备返回主线。"
+                ),
+                "resources": [title, anchor_concept],
+            },
+        ]
+    return _renumber_learning_path_steps(steps)
+
+
 def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
     verdict = str((structured_feedback or {}).get("correctness", "")).strip().lower()
     if not verdict:
@@ -1128,6 +1307,9 @@ async def create_problem(
     
     db_learning_path = LearningPath(
         problem_id=db_problem.id,
+        title=problem_data.title,
+        kind="main",
+        is_active=True,
         path_data=learning_path_data,
         current_step=0,
     )
@@ -1289,10 +1471,7 @@ async def get_socratic_question(
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    learning_path_result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
-    )
-    learning_path = learning_path_result.scalar_one_or_none()
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
     current_step_index, current_step_data = _resolve_current_step(learning_path)
     step_concept = (current_step_data or {}).get("concept") or problem.title
     step_description = (current_step_data or {}).get("description") or (problem.description or "")
@@ -1352,10 +1531,7 @@ async def create_response(
         raise HTTPException(status_code=400, detail="The /responses route only supports socratic mode")
     problem.learning_mode = learning_mode
 
-    learning_path_result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
-    )
-    learning_path = learning_path_result.scalar_one_or_none()
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
     current_step_index, current_step_data = _resolve_current_step(learning_path)
 
     step_concept = (current_step_data or {}).get("concept") or problem.title
@@ -1830,6 +2006,16 @@ async def decide_problem_path_candidate(
     db: AsyncSession = Depends(get_db),
 ):
     trace_id = str(uuid.uuid4())
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
     candidate_result = await db.execute(
         select(ProblemPathCandidate).where(
             ProblemPathCandidate.id == str(candidate_id),
@@ -1842,6 +2028,10 @@ async def decide_problem_path_candidate(
         raise HTTPException(status_code=404, detail="Path candidate not found")
 
     action = str(payload.action or "").strip().lower()
+    previous_status = str(candidate.status or "")
+    previous_selected_insertion = str(candidate.selected_insertion or "")
+    previous_reviewed_at = candidate.reviewed_at
+    applied_path_id: Optional[str] = None
     if action == "dismiss":
         candidate.status = "dismissed"
         candidate.selected_insertion = None
@@ -1851,6 +2041,72 @@ async def decide_problem_path_candidate(
     elif action in {"insert_before_current_main", "save_as_side_branch"}:
         candidate.status = "planned"
         candidate.selected_insertion = _normalize_path_insertion(action)
+        if action == "insert_before_current_main":
+            if previous_reviewed_at and previous_selected_insertion == action and previous_status == "planned":
+                main_path = await _load_main_learning_path(db, problem_id=str(problem_id))
+                if main_path:
+                    await _set_active_learning_path(
+                        db=db,
+                        problem_id=str(problem_id),
+                        target_path_id=str(main_path.id),
+                    )
+                    applied_path_id = str(main_path.id)
+            else:
+                main_path = await _load_main_learning_path(db, problem_id=str(problem_id))
+                if not main_path:
+                    raise HTTPException(status_code=404, detail="Main learning path not found")
+                main_step_index, main_step_data = _resolve_current_step(main_path)
+                anchor_concept = (main_step_data or {}).get("concept") or problem.title
+                inserted_steps = _build_path_steps_from_candidate(candidate, anchor_concept=anchor_concept)
+                existing_steps = list(main_path.path_data or [])
+                insert_at = min(max(int(main_path.current_step or 0), 0), len(existing_steps))
+                main_path.path_data = _renumber_learning_path_steps(
+                    existing_steps[:insert_at] + inserted_steps + existing_steps[insert_at:]
+                )
+                main_path.current_step = insert_at
+                main_path.title = main_path.title or problem.title
+                await _set_active_learning_path(
+                    db=db,
+                    problem_id=str(problem_id),
+                    target_path_id=str(main_path.id),
+                )
+                applied_path_id = str(main_path.id)
+        else:
+            existing_branch_result = await db.execute(
+                select(LearningPath).where(
+                    LearningPath.problem_id == str(problem_id),
+                    LearningPath.source_turn_id == candidate.source_turn_id,
+                    LearningPath.title == candidate.title,
+                    LearningPath.kind == _map_candidate_type_to_learning_path_kind(candidate.path_type),
+                )
+            )
+            branch_path = existing_branch_result.scalar_one_or_none()
+            if branch_path is None:
+                active_path = await _load_active_learning_path(db, problem_id=str(problem_id))
+                if not active_path:
+                    raise HTTPException(status_code=404, detail="Active learning path not found")
+                active_step_index, active_step_data = _resolve_current_step(active_path)
+                anchor_concept = (active_step_data or {}).get("concept") or problem.title
+                branch_path = LearningPath(
+                    problem_id=str(problem_id),
+                    title=candidate.title,
+                    kind=_map_candidate_type_to_learning_path_kind(candidate.path_type),
+                    parent_path_id=str(active_path.id),
+                    source_turn_id=candidate.source_turn_id,
+                    return_step_id=active_step_index,
+                    branch_reason=candidate.reason,
+                    is_active=True,
+                    path_data=_build_path_steps_from_candidate(candidate, anchor_concept=anchor_concept),
+                    current_step=0,
+                )
+                db.add(branch_path)
+                await db.flush()
+            await _set_active_learning_path(
+                db=db,
+                problem_id=str(problem_id),
+                target_path_id=str(branch_path.id),
+            )
+            applied_path_id = str(branch_path.id)
     else:
         raise HTTPException(status_code=400, detail="Unsupported path candidate action")
     candidate.reviewed_at = datetime.utcnow()
@@ -1868,6 +2124,7 @@ async def decide_problem_path_candidate(
             "title": candidate.title,
             "action": action,
             "selected_insertion": candidate.selected_insertion,
+            "applied_path_id": applied_path_id,
         },
     )
 
@@ -2155,10 +2412,7 @@ async def get_learning_step_hint(
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    path_result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
-    )
-    learning_path = path_result.scalar_one_or_none()
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
     if not learning_path:
         raise HTTPException(status_code=404, detail="Learning path not found")
 
@@ -2225,10 +2479,7 @@ async def ask_learning_question(
         raise HTTPException(status_code=400, detail="The /ask route only supports exploration mode")
     problem.learning_mode = learning_mode
 
-    path_result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
-    )
-    learning_path = path_result.scalar_one_or_none()
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
     step_index, step_data = _resolve_current_step(learning_path)
     step_concept = (step_data or {}).get("concept") or problem.title
     step_description = (step_data or {}).get("description") or (problem.description or "")
@@ -2485,6 +2736,37 @@ Learner question: {payload.question}
     }
 
 
+@router.get("/{problem_id}/learning-paths", response_model=List[LearningPathResponse])
+async def list_learning_paths(
+    problem_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
+        )
+    )
+    if not problem_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    result = await db.execute(
+        select(LearningPath)
+        .where(LearningPath.problem_id == str(problem_id))
+        .order_by(LearningPath.created_at.asc())
+    )
+    paths = list(result.scalars().all())
+    paths.sort(
+        key=lambda item: (
+            0 if _normalize_learning_path_kind(item.kind, "main") == "main" else 1,
+            0 if bool(getattr(item, "is_active", False)) else 1,
+            getattr(item, "created_at", datetime.utcnow()),
+        )
+    )
+    return paths
+
+
 @router.get("/{problem_id}/learning-path", response_model=LearningPathResponse)
 async def get_learning_path(
     problem_id: UUID,
@@ -2502,17 +2784,87 @@ async def get_learning_path(
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    result = await db.execute(
-        select(LearningPath).where(
-            LearningPath.problem_id == str(problem_id),
-        )
-    )
-    learning_path = result.scalar_one_or_none()
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
 
     if not learning_path:
         raise HTTPException(status_code=404, detail="Learning path not found")
 
     return learning_path
+
+
+@router.post("/{problem_id}/learning-paths/{path_id}/activate", response_model=LearningPathResponse)
+async def activate_learning_path(
+    problem_id: UUID,
+    path_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    path_result = await db.execute(
+        select(LearningPath)
+        .join(Problem, Problem.id == LearningPath.problem_id)
+        .where(
+            LearningPath.id == str(path_id),
+            LearningPath.problem_id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    target_path = path_result.scalar_one_or_none()
+    if not target_path:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+
+    target_path = await _set_active_learning_path(
+        db=db,
+        problem_id=str(problem_id),
+        target_path_id=str(path_id),
+    )
+    await db.commit()
+    await db.refresh(target_path)
+    return target_path
+
+
+@router.post("/{problem_id}/learning-path/return", response_model=LearningPathResponse)
+async def return_to_parent_learning_path(
+    problem_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    path_result = await db.execute(
+        select(LearningPath)
+        .join(Problem, Problem.id == LearningPath.problem_id)
+        .where(
+            LearningPath.problem_id == str(problem_id),
+            LearningPath.is_active.is_(True),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    active_path = path_result.scalar_one_or_none()
+    if not active_path:
+        raise HTTPException(status_code=404, detail="Active learning path not found")
+    if not active_path.parent_path_id:
+        raise HTTPException(status_code=400, detail="Current path has no parent path")
+
+    parent_result = await db.execute(
+        select(LearningPath).where(
+            LearningPath.id == active_path.parent_path_id,
+            LearningPath.problem_id == str(problem_id),
+        )
+    )
+    parent_path = parent_result.scalar_one_or_none()
+    if not parent_path:
+        raise HTTPException(status_code=404, detail="Parent learning path not found")
+
+    if active_path.return_step_id is not None:
+        total_steps = len(parent_path.path_data or [])
+        parent_path.current_step = min(max(active_path.return_step_id, 0), total_steps)
+
+    parent_path = await _set_active_learning_path(
+        db=db,
+        problem_id=str(problem_id),
+        target_path_id=str(parent_path.id),
+    )
+    await db.commit()
+    await db.refresh(parent_path)
+    return parent_path
 
 
 @router.put("/{problem_id}/learning-path", response_model=LearningPathResponse)
@@ -2532,10 +2884,7 @@ async def update_learning_path_progress(
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == str(problem_id))
-    )
-    learning_path = result.scalar_one_or_none()
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
     if not learning_path:
         raise HTTPException(status_code=404, detail="Learning path not found")
 

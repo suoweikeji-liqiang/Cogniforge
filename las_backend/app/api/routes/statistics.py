@@ -1,7 +1,7 @@
 """Learning statistics API routes."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from datetime import datetime, timedelta
 import hashlib
 import re
@@ -244,7 +244,13 @@ async def get_knowledge_graph(
 
     problems_result = await db.execute(
         select(Problem, LearningPath)
-        .outerjoin(LearningPath, LearningPath.problem_id == Problem.id)
+        .outerjoin(
+            LearningPath,
+            and_(
+                LearningPath.problem_id == Problem.id,
+                LearningPath.kind == "main",
+            ),
+        )
         .where(Problem.user_id == uid)
     )
     for problem, learning_path in problems_result.all():
