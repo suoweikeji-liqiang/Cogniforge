@@ -63,7 +63,7 @@
             </div>
             <div class="detail-row">
               <span class="label">{{ t('llm.apiKey') }}:</span>
-              <span class="value">{{ selectedProvider.api_key || '-' }}</span>
+              <span class="value">{{ maskApiKey(selectedProvider.api_key) }}</span>
             </div>
             <div class="detail-row">
               <span class="label">{{ t('llm.baseUrl') }}:</span>
@@ -369,6 +369,12 @@ const deleteModel = async (model) => {
   } catch (e) {
     console.error('Failed to delete model:', e)
   }
+}
+
+const maskApiKey = (key) => {
+  if (!key) return '-'
+  if (key.length <= 8) return '****'
+  return key.slice(0, 4) + '****' + key.slice(-4)
 }
 
 onMounted(loadProviders)
