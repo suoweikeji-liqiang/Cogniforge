@@ -162,7 +162,7 @@ class ModelOSService:
         suggestions = [
             str(item).strip()
             for item in (data.get("suggestions") or [])
-            if str(item).strip()
+            if item is not None and str(item).strip()
         ]
         next_question = str(data.get("next_question", "") or "").strip()
 
@@ -170,9 +170,9 @@ class ModelOSService:
             correctness=correctness,
             misconception_count=len(misconceptions),
         )
-        mastery_score = self._normalize_int(data.get("mastery_score"), default_score, 0, 100)
-        confidence = self._normalize_float(data.get("confidence"), 0.65, 0.0, 1.0)
-        pass_stage = self._normalize_bool(data.get("pass_stage"), default_pass)
+        mastery_score = self._normalize_int(data.get("mastery_score"), 0, 0, 100)
+        confidence = self._normalize_float(data.get("confidence"), 0.0, 0.0, 1.0)
+        pass_stage = self._normalize_bool(data.get("pass_stage"), False)
 
         raw_dimensions = data.get("dimension_scores")
         dimensions: Dict[str, int] = {}

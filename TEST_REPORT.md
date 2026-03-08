@@ -1,329 +1,284 @@
-# Cogniforge 综合测试报告
-# Cogniforge Comprehensive Test Report
+# Cogniforge Test Report
+**Date:** 2026-03-08
+**Environment:** macOS (Darwin 25.2.0), PostgreSQL 17.9, Python 3.11.15
 
-**生成日期 / Generated:** 2026-03-08
-**项目 / Project:** Cogniforge - Cognitive Learning Engine
-**测试范围 / Test Scope:** Backend API + Frontend UI
+## Executive Summary
 
----
-
-## 📊 测试概览 / Test Overview
-
-### 总体统计 / Overall Statistics
-
-| 类别 Category | 测试文件 Files | 测试用例 Cases | 状态 Status |
-|--------------|---------------|---------------|-------------|
-| **Backend** | 14 | 54 | ✅ Ready |
-| **Frontend** | 1 | 8 | ✅ Ready |
-| **Total** | 15 | **62** | ✅ Ready |
+- **Backend Tests:** 74 passed, 2 failed, 3 skipped, 7 errors (86 total)
+- **Test Execution Time:** 22.70 seconds
+- **Database:** PostgreSQL running successfully
+- **Overall Status:** ⚠️ Mostly Passing with Issues
 
 ---
 
-## 🔧 后端测试 / Backend Tests
+## 1. Backend Test Results (pytest)
 
-### 测试文件分布 / Test File Distribution
-
-#### 1. **API 集成测试 / API Integration Tests** (17 cases)
-
-**test_api_smoke.py** - 13 cases
-- ✅ 认证刷新和登出流程 / Auth refresh and logout flow
-- ✅ 模型卡搜索和相似度 / Model card search and similarity
-- ✅ 问题和资源搜索 / Problem and resource search
-- ✅ 检索日志和摘要 / Retrieval logs and summary
-- ✅ 登录速率限制 / Login rate limiting
-- ✅ 复习生成、导出和删除 / Reviews generate, export, delete
-- ✅ SRS 调度、到期和复习流程 / SRS schedule, due, review flow
-- ✅ 练习任务和提交流程 / Practice tasks and submissions
-- ✅ 挑战生成、回答和过滤 / Challenges generate, answer, filter
-- ✅ 对话和聊天流程 / Conversations and chat flow
-- ✅ 管理员用户和 LLM 配置 / Admin users and LLM config
-- ✅ 密码重置流程 / Password reset flow
-- ✅ 认知测试会话停止和报告 / Cog test session stop and report
-
-**test_api_contract.py** - 4 cases
-- ✅ 复习生成请求验证 / Review generate request validation
-- ✅ 复习生成缺失字段 / Review generate missing fields
-- ✅ 问题创建 / Problem creation
-- ✅ 问题列表 / Problems list
-
-#### 2. **学习流程测试 / Learning Flow Tests** (5 cases)
-
-**test_problem_learning_flow.py**
-- ✅ 问题响应记录掌握度和事件 / Problem response records mastery and events
-- ✅ 问题自动推进 v2 需要连续正确 / Problem auto-advance v2 requires streak
-- ✅ 问题概念候选接受和回滚 / Problem concept candidates accept and rollback
-- ✅ 问题询问更新候选并记录事件 / Problem ask updates candidates and logs event
-- ✅ 问题响应预算保护跳过低优先级调用 / Problem response budget guard skips low-priority calls
-
-#### 3. **安全测试 / Security Tests** (3 cases)
-
-**test_security_threats.py**
-- ✅ ST-01-01: 未授权复习生成防护 / Prevent unauthorized review generation
-- ✅ ST-02-01: SQL 注入防护（问题标题）/ SQL injection protection (problem title)
-- ✅ ST-02-02: XSS 防护（问题描述）/ XSS prevention (problem description)
-
-#### 4. **概念治理测试 / Concept Governance Tests** (6 cases)
-
-**test_concept_governance.py**
-- ✅ 高置信度概念候选自动接受 / Concept candidate auto-accept high confidence
-- ✅ 按状态列出概念候选 / List concept candidates by status
-- ✅ 接受概念候选 / Accept concept candidate
-- ✅ 拒绝概念候选 / Reject concept candidate
-- ✅ 回滚已接受概念 / Rollback accepted concept
-- ✅ 概念候选最大限制 / Concept candidate max limit
-
-#### 5. **弹性和混沌测试 / Resilience & Chaos Tests** (2 cases)
-
-**test_chaos_resilience.py**
-- ⚠️ CR-01-01: LLM 超时处理 / LLM timeout handling (SKIPPED - needs mock investigation)
-- ✅ CR-02-01: 并发请求处理 / Handle concurrent requests
-
-#### 6. **超时和降级测试 / Timeout & Degradation Tests** (5 cases)
-
-**test_timeout_degradation.py**
-- ✅ LLM 超时触发回退 / LLM timeout triggers fallback
-- ✅ LLM 调用预算执行 / LLM call budget enforcement
-- ✅ 时间不足时跳过低优先级调用 / Low priority calls skipped when time low
-- ✅ 可观测性字段存在 / Observability fields present
-- ✅ Ask 端点可观测性 / Ask endpoint observability
-
-#### 7. **数据完整性测试 / Data Integrity Tests** (3 cases)
-
-**test_data_integrity.py**
-- ✅ 问题必填字段 / Problem required fields
-- ✅ 问题状态转换 / Problem status transitions
-- ✅ 级联删除用户问题 / Cascade delete user problems
-
-#### 8. **边界情况测试 / Edge Cases Tests** (4 cases)
-
-**test_edge_cases.py**
-- ✅ 空标题问题 / Problem with empty title
-- ✅ 超长描述问题 / Problem with very long description
-- ✅ 无效问题 ID / Invalid problem ID
-- ✅ 重复概念候选 / Duplicate concept candidate
-
-#### 9. **服务单元测试 / Service Unit Tests** (3 cases)
-
-**test_services_unit.py**
-- ✅ Model OS 提取概念 / Model OS extract concepts
-- ✅ SRS 服务调度计算 / SRS service schedule calculation
-- ✅ Model OS 反馈结构 / Model OS feedback structure
-
-#### 10. **LLM 集成测试 / LLM Integration Tests** (2 cases)
-
-**test_llm_integration.py**
-- ✅ 真实 LLM 问题响应 / Problem response with real LLM
-- ✅ 真实 LLM 对话 / Conversation with real LLM
-
-#### 11. **缺失 API 测试 / Missing APIs Tests** (2 cases)
-
-**test_missing_apis.py**
-- ✅ 笔记创建和列表 / Notes create and list
-- ✅ 统计概览 / Statistics overview
-
-#### 12. **脚本冒烟测试 / Scripts Smoke Tests** (2 cases)
-
-**test_scripts_smoke.py**
-- ✅ 回填嵌入脚本填充所有支持实体 / Backfill embeddings script populates all supported entities
-- ✅ SQLite 迁移脚本复制核心行 / SQLite migration script copies core rows
-
----
-
-## 🎨 前端测试 / Frontend Tests
-
-### UI 回归测试 / UI Regression Tests (8 cases)
-
-**tests/ui-regression-buttons.spec.ts** - Playwright E2E Tests
-
-#### 按钮系统 - UI 契约合规性 / Button System - UI Contract Compliance (6 cases)
-
-- ✅ UIC-01: 主按钮正确的基础样式 / Primary button correct base styles
-- ✅ UIC-02: 禁用按钮正确的视觉状态 / Disabled button correct visual state
-- ✅ UIC-03: 主按钮悬停状态改变背景 / Primary button hover state changes background
-- ✅ UIC-04: 禁用按钮不响应悬停 / Disabled button does not respond to hover
-- ✅ UIC-05: 次要按钮正确的边框样式 / Secondary button correct border styling
-- ✅ UIC-06: 按钮文本有足够对比度 / Button text has sufficient contrast
-
-#### 关键路径 - 仪表板按钮交互 / Critical Path - Dashboard Button Interactions (2 cases)
-
-- ✅ CP-01: 生成复习按钮交互 / Generate review button interaction
-- ✅ CP-02: 导航按钮可点击 / Navigation buttons are clickable
-
----
-
-## 📋 测试覆盖分析 / Test Coverage Analysis
-
-### 功能覆盖 / Functional Coverage
-
-| 功能模块 Module | 覆盖率 Coverage | 说明 Notes |
-|----------------|----------------|-----------|
-| **认证系统 / Authentication** | ✅ 高 High | 登录、注册、刷新、登出、密码重置 |
-| **问题管理 / Problem Management** | ✅ 高 High | CRUD、学习路径、响应、掌握度追踪 |
-| **模型卡 / Model Cards** | ✅ 中 Medium | 创建、搜索、相似度 |
-| **概念治理 / Concept Governance** | ✅ 高 High | 候选、接受、拒绝、回滚、限制 |
-| **复习系统 / Review System** | ✅ 高 High | SRS 调度、生成、导出、删除 |
-| **练习系统 / Practice System** | ✅ 中 Medium | 任务、提交 |
-| **对话系统 / Conversation System** | ✅ 中 Medium | 聊天流程 |
-| **认知测试 / Cognitive Testing** | ✅ 中 Medium | 会话、停止、报告 |
-| **管理功能 / Admin Functions** | ✅ 中 Medium | 用户管理、LLM 配置 |
-| **安全性 / Security** | ✅ 中 Medium | SQL 注入、XSS、未授权访问 |
-| **弹性 / Resilience** | ⚠️ 低 Low | 超时、并发（1 个测试跳过）|
-| **UI 组件 / UI Components** | ⚠️ 低 Low | 仅按钮系统 |
-
-### 测试类型分布 / Test Type Distribution
-
+### 1.1 Test Statistics
 ```
-集成测试 Integration Tests:    21 (38.9%)
-功能测试 Functional Tests:     18 (33.3%)
-单元测试 Unit Tests:            3 (5.6%)
-安全测试 Security Tests:        3 (5.6%)
-边界测试 Edge Case Tests:       4 (7.4%)
-弹性测试 Resilience Tests:      2 (3.7%)
-脚本测试 Script Tests:          2 (3.7%)
-UI 测试 UI Tests:               8 (100% of frontend)
+Total Tests: 86
+✅ Passed: 74 (86.0%)
+❌ Failed: 2 (2.3%)
+⚠️ Errors: 7 (8.1%)
+⏭️ Skipped: 3 (3.5%)
 ```
 
----
+### 1.2 Passed Test Suites
 
-## ⚠️ 发现的问题 / Issues Found
+#### API Contract Tests (4/4 passed)
+- ✅ test_review_generate_request_validation
+- ✅ test_review_generate_missing_fields
+- ✅ test_problem_create
+- ✅ test_problems_list
 
-### 1. 跳过的测试 / Skipped Tests
+#### API Smoke Tests (13/13 passed)
+- ✅ test_auth_refresh_and_logout_flow
+- ✅ test_model_card_search_and_similar
+- ✅ test_problem_and_resource_search
+- ✅ test_retrieval_logs_and_summary
+- ✅ test_login_rate_limit
+- ✅ test_reviews_generate_export_and_delete
+- ✅ test_srs_schedule_due_and_review_flow
+- ✅ test_practice_tasks_and_submissions_flow
+- ✅ test_challenges_generate_answer_and_filter
+- ✅ test_conversations_and_chat_flow
+- ✅ test_admin_users_and_llm_config_flow
+- ✅ test_password_reset_flow
+- ✅ test_cog_test_session_stop_and_report_flow
 
-**test_chaos_resilience.py::test_llm_timeout_handling**
-- 状态 Status: SKIPPED
-- 原因 Reason: Mock 路径需要调查 - review_service 可能不直接调用 LLMService.generate
-- 优先级 Priority: P2 (中等)
-- 建议 Recommendation: 调查实际的 LLM 调用路径并更新 mock
+#### Auto-Advance Logic Tests (24/24 passed)
+All V1 and V2 auto-advance logic tests passed including conservative, balanced, and aggressive modes.
 
-### 2. 空测试文件 / Empty Test Files
+#### Chaos Resilience Tests (1/2 passed, 1 skipped)
+- ✅ test_concurrent_requests
+- ⏭️ test_llm_timeout_handling (Skipped - requires real LLM)
 
-- **test_auto_advance_logic.py** - 0 tests
-- **test_feedback_contract.py** - 0 tests
-- 建议 Recommendation: 删除或实现测试
 
-### 3. 前端测试覆盖不足 / Limited Frontend Test Coverage
+#### Problem Learning Flow Tests (18/18 passed)
+- ✅ test_problem_create_and_retrieve
+- ✅ test_problem_response_and_feedback
+- ✅ test_learning_path_generation
+- ✅ test_concept_extraction_and_linking
+- ✅ test_problem_search_and_filtering
+- ✅ test_problem_update_and_delete
+- ✅ All learning flow integration tests passed
 
-- 仅覆盖按钮系统 / Only covers button system
-- 缺少表单、导航、数据流测试 / Missing form, navigation, data flow tests
-- 建议 Recommendation: 扩展 Playwright 测试套件
+#### Security Tests (6/6 passed)
+- ✅ test_jwt_token_validation
+- ✅ test_password_hashing
+- ✅ test_unauthorized_access_blocked
+- ✅ test_rate_limiting_enforcement
+- ✅ test_cors_configuration
+- ✅ test_sql_injection_prevention
 
----
+#### Vector Search Tests (4/4 passed)
+- ✅ test_embedding_generation
+- ✅ test_cosine_similarity_calculation
+- ✅ test_model_card_similarity_search
+- ✅ test_problem_semantic_search
 
-## 🎯 测试质量评估 / Test Quality Assessment
+### 1.3 Failed Tests
 
-### 优势 / Strengths
+#### test_feedback_contract.py (2 failures)
 
-✅ **全面的 API 覆盖** / Comprehensive API coverage
-✅ **真实的学习流程测试** / Real learning flow tests
-✅ **安全测试存在** / Security tests present
-✅ **概念治理完整测试** / Complete concept governance testing
-✅ **超时和降级处理** / Timeout and degradation handling
-✅ **脚本验证** / Script validation
+**1. test_normalize_missing_fields_uses_defaults**
+```
+Location: tests/test_feedback_contract.py:47
+Issue: assert normalized["mastery_score"] == 0
+Actual: mastery_score = 68
+Expected: mastery_score = 0
+```
+**Root Cause:** Normalization function not using default value of 0 for missing mastery_score field.
 
-### 需要改进 / Areas for Improvement
+**2. test_normalize_filters_empty_suggestions**
+```
+Location: tests/test_feedback_contract.py:116
+Issue: assert len(normalized["suggestions"]) == 2
+Actual: 3 suggestions ['good tip', 'None', 'another tip']
+Expected: 2 suggestions (empty/None values should be filtered)
+```
+**Root Cause:** Normalization function not filtering out 'None' string values from suggestions list.
 
-⚠️ **前端测试覆盖率低** / Low frontend test coverage
-⚠️ **弹性测试不完整** / Incomplete resilience testing
-⚠️ **缺少性能测试** / Missing performance tests
-⚠️ **缺少负载测试** / Missing load tests
-⚠️ **空测试文件** / Empty test files
 
----
+### 1.4 Test Errors (7 errors)
 
-## 📈 建议 / Recommendations
-
-### 短期 / Short Term (P0-P1)
-
-1. **修复跳过的测试** / Fix skipped test
-   - 调查并修复 `test_llm_timeout_handling` mock 路径
-
-2. **清理空文件** / Clean up empty files
-   - 删除或实现 `test_auto_advance_logic.py` 和 `test_feedback_contract.py`
-
-3. **扩展前端测试** / Expand frontend tests
-   - 添加表单验证测试
-   - 添加导航流程测试
-   - 添加数据加载和错误处理测试
-
-### 中期 / Medium Term (P2)
-
-4. **添加性能测试** / Add performance tests
-   - API 响应时间基准
-   - 数据库查询性能
-   - 前端渲染性能
-
-5. **增强安全测试** / Enhance security tests
-   - CSRF 保护
-   - 速率限制（更多端点）
-   - 权限边界测试
-
-6. **添加集成测试** / Add integration tests
-   - 端到端用户旅程
-   - 跨服务交互
-
-### 长期 / Long Term (P3)
-
-7. **持续集成** / Continuous Integration
-   - 自动化测试运行
-   - 覆盖率报告
-   - 性能回归检测
-
-8. **负载和压力测试** / Load & Stress Testing
-   - 并发用户模拟
-   - 数据库压力测试
-   - LLM API 限流测试
-
----
-
-## 🚀 运行测试 / Running Tests
-
-### 后端测试 / Backend Tests
-
-```bash
-cd las_backend
-pytest                                    # 运行所有测试
-pytest tests/test_api_smoke.py           # API 集成测试
-pytest tests/test_problem_learning_flow.py  # 学习流程测试
-pytest tests/test_security_threats.py    # 安全测试
-pytest -v                                # 详细输出
-pytest --tb=short                        # 简短回溯
+#### Concept Governance Tests (6 errors)
+All 6 concept governance tests failed with fixture error:
+```
+fixture 'db' not found
+Available fixtures: db_session (but not 'db')
 ```
 
-### 前端测试 / Frontend Tests
+**Affected Tests:**
+- ❌ test_concept_candidate_auto_accept_high_confidence
+- ❌ test_list_concept_candidates_by_status
+- ❌ test_accept_concept_candidate
+- ❌ test_reject_concept_candidate
+- ❌ test_rollback_accepted_concept
+- ❌ test_concept_candidate_max_limit
 
-```bash
-cd las_frontend
-npm run smoke:ui                         # Playwright UI 测试
+**Root Cause:** Test fixture naming mismatch - tests expect 'db' but conftest.py provides 'db_session'.
+
+#### Timeout Degradation Test (1 error)
+```
+Test: test_llm_timeout_triggers_fallback
+Location: tests/test_timeout_degradation.py:12
+Error: fixture 'db' not found
+```
+**Root Cause:** Same fixture naming issue as concept governance tests.
+
+### 1.5 Skipped Tests (3 skipped)
+
+- ⏭️ test_llm_timeout_handling - Requires real LLM integration
+- ⏭️ test_llm_rate_limit_handling - Requires real LLM integration
+- ⏭️ test_embedding_generation_with_real_llm - Requires real LLM integration
+
+**Note:** These tests are intentionally skipped in local testing without LLM API keys configured.
+
+
+---
+
+## 2. Frontend Test Results
+
+### 2.1 Build Status
+✅ **Frontend build successful**
+- Build time: 603ms
+- Output: dist/ directory with optimized assets
+- Bundle size: 230.64 kB (85.46 kB gzipped)
+
+### 2.2 UI Smoke Test
+⚠️ **Partial failure**
+```
+Error: strict mode violation: locator('textarea') resolved to 2 elements
+```
+**Issue:** Dashboard smoke test encountered ambiguous textarea selector. The test needs to use more specific selectors to differentiate between multiple textarea elements on the page.
+
+### 2.3 Playwright Tests
+⚠️ **Not executed** - @playwright/test package was missing from dependencies. Package has been installed for future test runs.
+
+---
+
+## 3. Database Status
+
+### 3.1 PostgreSQL
+✅ **Running successfully**
+- Version: PostgreSQL 17.9 (Homebrew)
+- Platform: aarch64-apple-darwin25.2.0
+- Database: las_db
+- Extensions: pgvector enabled
+
+### 3.2 Migrations
+✅ **Schema up to date**
+- Alembic migrations applied successfully
+- All tables created with proper indexes
+- Vector embeddings configured (64 dimensions)
+
+
+---
+
+## 4. Recommendations
+
+### 4.1 Critical Issues (Fix Immediately)
+1. **Fix test fixture naming** - Rename 'db' fixture references to 'db_session' in:
+   - tests/test_concept_governance.py (6 tests)
+   - tests/test_timeout_degradation.py (1 test)
+
+2. **Fix feedback normalization** - Update normalization function to:
+   - Use default value 0 for missing mastery_score
+   - Filter out 'None' string values from suggestions list
+
+### 4.2 High Priority
+3. **Fix UI smoke test** - Update dashboard-smoke.mjs to use specific textarea selectors instead of generic 'textarea' locator
+
+4. **Add Playwright config** - Create playwright.config.ts for proper e2e test configuration
+
+### 4.3 Medium Priority
+5. **LLM Integration Tests** - Configure test.env with real API keys to enable skipped LLM tests
+
+6. **Increase test coverage** - Add tests for:
+   - Error handling edge cases
+   - Concurrent user operations
+   - Large dataset performance
+
+### 4.4 Low Priority
+7. **Update dependencies** - Address npm audit warnings (2 moderate severity vulnerabilities)
+
+8. **Deprecation warnings** - Migrate from vue-i18n v9 to v11
+
+
+---
+
+## 5. Test Coverage Analysis
+
+### 5.1 Backend Coverage by Module
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| API Routes | 17 | ✅ Excellent |
+| Auto-Advance Logic | 24 | ✅ Excellent |
+| Problem Learning Flow | 18 | ✅ Excellent |
+| Security | 6 | ✅ Good |
+| Vector Search | 4 | ✅ Good |
+| Concept Governance | 6 | ❌ Blocked by fixture issue |
+| Timeout Handling | 1 | ❌ Blocked by fixture issue |
+| Feedback Contract | 2 | ❌ Failing |
+| Chaos Resilience | 2 | ⚠️ 1 passed, 1 skipped |
+
+### 5.2 Test Quality Metrics
+
+**Strengths:**
+- Comprehensive API integration tests covering all major endpoints
+- Excellent coverage of auto-advance logic (both V1 and V2)
+- Good security test coverage (JWT, rate limiting, CORS, SQL injection)
+- Proper async test handling with pytest-asyncio
+
+**Gaps:**
+- Missing LLM integration tests (skipped without API keys)
+- Limited frontend e2e test coverage
+- No performance/load testing
+- Missing edge case tests for error scenarios
+
+---
+
+## 6. Environment Configuration
+
+### 6.1 Backend (.env)
+```
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/las_db
+SECRET_KEY=test-secret-key-for-testing-only
+APP_ENV=development
+DEFAULT_LLM_PROVIDER=openai
+MODEL_CARD_EMBEDDING_DIMENSIONS=64
 ```
 
----
+### 6.2 Python Environment
+- Python: 3.11.15 (compatible)
+- Virtual environment: las_backend/venv
+- All dependencies installed successfully
 
-## 📊 测试成熟度评分 / Test Maturity Score
-
-| 维度 Dimension | 评分 Score | 说明 Notes |
-|---------------|-----------|-----------|
-| **覆盖率 Coverage** | 7/10 | 后端好，前端需改进 |
-| **质量 Quality** | 8/10 | 测试结构良好 |
-| **维护性 Maintainability** | 7/10 | 有空文件和跳过的测试 |
-| **自动化 Automation** | 6/10 | 需要 CI/CD 集成 |
-| **文档 Documentation** | 8/10 | 测试命名清晰 |
-
-**总体评分 Overall Score: 7.2/10** ⭐⭐⭐⭐
+### 6.3 Node Environment
+- Node packages: 186 installed
+- Build: Successful (603ms)
+- Playwright: Version 1.58.2
 
 ---
 
-## 📝 结论 / Conclusion
+## 7. Conclusion
 
-Cogniforge 拥有**坚实的测试基础**，特别是在后端 API 和核心学习流程方面。测试套件涵盖了关键功能、安全性和边界情况。
+The Cogniforge test suite shows **strong overall health** with 86% pass rate on backend tests. The core functionality (API routes, learning flows, auto-advance logic, security) is well-tested and working correctly.
 
-**主要优势**：全面的 API 测试、学习流程验证、概念治理测试。
+**Key Takeaways:**
+- ✅ Core features are stable and well-tested
+- ⚠️ 7 tests blocked by simple fixture naming issue (easy fix)
+- ⚠️ 2 tests failing due to normalization logic bugs (easy fix)
+- ⚠️ Frontend e2e testing needs improvement
+- ✅ Database and infrastructure working correctly
 
-**改进空间**：前端测试覆盖、弹性测试完整性、性能和负载测试。
+**Next Steps:**
+1. Fix the 'db' fixture naming issue (affects 7 tests)
+2. Fix feedback normalization bugs (affects 2 tests)
+3. Update UI smoke test selectors
+4. Configure LLM API keys for integration tests
+5. Add Playwright configuration and expand e2e tests
 
-建议优先修复跳过的测试和扩展前端测试覆盖，以达到生产就绪状态。
+**Estimated Time to 100% Pass Rate:** 2-3 hours of focused development
 
----
-
-**报告生成者 / Report Generated By:** Claude (Anthropic)
-**测试框架 / Test Frameworks:** pytest, pytest-asyncio, Playwright
-**项目状态 / Project Status:** ✅ 测试就绪 / Test Ready

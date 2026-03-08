@@ -10,7 +10,7 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_llm_timeout_triggers_fallback(client: AsyncClient, auth_headers: dict, db):
+async def test_llm_timeout_triggers_fallback(client: AsyncClient, auth_headers: dict, db_session):
     """When LLM times out, should use fallback and record reason"""
     problem_response = await client.post(
         "/api/problems/",

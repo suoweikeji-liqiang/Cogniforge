@@ -12,7 +12,7 @@ from app.models.entities.user import Problem, ProblemConceptCandidate
 
 
 @pytest.mark.asyncio
-async def test_concept_candidate_auto_accept_high_confidence(client: AsyncClient, auth_headers: dict, db: AsyncSession):
+async def test_concept_candidate_auto_accept_high_confidence(client: AsyncClient, auth_headers: dict, db_session: AsyncSession):
     """High confidence concepts should be auto-accepted"""
     problem_response = await client.post(
         "/api/problems/",
@@ -36,7 +36,7 @@ async def test_concept_candidate_auto_accept_high_confidence(client: AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_list_concept_candidates_by_status(client: AsyncClient, auth_headers: dict, db: AsyncSession):
+async def test_list_concept_candidates_by_status(client: AsyncClient, auth_headers: dict, db_session: AsyncSession):
     """Should filter candidates by status"""
     problem_response = await client.post(
         "/api/problems/",
@@ -70,15 +70,15 @@ async def test_list_concept_candidates_by_status(client: AsyncClient, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_accept_concept_candidate(client: AsyncClient, auth_headers: dict, db: AsyncSession, test_user):
+async def test_accept_concept_candidate(client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user):
     """Accepting a candidate should update status and add to problem concepts"""
     problem = Problem(
         user_id=str(test_user.id),
         title="Test Problem",
         associated_concepts=["existing concept"],
     )
-    db.add(problem)
-    await db.flush()
+    db_session.add(problem)
+    await db_session.flush()
 
     candidate = ProblemConceptCandidate(
         user_id=str(test_user.id),
@@ -89,8 +89,8 @@ async def test_accept_concept_candidate(client: AsyncClient, auth_headers: dict,
         confidence=0.7,
         status="pending",
     )
-    db.add(candidate)
-    await db.commit()
+    db_session.add(candidate)
+    await db_session.commit()
 
     response = await client.post(
         f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/accept",
@@ -103,20 +103,20 @@ async def test_accept_concept_candidate(client: AsyncClient, auth_headers: dict,
     assert data["candidate"]["reviewed_at"] is not None
     assert "trace_id" in data
 
-    await db.refresh(problem)
+    await db_session.refresh(problem)
     assert "new concept" in problem.associated_concepts
 
 
 @pytest.mark.asyncio
-async def test_reject_concept_candidate(client: AsyncClient, auth_headers: dict, db: AsyncSession, test_user):
+async def test_reject_concept_candidate(client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user):
     """Rejecting a candidate should update status without adding to problem"""
     problem = Problem(
         user_id=str(test_user.id),
         title="Test Problem",
         associated_concepts=["existing"],
     )
-    db.add(problem)
-    await db.flush()
+    db_session.add(problem)
+    await db_session.flush()
 
     candidate = ProblemConceptCandidate(
         user_id=str(test_user.id),
@@ -127,8 +127,8 @@ async def test_reject_concept_candidate(client: AsyncClient, auth_headers: dict,
         confidence=0.5,
         status="pending",
     )
-    db.add(candidate)
-    await db.commit()
+    db_session.add(candidate)
+    await db_session.commit()
 
     response = await client.post(
         f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/reject",
@@ -140,20 +140,20 @@ async def test_reject_concept_candidate(client: AsyncClient, auth_headers: dict,
     assert data["candidate"]["status"] == "rejected"
     assert data["candidate"]["reviewed_at"] is not None
 
-    await db.refresh(problem)
+    await db_session.refresh(problem)
     assert "bad concept" not in problem.associated_concepts
 
 
 @pytest.mark.asyncio
-async def test_rollback_accepted_concept(client: AsyncClient, auth_headers: dict, db: AsyncSession, test_user):
+async def test_rollback_accepted_concept(client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user):
     """Rolling back should remove concept from problem and mark candidates as reverted"""
     problem = Problem(
         user_id=str(test_user.id),
         title="Test Problem",
         associated_concepts=["keep this", "remove this"],
     )
-    db.add(problem)
-    await db.flush()
+    db_session.add(problem)
+    await db_session.flush()
 
     candidate = ProblemConceptCandidate(
         user_id=str(test_user.id),
@@ -164,8 +164,8 @@ async def test_rollback_accepted_concept(client: AsyncClient, auth_headers: dict
         confidence=0.9,
         status="accepted",
     )
-    db.add(candidate)
-    await db.commit()
+    db_session.add(candidate)
+    await db_session.commit()
 
     response = await client.post(
         f"/api/problems/{problem.id}/concepts/rollback",
@@ -179,12 +179,12 @@ async def test_rollback_accepted_concept(client: AsyncClient, auth_headers: dict
     assert "remove this" not in data["associated_concepts"]
     assert "keep this" in data["associated_concepts"]
 
-    await db.refresh(candidate)
+    await db_session.refresh(candidate)
     assert candidate.status == "reverted"
 
 
 @pytest.mark.asyncio
-async def test_concept_candidate_max_limit(client: AsyncClient, auth_headers: dict, db: AsyncSession):
+async def test_concept_candidate_max_limit(client: AsyncClient, auth_headers: dict, db_session: AsyncSession):
     """Should respect PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN limit"""
     problem_response = await client.post(
         "/api/problems/",
