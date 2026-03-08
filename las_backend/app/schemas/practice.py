@@ -1,7 +1,8 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List
-from uuid import UUID
 from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PracticeTaskBase(BaseModel):
@@ -39,36 +40,4 @@ class PracticeSubmissionResponse(BaseModel):
     solution: str
     feedback: Optional[str]
     structured_feedback: Optional[dict] = None
-    created_at: datetime
-
-
-class ReviewBase(BaseModel):
-    review_type: str
-    period: str
-
-
-class ReviewCreate(ReviewBase):
-    content: dict
-
-
-class ReviewGenerateRequest(ReviewBase):
-    pass
-
-
-class ReviewGenerateResponse(ReviewBase):
-    content: dict
-
-
-class ReviewUpdate(BaseModel):
-    review_type: Optional[str] = None
-    period: Optional[str] = None
-    content: Optional[dict] = None
-
-
-class ReviewResponse(ReviewBase):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    user_id: UUID
-    content: dict
     created_at: datetime

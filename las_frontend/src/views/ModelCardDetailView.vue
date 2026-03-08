@@ -43,6 +43,9 @@
           >
             {{ isScheduled ? t('modelCards.scheduled') : t('modelCards.addToReview') }}
           </button>
+          <router-link to="/reviews" class="btn btn-secondary review-hub-link">
+            {{ t('modelCards.openReviewHub') }}
+          </router-link>
         </div>
         <div class="cog-test-action">
           <button class="btn btn-primary" @click="startCogTest">
@@ -212,6 +215,13 @@ onMounted(fetchCard)
 
 .review-actions {
   margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.review-hub-link {
+  text-decoration: none;
 }
 
 .evolution-section { margin-top: 2rem; }

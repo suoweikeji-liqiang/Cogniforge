@@ -64,6 +64,8 @@ from app.schemas.practice import (
     PracticeTaskResponse,
     PracticeSubmissionCreate,
     PracticeSubmissionResponse,
+)
+from app.schemas.review import (
     ReviewBase,
     ReviewCreate,
     ReviewGenerateRequest,
