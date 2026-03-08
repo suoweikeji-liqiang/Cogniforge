@@ -1,5 +1,5 @@
 <template>
-  <section class="card derived-concepts-card">
+  <section class="card derived-concepts-card" data-testid="derived-concepts-panel">
     <h2>{{ t('problemDetail.derivedConceptsTitle') }}</h2>
     <p class="section-subtitle">{{ t('problemDetail.derivedConceptsSubtitle') }}</p>
 
@@ -18,6 +18,7 @@
             :key="candidate.id"
             class="candidate-item"
             :class="[`candidate-${candidate.status}`, { 'candidate-current': isCurrentTurnCandidate(candidate) }]"
+            data-testid="derived-concept-card"
           >
             <div class="candidate-head">
               <strong>{{ candidate.concept_text }}</strong>
@@ -48,6 +49,7 @@
                 type="button"
                 class="btn btn-primary"
                 :disabled="actionPendingId === candidate.id"
+                data-testid="accept-derived-concept"
                 @click="emit('accept', candidate.id)"
               >
                 {{ t('problemDetail.acceptCandidate') }}
@@ -56,6 +58,7 @@
                 type="button"
                 class="btn btn-secondary"
                 :disabled="actionPendingId === candidate.id"
+                data-testid="reject-derived-concept"
                 @click="emit('reject', candidate.id)"
               >
                 {{ t('problemDetail.rejectCandidate') }}
@@ -65,6 +68,7 @@
                 type="button"
                 class="btn btn-secondary"
                 :disabled="actionPendingId === candidate.id"
+                data-testid="postpone-derived-concept"
                 @click="emit('postpone', candidate.id)"
               >
                 {{ t('problemDetail.postponeCandidate') }}
@@ -76,6 +80,7 @@
                 v-model="selectedMergeTargets[candidate.id]"
                 class="merge-select"
                 :disabled="actionPendingId === candidate.id"
+                data-testid="merge-derived-concept-target"
               >
                 <option value="">{{ t('problemDetail.mergeTargetPlaceholder') }}</option>
                 <option
@@ -90,6 +95,7 @@
                 type="button"
                 class="btn btn-secondary"
                 :disabled="actionPendingId === candidate.id || !selectedMergeTargets[candidate.id]"
+                data-testid="merge-derived-concept"
                 @click="emitMerge(candidate.id)"
               >
                 {{ t('problemDetail.mergeCandidate') }}
@@ -101,6 +107,7 @@
                 type="button"
                 class="btn btn-secondary"
                 :disabled="actionPendingId === candidate.id"
+                data-testid="rollback-derived-concept"
                 @click="emit('rollback', { candidateId: candidate.id, conceptText: candidate.concept_text })"
               >
                 {{ t('problemDetail.rollbackConcept') }}

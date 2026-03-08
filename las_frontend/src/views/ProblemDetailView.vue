@@ -1,5 +1,5 @@
 <template>
-  <div class="problem-detail">
+  <div class="problem-detail" data-testid="problem-detail-workspace">
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
 
     <template v-else-if="problem">
@@ -28,6 +28,7 @@
               class="btn btn-secondary"
               :class="{ active: learningMode === 'socratic' }"
               :disabled="switchingMode || submitting || askingQuestion"
+              data-testid="mode-switch-socratic"
               @click="setLearningMode('socratic')"
             >
               {{ t('problemDetail.modeSocratic') }}
@@ -37,6 +38,7 @@
               class="btn btn-secondary"
               :class="{ active: learningMode === 'exploration' }"
               :disabled="switchingMode || submitting || askingQuestion"
+              data-testid="mode-switch-exploration"
               @click="setLearningMode('exploration')"
             >
               {{ t('problemDetail.modeExploration') }}
@@ -53,7 +55,7 @@
             </div>
           </div>
 
-          <div v-if="learningPath" class="path-structure-panel">
+          <div v-if="learningPath" class="path-structure-panel" data-testid="current-learning-path">
             <div class="path-structure-head">
               <span class="mode-badge">{{ t('problemDetail.currentPath') }}: {{ formatLearningPathKind(learningPath.kind) }}</span>
               <span class="candidate-status">{{ learningPath.title || t('problemDetail.unnamedPath') }}</span>
@@ -73,6 +75,7 @@
                 class="btn btn-secondary path-nav-button"
                 :class="{ active: path.is_active }"
                 :disabled="updatingPath"
+                data-testid="learning-path-button"
                 @click="activateLearningPathById(path.id)"
               >
                 {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
@@ -83,6 +86,7 @@
               type="button"
               class="btn btn-secondary"
               :disabled="updatingPath"
+              data-testid="return-to-parent-path"
               @click="returnToParentPath"
             >
               {{ t('problemDetail.returnToParentPath') }}
@@ -118,6 +122,7 @@
               type="button"
               class="btn btn-primary"
               :disabled="updatingPath"
+              data-testid="mark-step-done"
               @click="updateCurrentStep(completedSteps + 1)"
             >
               {{ t('problemDetail.markStepDone') }}
@@ -145,7 +150,7 @@
           <div class="workspace-stage">
             <div class="workspace-main-column">
 
-              <div v-if="socraticQuestion" class="socratic-question-panel">
+              <div v-if="socraticQuestion" class="socratic-question-panel" data-testid="socratic-question-panel">
                 <div class="question-head">
                   <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
                   <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
@@ -160,6 +165,7 @@
                     v-model="responseText"
                     rows="5"
                     :placeholder="t('problemDetail.progressInputPlaceholder')"
+                    data-testid="socratic-response-input"
                     required
                   ></textarea>
                 </div>
@@ -167,7 +173,7 @@
                   <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
                     {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
                   </button>
-                  <button type="submit" class="btn btn-primary" :disabled="submitting">
+                  <button type="submit" class="btn btn-primary" :disabled="submitting" data-testid="submit-socratic-response">
                     {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
                   </button>
                 </div>
@@ -259,7 +265,7 @@
           </div>
         </section>
 
-        <section class="card concept-governance-section">
+        <section class="card concept-governance-section" data-testid="path-candidates-panel">
           <h2>{{ t('problemDetail.pathCandidatesTitle') }}</h2>
           <p class="section-subtitle">{{ t('problemDetail.pathCandidatesSubtitle') }}</p>
 
@@ -271,6 +277,7 @@
               :key="candidate.id"
               class="candidate-item"
               :class="`candidate-${candidate.status}`"
+              data-testid="path-candidate-card"
             >
               <div class="candidate-head">
                 <strong>{{ candidate.title }}</strong>
@@ -292,6 +299,7 @@
                   type="button"
                   class="btn btn-primary"
                   :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-insert-main"
                   @click="decidePathCandidate(candidate.id, 'insert_before_current_main')"
                 >
                   {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
@@ -300,6 +308,7 @@
                   type="button"
                   class="btn btn-secondary"
                   :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-save-branch"
                   @click="decidePathCandidate(candidate.id, 'save_as_side_branch')"
                 >
                   {{ t('problemDetail.pathCandidateSaveAsBranch') }}
@@ -308,6 +317,7 @@
                   type="button"
                   class="btn btn-secondary"
                   :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-bookmark"
                   @click="decidePathCandidate(candidate.id, 'bookmark_for_later')"
                 >
                   {{ t('problemDetail.pathCandidateBookmark') }}
@@ -316,6 +326,7 @@
                   type="button"
                   class="btn btn-secondary"
                   :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-dismiss"
                   @click="decidePathCandidate(candidate.id, 'dismiss')"
                 >
                   {{ t('problemDetail.pathCandidateDismiss') }}
@@ -337,6 +348,7 @@
                   class="btn btn-secondary"
                   :class="{ active: answerMode === 'direct' }"
                   :disabled="askingQuestion"
+                  data-testid="exploration-answer-mode-direct"
                   @click="answerMode = 'direct'"
                 >
                   {{ t('problemDetail.askModeDirect') }}
@@ -346,6 +358,7 @@
                   class="btn btn-secondary"
                   :class="{ active: answerMode === 'guided' }"
                   :disabled="askingQuestion"
+                  data-testid="exploration-answer-mode-guided"
                   @click="answerMode = 'guided'"
                 >
                   {{ t('problemDetail.askModeGuided') }}
@@ -359,10 +372,11 @@
                     v-model="learningQuestion"
                     rows="3"
                     :placeholder="t('problemDetail.askInputPlaceholder')"
+                    data-testid="exploration-question-input"
                     required
                   ></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()">
+                <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()" data-testid="submit-exploration-question">
                   {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
                 </button>
               </form>

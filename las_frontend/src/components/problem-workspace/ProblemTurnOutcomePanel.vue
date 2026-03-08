@@ -1,5 +1,5 @@
 <template>
-  <section class="card turn-outcome-card">
+  <section class="card turn-outcome-card" data-testid="turn-outcome-panel">
     <h2>{{ t('problemDetail.turnResultTitle') }}</h2>
     <p class="section-subtitle">
       {{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}
@@ -55,24 +55,24 @@
     </template>
 
     <template v-else>
-      <div v-if="latestQA" class="turn-outcome-body">
-        <p v-if="latestQA.answer_type" class="meta-line">
-          <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(latestQA.answer_type) }}
+      <div v-if="latestQa" class="turn-outcome-body">
+        <p v-if="latestQa.answer_type" class="meta-line">
+          <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(latestQa.answer_type) }}
         </p>
         <div class="qa-block">
           <strong>{{ t('problemDetail.answerLabel') }}</strong>
-          <p>{{ latestQA.answer }}</p>
+          <p>{{ latestQa.answer }}</p>
         </div>
-        <p v-if="latestQA.answered_concepts?.length" class="meta-line">
-          <strong>{{ t('problemDetail.answeredConcepts') }}:</strong> {{ latestQA.answered_concepts.join(' / ') }}
+        <p v-if="latestQa.answered_concepts?.length" class="meta-line">
+          <strong>{{ t('problemDetail.answeredConcepts') }}:</strong> {{ latestQa.answered_concepts.join(' / ') }}
         </p>
-        <p v-if="latestQA.related_concepts?.length" class="meta-line">
-          <strong>{{ t('problemDetail.relatedConcepts') }}:</strong> {{ latestQA.related_concepts.join(' / ') }}
+        <p v-if="latestQa.related_concepts?.length" class="meta-line">
+          <strong>{{ t('problemDetail.relatedConcepts') }}:</strong> {{ latestQa.related_concepts.join(' / ') }}
         </p>
-        <div v-if="latestQA.next_learning_actions?.length" class="artifact-block">
+        <div v-if="latestQa.next_learning_actions?.length" class="artifact-block">
           <strong>{{ t('problemDetail.nextActionTitle') }}</strong>
           <ul class="artifact-actions">
-            <li v-for="(action, index) in latestQA.next_learning_actions" :key="`${index}-${action}`">{{ action }}</li>
+            <li v-for="(action, index) in latestQa.next_learning_actions" :key="`${index}-${action}`">{{ action }}</li>
           </ul>
         </div>
         <div v-if="displayPathSuggestions.length" class="artifact-block">
@@ -93,13 +93,13 @@
         </div>
         <p class="meta-line">
           <strong>{{ t('problemDetail.returnToMainPath') }}:</strong>
-          {{ latestQA.return_to_main_path_hint ? t('problemDetail.returnToMainPathYes') : t('problemDetail.returnToMainPathNo') }}
+          {{ latestQa.return_to_main_path_hint ? t('problemDetail.returnToMainPathYes') : t('problemDetail.returnToMainPathNo') }}
         </p>
-        <p v-if="latestQA.accepted_concepts?.length" class="accent-line">
-          <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ latestQA.accepted_concepts.join(' / ') }}
+        <p v-if="latestQa.accepted_concepts?.length" class="accent-line">
+          <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ latestQa.accepted_concepts.join(' / ') }}
         </p>
-        <p v-if="latestQA.pending_concepts?.length" class="pending-line">
-          <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ latestQA.pending_concepts.join(' / ') }}
+        <p v-if="latestQa.pending_concepts?.length" class="pending-line">
+          <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ latestQa.pending_concepts.join(' / ') }}
         </p>
       </div>
       <p v-else class="empty">{{ t('problemDetail.noTurnResultExploration') }}</p>
@@ -115,7 +115,7 @@ const props = defineProps<{
   learningMode: 'socratic' | 'exploration'
   latestResponse?: any | null
   latestFeedback?: any | null
-  latestQA?: any | null
+  latestQa?: any | null
 }>()
 
 const { t } = useI18n()
@@ -148,10 +148,10 @@ const formatPathSuggestionType = (pathType: string | undefined | null) => {
 }
 
 const displayPathSuggestions = computed(() => {
-  if (props.latestQA?.derived_path_candidates?.length) {
-    return props.latestQA.derived_path_candidates
+  if (props.latestQa?.derived_path_candidates?.length) {
+    return props.latestQa.derived_path_candidates
   }
-  return props.latestQA?.path_suggestions || []
+  return props.latestQa?.path_suggestions || []
 })
 </script>
 
