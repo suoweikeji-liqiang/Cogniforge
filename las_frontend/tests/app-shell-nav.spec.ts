@@ -41,6 +41,7 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await authenticate(page, request)
   await page.goto('/dashboard')
 
+  await expect(page.getByTestId('resume-dashboard')).toBeVisible()
   const primaryNav = page.getByTestId('primary-nav')
   await expect(primaryNav.getByTestId('primary-nav-item-home')).toBeVisible()
   await expect(primaryNav.getByTestId('primary-nav-item-problems')).toBeVisible()
@@ -56,7 +57,12 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(secondaryNav.getByTestId('secondary-nav-item-srs-review')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-practice')).toBeVisible()
   await expect(secondaryNav.getByTestId('secondary-nav-item-chat')).toBeVisible()
+  await expect(page.getByTestId('dashboard-focus-card')).toBeVisible()
+  await expect(page.getByTestId('dashboard-problems-panel')).toBeVisible()
+  await expect(page.getByTestId('dashboard-review-panel')).toBeVisible()
+  await expect(page.getByTestId('dashboard-model-cards-panel')).toBeVisible()
   await expect(page.locator('.actions-grid a[href="/chat"]')).toHaveCount(0)
+  await expect(page.locator('.actions-grid a[href="/practice"]')).toHaveCount(0)
   await expect(page.getByTestId('dashboard-exploration-action')).toHaveAttribute('href', /\/problems/)
 })
 
