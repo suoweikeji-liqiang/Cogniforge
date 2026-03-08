@@ -29,11 +29,18 @@ class User(Base):
     practice_submissions = relationship("PracticeSubmission", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
     mastery_events = relationship("ProblemMasteryEvent", back_populates="user", cascade="all, delete-orphan")
+    problem_turns = relationship("ProblemTurn", back_populates="user", cascade="all, delete-orphan")
     concept_candidates = relationship(
         "ProblemConceptCandidate",
         back_populates="user",
         cascade="all, delete-orphan",
         foreign_keys="ProblemConceptCandidate.user_id",
+    )
+    path_candidates = relationship(
+        "ProblemPathCandidate",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="ProblemPathCandidate.user_id",
     )
     concepts = relationship("Concept", back_populates="user", cascade="all, delete-orphan")
     learning_events = relationship("LearningEvent", back_populates="user", cascade="all, delete-orphan")
@@ -47,6 +54,7 @@ class Problem(Base):
     title = Column(String(500), nullable=False)
     description = Column(Text)
     associated_concepts = Column(JSON, default=list)
+    learning_mode = Column(String(20), default="socratic")
     status = Column(String(50), default="new")
     embedding = Column(EmbeddingVector(settings.MODEL_CARD_EMBEDDING_DIMENSIONS))
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -54,9 +62,11 @@ class Problem(Base):
     
     user = relationship("User", back_populates="problems")
     responses = relationship("ProblemResponse", back_populates="problem", cascade="all, delete-orphan")
-    learning_path = relationship("LearningPath", back_populates="problem", uselist=False, cascade="all, delete-orphan")
+    turns = relationship("ProblemTurn", back_populates="problem", cascade="all, delete-orphan")
+    learning_paths = relationship("LearningPath", back_populates="problem", cascade="all, delete-orphan")
     mastery_events = relationship("ProblemMasteryEvent", back_populates="problem", cascade="all, delete-orphan")
     concept_candidates = relationship("ProblemConceptCandidate", back_populates="problem", cascade="all, delete-orphan")
+    path_candidates = relationship("ProblemPathCandidate", back_populates="problem", cascade="all, delete-orphan")
     learning_events = relationship("LearningEvent", back_populates="problem", cascade="all, delete-orphan")
 
 
@@ -67,22 +77,50 @@ class ProblemResponse(Base):
     problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False)
     user_response = Column(Text, nullable=False)
     system_feedback = Column(Text)
+    learning_mode = Column(String(20), nullable=False, default="socratic")
+    mode_metadata = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     problem = relationship("Problem", back_populates="responses")
+
+
+class ProblemTurn(Base):
+    __tablename__ = "problem_turns"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    learning_mode = Column(String(20), nullable=False, default="socratic", index=True)
+    step_index = Column(Integer, nullable=True)
+    user_text = Column(Text, nullable=True)
+    assistant_text = Column(Text, nullable=True)
+    mode_metadata = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="problem_turns")
+    problem = relationship("Problem", back_populates="turns")
 
 
 class LearningPath(Base):
     __tablename__ = "learning_paths"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, unique=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=True)
+    kind = Column(String(20), nullable=False, default="main", index=True)
+    parent_path_id = Column(String(36), ForeignKey("learning_paths.id"), nullable=True, index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
+    return_step_id = Column(Integer, nullable=True)
+    branch_reason = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
     path_data = Column(JSON)
     current_step = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    problem = relationship("Problem", back_populates="learning_path")
+    problem = relationship("Problem", back_populates="learning_paths")
+    parent_path = relationship("LearningPath", remote_side=[id], backref="child_paths", foreign_keys=[parent_path_id])
+    source_turn = relationship("ProblemTurn", foreign_keys=[source_turn_id])
 
 
 class Concept(Base):
@@ -173,8 +211,11 @@ class ProblemConceptCandidate(Base):
     concept_text = Column(String(120), nullable=False)
     normalized_text = Column(String(120), nullable=False, index=True)
     source = Column(String(30), nullable=False, default="response")
+    learning_mode = Column(String(20), nullable=False, default="socratic", index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
     confidence = Column(Float, nullable=False, default=0.0)
     status = Column(String(20), nullable=False, default="pending", index=True)
+    merged_into_concept = Column(String(120), nullable=True)
     evidence_snippet = Column(Text, nullable=True)
     reviewer_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -183,6 +224,32 @@ class ProblemConceptCandidate(Base):
     user = relationship("User", back_populates="concept_candidates", foreign_keys=[user_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     problem = relationship("Problem", back_populates="concept_candidates")
+    source_turn = relationship("ProblemTurn")
+
+
+class ProblemPathCandidate(Base):
+    __tablename__ = "problem_path_candidates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    learning_mode = Column(String(20), nullable=False, default="socratic", index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
+    step_index = Column(Integer, nullable=True)
+    path_type = Column(String(30), nullable=False, default="branch_deep_dive", index=True)
+    title = Column(String(200), nullable=False)
+    normalized_title = Column(String(200), nullable=False, index=True)
+    reason = Column(Text, nullable=True)
+    recommended_insertion = Column(String(40), nullable=False, default="save_as_side_branch")
+    selected_insertion = Column(String(40), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    evidence_snippet = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", back_populates="path_candidates", foreign_keys=[user_id])
+    problem = relationship("Problem", back_populates="path_candidates")
+    source_turn = relationship("ProblemTurn")
 
 
 class LearningEvent(Base):
@@ -192,6 +259,7 @@ class LearningEvent(Base):
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     problem_id = Column(String(36), ForeignKey("problems.id"), nullable=True, index=True)
     event_type = Column(String(50), nullable=False, index=True)
+    learning_mode = Column(String(20), nullable=True, index=True)
     trace_id = Column(String(36), nullable=True, index=True)
     payload_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

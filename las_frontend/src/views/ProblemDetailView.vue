@@ -1,5 +1,5 @@
 <template>
-  <div class="problem-detail">
+  <div class="problem-detail" data-testid="problem-detail-workspace">
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
 
     <template v-else-if="problem">
@@ -9,6 +9,7 @@
         <p>{{ problem.description }}</p>
         <div class="problem-meta">
           <span class="status" :class="problem.status">{{ problem.status }}</span>
+          <span class="mode-badge">{{ t('problemDetail.currentMode') }}: {{ formatLearningMode(learningMode) }}</span>
           <span v-if="totalSteps" class="progress-text">
             {{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps }}
           </span>
@@ -16,6 +17,35 @@
       </div>
 
       <div class="problem-content">
+        <section class="card mode-switch-section">
+          <h2>{{ t('problemDetail.modeSwitchTitle') }}</h2>
+          <p class="section-subtitle">
+            {{ learningMode === 'socratic' ? t('problemDetail.modeSocraticHint') : t('problemDetail.modeExplorationHint') }}
+          </p>
+          <div class="workspace-mode-toggle">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: learningMode === 'socratic' }"
+              :disabled="switchingMode || submitting || askingQuestion"
+              data-testid="mode-switch-socratic"
+              @click="setLearningMode('socratic')"
+            >
+              {{ t('problemDetail.modeSocratic') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: learningMode === 'exploration' }"
+              :disabled="switchingMode || submitting || askingQuestion"
+              data-testid="mode-switch-exploration"
+              @click="setLearningMode('exploration')"
+            >
+              {{ t('problemDetail.modeExploration') }}
+            </button>
+          </div>
+        </section>
+
         <section class="card current-step-section">
           <h2>{{ t('problemDetail.currentStepTitle') }}</h2>
           <div v-if="totalSteps" class="progress-overview">
@@ -23,6 +53,44 @@
             <div class="progress-track">
               <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
             </div>
+          </div>
+
+          <div v-if="learningPath" class="path-structure-panel" data-testid="current-learning-path">
+            <div class="path-structure-head">
+              <span class="mode-badge">{{ t('problemDetail.currentPath') }}: {{ formatLearningPathKind(learningPath.kind) }}</span>
+              <span class="candidate-status">{{ learningPath.title || t('problemDetail.unnamedPath') }}</span>
+              <span
+                v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
+                class="candidate-source"
+              >
+                {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
+              </span>
+            </div>
+            <p v-if="learningPath.branch_reason" class="section-subtitle">{{ learningPath.branch_reason }}</p>
+            <div v-if="allLearningPaths.length > 1" class="path-nav-list">
+              <button
+                v-for="path in allLearningPaths"
+                :key="path.id"
+                type="button"
+                class="btn btn-secondary path-nav-button"
+                :class="{ active: path.is_active }"
+                :disabled="updatingPath"
+                data-testid="learning-path-button"
+                @click="activateLearningPathById(path.id)"
+              >
+                {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
+              </button>
+            </div>
+            <button
+              v-if="canReturnToParent"
+              type="button"
+              class="btn btn-secondary"
+              :disabled="updatingPath"
+              data-testid="return-to-parent-path"
+              @click="returnToParentPath"
+            >
+              {{ t('problemDetail.returnToParentPath') }}
+            </button>
           </div>
 
           <div v-if="currentStep" class="step-card">
@@ -54,6 +122,7 @@
               type="button"
               class="btn btn-primary"
               :disabled="updatingPath"
+              data-testid="mark-step-done"
               @click="updateCurrentStep(completedSteps + 1)"
             >
               {{ t('problemDetail.markStepDone') }}
@@ -75,264 +144,286 @@
           </details>
         </section>
 
-        <section class="card responses-section">
+        <section v-if="learningMode === 'socratic'" class="card responses-section">
           <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
           <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
+          <div class="workspace-stage">
+            <div class="workspace-main-column">
 
-          <form @submit.prevent="submitResponse" class="response-form">
-            <div class="form-group">
-              <label>{{ t('problemDetail.progressInputLabel') }}</label>
-              <textarea
-                v-model="responseText"
-                rows="5"
-                :placeholder="t('problemDetail.progressInputPlaceholder')"
-                required
-              ></textarea>
-            </div>
-            <div class="response-actions">
-              <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
-                {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
-              </button>
-              <button type="submit" class="btn btn-primary" :disabled="submitting">
-                {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
-              </button>
-            </div>
-          </form>
-          <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
-          <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
-            <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
-              {{ t('problemDetail.undoAutoAdvance') }}
-            </button>
-          </div>
-
-          <div v-if="stepHint" class="hint-panel">
-            <h3>{{ t('problemDetail.hintTitle') }}</h3>
-            <p v-if="stepHint.focus"><strong>{{ t('problemDetail.hintFocus') }}:</strong> {{ stepHint.focus }}</p>
-            <ul v-if="stepHint.next_actions?.length">
-              <li v-for="(item, idx) in stepHint.next_actions" :key="`${idx}-${item}`">{{ item }}</li>
-            </ul>
-            <p v-if="stepHint.starter"><strong>{{ t('problemDetail.hintStarter') }}:</strong> {{ stepHint.starter }}</p>
-          </div>
-
-          <div v-if="latestFeedback" class="system-feedback">
-            <h3>{{ t('problemDetail.latestFeedbackTitle') }}</h3>
-            <p v-if="latestFeedback.correctness">
-              <strong>{{ t('feedback.correctness') }}:</strong> {{ latestFeedback.correctness }}
-            </p>
-            <p v-if="latestFeedback.mastery_score !== undefined">
-              <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ latestFeedback.mastery_score }}
-              · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(latestFeedback.confidence) }}
-              · <strong>{{ t('problemDetail.passStage') }}:</strong>
-              {{ latestFeedback.pass_stage ? t('problemDetail.passStageYes') : t('problemDetail.passStageNo') }}
-            </p>
-            <p v-if="latestFeedback.misconceptions?.length">
-              <strong>{{ t('feedback.misconceptions') }}:</strong> {{ latestFeedback.misconceptions.join(' / ') }}
-            </p>
-            <p v-if="latestFeedback.suggestions?.length">
-              <strong>{{ t('feedback.suggestions') }}:</strong> {{ latestFeedback.suggestions.join(' / ') }}
-            </p>
-            <p v-if="latestFeedback.next_question">
-              <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ latestFeedback.next_question }}
-            </p>
-            <p v-if="latestFeedback.decision_reason">
-              <strong>{{ t('problemDetail.decisionReason') }}:</strong> {{ latestFeedback.decision_reason }}
-            </p>
-            <p v-if="latestResponse?.accepted_concepts?.length" class="new-concepts-line">
-              <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong>
-              {{ latestResponse.accepted_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestResponse?.pending_concepts?.length" class="pending-concepts-line">
-              <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong>
-              {{ latestResponse.pending_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestResponse?.trace_id || latestResponse?.llm_calls !== undefined" class="ops-meta-line">
-              <strong>{{ t('problemDetail.traceId') }}:</strong> {{ latestResponse?.trace_id || '-' }}
-              · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ latestResponse?.llm_calls ?? '-' }}
-              · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ latestResponse?.llm_latency_ms ?? '-' }}
-            </p>
-            <p v-if="latestResponse?.fallback_reason" class="ops-fallback-line">
-              <strong>{{ t('problemDetail.fallbackReason') }}:</strong> {{ latestResponse.fallback_reason }}
-            </p>
-          </div>
-
-          <details v-if="responses.length" class="history-panel">
-            <summary>{{ t('problemDetail.historyTitle', { count: responses.length }) }}</summary>
-            <div class="responses-list">
-              <div v-for="response in responses" :key="response.id" class="response-item">
-                <div class="user-response">
-                  <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
-                  <p>{{ response.user_response }}</p>
+              <div v-if="socraticQuestion" class="socratic-question-panel" data-testid="socratic-question-panel">
+                <div class="question-head">
+                  <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
+                  <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
                 </div>
-                <div v-if="response.structured_feedback" class="history-feedback">
-                  <p v-if="response.structured_feedback.correctness">
-                    <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
-                  </p>
-                  <p v-if="response.structured_feedback.mastery_score !== undefined">
-                    <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
-                    · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
-                  </p>
-                  <p v-if="response.structured_feedback.suggestions?.length">
-                    <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
-                  </p>
-                  <p v-if="response.structured_feedback.next_question">
-                    <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
-                  </p>
-                  <p v-if="response.accepted_concepts?.length">
-                    <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.accepted_concepts.join(' / ') }}
-                  </p>
-                  <p v-if="response.pending_concepts?.length">
-                    <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ response.pending_concepts.join(' / ') }}
-                  </p>
-                  <p v-if="response.trace_id || response.llm_calls !== undefined" class="ops-meta-line">
-                    <strong>{{ t('problemDetail.traceId') }}:</strong> {{ response.trace_id || '-' }}
-                    · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ response.llm_calls ?? '-' }}
-                    · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ response.llm_latency_ms ?? '-' }}
-                  </p>
-                </div>
+                <p class="question-copy">{{ socraticQuestion.question }}</p>
               </div>
+
+              <form @submit.prevent="submitResponse" class="response-form">
+                <div class="form-group">
+                  <label>{{ t('problemDetail.progressInputLabel') }}</label>
+                  <textarea
+                    v-model="responseText"
+                    rows="5"
+                    :placeholder="t('problemDetail.progressInputPlaceholder')"
+                    data-testid="socratic-response-input"
+                    required
+                  ></textarea>
+                </div>
+                <div class="response-actions">
+                  <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
+                    {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
+                  </button>
+                  <button type="submit" class="btn btn-primary" :disabled="submitting" data-testid="submit-socratic-response">
+                    {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
+                  </button>
+                </div>
+              </form>
+              <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
+              <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
+                <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
+                  {{ t('problemDetail.undoAutoAdvance') }}
+                </button>
+              </div>
+
+              <div v-if="stepHint" class="hint-panel">
+                <h3>{{ t('problemDetail.hintTitle') }}</h3>
+                <p v-if="stepHint.focus"><strong>{{ t('problemDetail.hintFocus') }}:</strong> {{ stepHint.focus }}</p>
+                <ul v-if="stepHint.next_actions?.length">
+                  <li v-for="(item, idx) in stepHint.next_actions" :key="`${idx}-${item}`">{{ item }}</li>
+                </ul>
+                <p v-if="stepHint.starter"><strong>{{ t('problemDetail.hintStarter') }}:</strong> {{ stepHint.starter }}</p>
+              </div>
+
+              <details v-if="responses.length" class="history-panel">
+                <summary>{{ t('problemDetail.historyTitle', { count: responses.length }) }}</summary>
+                <div class="responses-list">
+                  <div v-for="response in responses" :key="response.id" class="response-item">
+                    <div class="user-response">
+                      <p class="mode-line">
+                        <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
+                      </p>
+                      <p v-if="response.question_kind" class="mode-line">
+                        <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(response.question_kind) }}
+                      </p>
+                      <p v-if="response.socratic_question" class="mode-line">
+                        <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ response.socratic_question }}
+                      </p>
+                      <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
+                      <p>{{ response.user_response }}</p>
+                    </div>
+                    <div v-if="response.structured_feedback" class="history-feedback">
+                      <p v-if="response.structured_feedback.correctness">
+                        <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
+                      </p>
+                      <p v-if="response.structured_feedback.mastery_score !== undefined">
+                        <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
+                        · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
+                      </p>
+                      <p v-if="response.structured_feedback.suggestions?.length">
+                        <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
+                      </p>
+                      <p v-if="response.structured_feedback.next_question">
+                        <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
+                      </p>
+                      <p v-if="response.accepted_concepts?.length">
+                        <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.accepted_concepts.join(' / ') }}
+                      </p>
+                      <p v-if="response.pending_concepts?.length">
+                        <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ response.pending_concepts.join(' / ') }}
+                      </p>
+                      <p v-if="response.trace_id || response.llm_calls !== undefined" class="ops-meta-line">
+                        <strong>{{ t('problemDetail.traceId') }}:</strong> {{ response.trace_id || '-' }}
+                        · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ response.llm_calls ?? '-' }}
+                        · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ response.llm_latency_ms ?? '-' }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
             </div>
-          </details>
-          <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
+            <div class="workspace-side-column workspace-side-stack">
+              <ProblemTurnOutcomePanel
+                :learning-mode="learningMode"
+                :latest-response="latestResponse"
+                :latest-feedback="latestFeedback"
+                :latest-qa="latestQA"
+              />
+              <ProblemDerivedConceptsPanel
+                :candidates="conceptCandidates"
+                :loading="candidateLoading"
+                :current-turn-id="activeConceptTurnId"
+                :merge-targets="conceptMergeTargets"
+                :action-pending-id="candidateSubmittingId"
+                @accept="acceptCandidate"
+                @reject="rejectCandidate"
+                @postpone="postponeCandidate"
+                @merge="mergeCandidate"
+                @rollback="rollbackConcept"
+              />
+            </div>
+          </div>
         </section>
 
-        <section class="card concept-governance-section">
-          <h2>{{ t('problemDetail.conceptGovernanceTitle') }}</h2>
-          <p class="section-subtitle">{{ t('problemDetail.conceptGovernanceSubtitle') }}</p>
+        <section class="card concept-governance-section" data-testid="path-candidates-panel">
+          <h2>{{ t('problemDetail.pathCandidatesTitle') }}</h2>
+          <p class="section-subtitle">{{ t('problemDetail.pathCandidatesSubtitle') }}</p>
 
-          <div v-if="candidateLoading" class="loading">{{ t('common.loading') }}</div>
-          <p v-else-if="!conceptCandidates.length" class="empty">{{ t('problemDetail.noConceptCandidates') }}</p>
+          <div v-if="pathCandidateLoading" class="loading">{{ t('common.loading') }}</div>
+          <p v-else-if="!pathCandidates.length" class="empty">{{ t('problemDetail.noPathCandidates') }}</p>
           <div v-else class="candidate-list">
             <div
-              v-for="candidate in conceptCandidates"
+              v-for="candidate in pathCandidates"
               :key="candidate.id"
               class="candidate-item"
               :class="`candidate-${candidate.status}`"
+              data-testid="path-candidate-card"
             >
               <div class="candidate-head">
-                <strong>{{ candidate.concept_text }}</strong>
-                <span class="candidate-status">{{ candidate.status }}</span>
-                <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
-                <span class="candidate-source">{{ candidate.source }}</span>
+                <strong>{{ candidate.title }}</strong>
+                <span class="candidate-status">{{ formatPathCandidateStatus(candidate.status) }}</span>
+                <span class="candidate-source">{{ formatLearningMode(candidate.learning_mode) }}</span>
+                <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
               </div>
-              <p v-if="candidate.evidence_snippet" class="candidate-evidence">{{ candidate.evidence_snippet }}</p>
-              <div class="candidate-actions">
+              <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
+              <p class="mode-line">
+                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+              </p>
+              <p v-if="candidate.selected_insertion" class="mode-line">
+                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.selected_insertion) }}
+              </p>
+              <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
                 <button
-                  v-if="candidate.status === 'pending'"
                   type="button"
                   class="btn btn-primary"
-                  :disabled="candidateSubmittingId === candidate.id"
-                  @click="acceptCandidate(candidate.id)"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-insert-main"
+                  @click="decidePathCandidate(candidate.id, 'insert_before_current_main')"
                 >
-                  {{ t('problemDetail.acceptCandidate') }}
+                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
                 </button>
                 <button
-                  v-if="candidate.status === 'pending'"
                   type="button"
                   class="btn btn-secondary"
-                  :disabled="candidateSubmittingId === candidate.id"
-                  @click="rejectCandidate(candidate.id)"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-save-branch"
+                  @click="decidePathCandidate(candidate.id, 'save_as_side_branch')"
                 >
-                  {{ t('problemDetail.rejectCandidate') }}
+                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
                 </button>
                 <button
-                  v-if="candidate.status === 'accepted'"
                   type="button"
                   class="btn btn-secondary"
-                  :disabled="candidateSubmittingId === candidate.id"
-                  @click="rollbackConcept(candidate.id, candidate.concept_text)"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-bookmark"
+                  @click="decidePathCandidate(candidate.id, 'bookmark_for_later')"
                 >
-                  {{ t('problemDetail.rollbackConcept') }}
+                  {{ t('problemDetail.pathCandidateBookmark') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="pathCandidateSubmittingId === candidate.id"
+                  data-testid="path-candidate-dismiss"
+                  @click="decidePathCandidate(candidate.id, 'dismiss')"
+                >
+                  {{ t('problemDetail.pathCandidateDismiss') }}
                 </button>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="card qa-section">
+        <section v-if="learningMode === 'exploration'" class="card qa-section">
           <h2>{{ t('problemDetail.askTitle') }}</h2>
           <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
+          <div class="workspace-stage">
+            <div class="workspace-main-column">
 
-          <div class="ask-mode-toggle">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :class="{ active: answerMode === 'direct' }"
-              :disabled="askingQuestion"
-              @click="answerMode = 'direct'"
-            >
-              {{ t('problemDetail.askModeDirect') }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :class="{ active: answerMode === 'guided' }"
-              :disabled="askingQuestion"
-              @click="answerMode = 'guided'"
-            >
-              {{ t('problemDetail.askModeGuided') }}
-            </button>
-          </div>
-
-          <form @submit.prevent="askLearningQuestion" class="response-form">
-            <div class="form-group">
-              <label>{{ t('problemDetail.askInputLabel') }}</label>
-              <textarea
-                v-model="learningQuestion"
-                rows="3"
-                :placeholder="t('problemDetail.askInputPlaceholder')"
-                required
-              ></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()">
-              {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
-            </button>
-          </form>
-
-          <div v-if="latestQA" class="qa-latest">
-            <h3>{{ t('problemDetail.latestAnswerTitle') }}</h3>
-            <p class="qa-meta">{{ t('problemDetail.stepIndicator', { current: latestQA.step_index + 1, total: totalSteps || latestQA.step_index + 1 }) }} · {{ latestQA.step_concept }}</p>
-            <div class="qa-block">
-              <strong>{{ t('problemDetail.questionLabel') }}</strong>
-              <p>{{ latestQA.question }}</p>
-            </div>
-            <div class="qa-block">
-              <strong>{{ t('problemDetail.answerLabel') }}</strong>
-              <p>{{ latestQA.answer }}</p>
-            </div>
-            <p v-if="latestQA.suggested_next_focus" class="qa-focus-line">
-              <strong>{{ t('problemDetail.suggestedNextFocus') }}:</strong> {{ latestQA.suggested_next_focus }}
-            </p>
-            <p v-if="latestQA.accepted_concepts?.length" class="new-concepts-line">
-              <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ latestQA.accepted_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestQA.pending_concepts?.length" class="pending-concepts-line">
-              <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ latestQA.pending_concepts.join(' / ') }}
-            </p>
-            <p v-if="latestQA.trace_id || latestQA.llm_calls !== undefined" class="ops-meta-line">
-              <strong>{{ t('problemDetail.traceId') }}:</strong> {{ latestQA.trace_id || '-' }}
-              · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ latestQA.llm_calls ?? '-' }}
-              · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ latestQA.llm_latency_ms ?? '-' }}
-            </p>
-            <p v-if="latestQA.fallback_reason" class="ops-fallback-line">
-              <strong>{{ t('problemDetail.fallbackReason') }}:</strong> {{ latestQA.fallback_reason }}
-            </p>
-          </div>
-
-          <details v-if="qaHistory.length" class="history-panel">
-            <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
-            <div class="responses-list">
-              <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
-                <div class="qa-block">
-                  <strong>{{ t('problemDetail.questionLabel') }}</strong>
-                  <p>{{ item.question }}</p>
-                </div>
-                <div class="qa-block">
-                  <strong>{{ t('problemDetail.answerLabel') }}</strong>
-                  <p>{{ item.answer }}</p>
-                </div>
+              <div class="ask-mode-toggle">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :class="{ active: answerMode === 'direct' }"
+                  :disabled="askingQuestion"
+                  data-testid="exploration-answer-mode-direct"
+                  @click="answerMode = 'direct'"
+                >
+                  {{ t('problemDetail.askModeDirect') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :class="{ active: answerMode === 'guided' }"
+                  :disabled="askingQuestion"
+                  data-testid="exploration-answer-mode-guided"
+                  @click="answerMode = 'guided'"
+                >
+                  {{ t('problemDetail.askModeGuided') }}
+                </button>
               </div>
+
+              <form @submit.prevent="askLearningQuestion" class="response-form">
+                <div class="form-group">
+                  <label>{{ t('problemDetail.askInputLabel') }}</label>
+                  <textarea
+                    v-model="learningQuestion"
+                    rows="3"
+                    :placeholder="t('problemDetail.askInputPlaceholder')"
+                    data-testid="exploration-question-input"
+                    required
+                  ></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()" data-testid="submit-exploration-question">
+                  {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
+                </button>
+              </form>
+
+              <details v-if="qaHistory.length" class="history-panel">
+                <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
+                <div class="responses-list">
+                  <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
+                    <p class="mode-line">
+                      <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
+                    </p>
+                    <p v-if="item.answer_type" class="mode-line">
+                      <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(item.answer_type) }}
+                    </p>
+                    <div class="qa-block">
+                      <strong>{{ t('problemDetail.questionLabel') }}</strong>
+                      <p>{{ item.question }}</p>
+                    </div>
+                    <div class="qa-block">
+                      <strong>{{ t('problemDetail.answerLabel') }}</strong>
+                      <p>{{ item.answer }}</p>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </div>
-          </details>
+            <div class="workspace-side-column workspace-side-stack">
+              <ProblemTurnOutcomePanel
+                :learning-mode="learningMode"
+                :latest-response="latestResponse"
+                :latest-feedback="latestFeedback"
+                :latest-qa="latestQA"
+              />
+              <ProblemDerivedConceptsPanel
+                :candidates="conceptCandidates"
+                :loading="candidateLoading"
+                :current-turn-id="activeConceptTurnId"
+                :merge-targets="conceptMergeTargets"
+                :action-pending-id="candidateSubmittingId"
+                @accept="acceptCandidate"
+                @reject="rejectCandidate"
+                @postpone="postponeCandidate"
+                @merge="mergeCandidate"
+                @rollback="rollbackConcept"
+              />
+            </div>
+          </div>
         </section>
       </div>
     </template>
@@ -344,34 +435,44 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
+import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 
 const problem = ref<any>(null)
 const learningPath = ref<any>(null)
+const allLearningPaths = ref<any[]>([])
 const responses = ref<any[]>([])
+const learningMode = ref<'socratic' | 'exploration'>('socratic')
 const loading = ref(true)
 const submitting = ref(false)
 const updatingPath = ref(false)
+const switchingMode = ref(false)
 const hintLoading = ref(false)
 const responseText = ref('')
 const autoAdvanceMessage = ref('')
 const canUndoAutoAdvance = ref(false)
 const undoTargetStep = ref<number | null>(null)
 const stepHint = ref<any | null>(null)
+const socraticQuestion = ref<any | null>(null)
 const learningQuestion = ref('')
 const askingQuestion = ref(false)
 const answerMode = ref<'direct' | 'guided'>('direct')
 const qaHistory = ref<any[]>([])
 const conceptCandidates = ref<any[]>([])
+const pathCandidates = ref<any[]>([])
 const candidateLoading = ref(false)
 const candidateSubmittingId = ref<string | null>(null)
+const pathCandidateLoading = ref(false)
+const pathCandidateSubmittingId = ref<string | null>(null)
 const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
 const completedSteps = computed(() => learningPath.value?.current_step || 0)
 const isPathCompleted = computed(() => totalSteps.value > 0 && completedSteps.value >= totalSteps.value)
+const canReturnToParent = computed(() => Boolean(learningPath.value?.parent_path_id))
 const currentStep = computed(() => {
   if (!learningPath.value?.path_data?.length || isPathCompleted.value) return null
   return learningPath.value.path_data[completedSteps.value] || null
@@ -387,12 +488,129 @@ const progressPercent = computed(() => {
 const completedStepList = computed(() => (learningPath.value?.path_data || []).slice(0, completedSteps.value))
 const latestResponse = computed(() => responses.value[responses.value.length - 1] || null)
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
+const activeConceptTurnId = computed(() => {
+  if (learningMode.value === 'exploration') {
+    return latestQA.value?.turn_id || null
+  }
+  return latestResponse.value?.turn_id || null
+})
+const conceptMergeTargets = computed(() => {
+  const values = [
+    ...(problem.value?.associated_concepts || []),
+    ...conceptCandidates.value
+      .filter((candidate) => ['accepted', 'merged'].includes(candidate.status))
+      .map((candidate) => candidate.merged_into_concept || candidate.concept_text),
+  ]
+  const seen = new Set<string>()
+  return values.filter((item) => {
+    const key = String(item || '').trim().toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
 
 const formatConfidence = (value: number | string | undefined | null) => {
   const parsed = Number(value ?? 0)
   if (!Number.isFinite(parsed)) return '0%'
   const percent = Math.round(Math.max(0, Math.min(1, parsed)) * 100)
   return `${percent}%`
+}
+
+const formatLearningMode = (mode: string | undefined | null) => {
+  return mode === 'exploration'
+    ? t('problemDetail.modeExploration')
+    : t('problemDetail.modeSocratic')
+}
+
+const formatLearningPathKind = (kind: string | undefined | null) => {
+  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
+  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
+  if (kind === 'branch') return t('problemDetail.pathKindBranch')
+  return t('problemDetail.pathKindMain')
+}
+
+const formatQuestionKind = (kind: string | undefined | null) => {
+  return kind === 'checkpoint'
+    ? t('problemDetail.questionKindCheckpoint')
+    : t('problemDetail.questionKindProbe')
+}
+
+const formatAnswerType = (answerType: string | undefined | null) => {
+  if (answerType === 'boundary_clarification') return t('problemDetail.answerTypeBoundaryClarification')
+  if (answerType === 'misconception_correction') return t('problemDetail.answerTypeMisconceptionCorrection')
+  if (answerType === 'comparison') return t('problemDetail.answerTypeComparison')
+  if (answerType === 'prerequisite_explanation') return t('problemDetail.answerTypePrerequisiteExplanation')
+  if (answerType === 'worked_example') return t('problemDetail.answerTypeWorkedExample')
+  return t('problemDetail.answerTypeConceptExplanation')
+}
+
+const formatPathSuggestionType = (pathType: string | undefined | null) => {
+  if (pathType === 'prerequisite') return t('problemDetail.pathSuggestionPrerequisite')
+  if (pathType === 'comparison_path') return t('problemDetail.pathSuggestionComparisonPath')
+  return t('problemDetail.pathSuggestionBranchDeepDive')
+}
+
+const formatPathCandidateStatus = (status: string | undefined | null) => {
+  if (status === 'planned') return t('problemDetail.pathCandidateStatusPlanned')
+  if (status === 'bookmarked') return t('problemDetail.pathCandidateStatusBookmarked')
+  if (status === 'dismissed') return t('problemDetail.pathCandidateStatusDismissed')
+  return t('problemDetail.pathCandidateStatusPending')
+}
+
+const formatInsertionBehavior = (action: string | undefined | null) => {
+  if (action === 'insert_before_current_main') return t('problemDetail.insertionInsertBeforeCurrentMain')
+  if (action === 'save_as_side_branch') return t('problemDetail.insertionSaveAsSideBranch')
+  return t('problemDetail.insertionBookmarkForLater')
+}
+
+const normalizeExplorationTurn = (turn: any) => ({
+  turn_id: turn.turn_id || turn.id || null,
+  learning_mode: turn.learning_mode || 'exploration',
+  mode_metadata: turn.mode_metadata || {},
+  question: turn.question ?? turn.user_text ?? '',
+  answer: turn.answer ?? turn.assistant_text ?? '',
+  answer_mode: turn.answer_mode ?? turn.mode_metadata?.answer_mode ?? 'direct',
+  answer_type: turn.answer_type ?? turn.mode_metadata?.answer_type ?? 'concept_explanation',
+  answered_concepts: turn.answered_concepts ?? turn.mode_metadata?.answered_concepts ?? [],
+  related_concepts: turn.related_concepts ?? turn.mode_metadata?.related_concepts ?? [],
+  derived_candidates: turn.derived_candidates ?? turn.mode_metadata?.derived_candidates ?? [],
+  derived_path_candidates: turn.derived_path_candidates ?? turn.mode_metadata?.derived_path_candidates ?? [],
+  next_learning_actions: turn.next_learning_actions ?? turn.mode_metadata?.next_learning_actions ?? [],
+  path_suggestions: turn.path_suggestions ?? turn.mode_metadata?.path_suggestions ?? [],
+  return_to_main_path_hint: turn.return_to_main_path_hint ?? turn.mode_metadata?.return_to_main_path_hint ?? true,
+  step_index: Number(turn.step_index ?? turn.mode_metadata?.step_index ?? 0),
+  step_concept: turn.step_concept ?? turn.mode_metadata?.step_concept ?? problem.value?.title ?? '',
+  suggested_next_focus: turn.suggested_next_focus ?? turn.mode_metadata?.suggested_next_focus ?? null,
+  accepted_concepts: turn.accepted_concepts ?? turn.mode_metadata?.accepted_concepts ?? [],
+  pending_concepts: turn.pending_concepts ?? turn.mode_metadata?.pending_concepts ?? [],
+  trace_id: turn.trace_id,
+  llm_calls: turn.llm_calls,
+  llm_latency_ms: turn.llm_latency_ms,
+  fallback_reason: turn.fallback_reason,
+  created_at: turn.created_at,
+})
+
+const fetchExplorationTurns = async () => {
+  try {
+    const response = await api.get(`/problems/${route.params.id}/turns`, {
+      params: { learning_mode: 'exploration' },
+    })
+    qaHistory.value = (response.data || []).map(normalizeExplorationTurn)
+  } catch (e) {
+    console.error('Failed to fetch exploration turns:', e)
+    qaHistory.value = []
+  }
+}
+
+const fetchSocraticQuestion = async () => {
+  try {
+    const response = await api.get(`/problems/${route.params.id}/socratic-question`)
+    socraticQuestion.value = response.data || null
+  } catch (e) {
+    console.error('Failed to fetch socratic question:', e)
+    socraticQuestion.value = null
+  }
 }
 
 const fetchConceptCandidates = async () => {
@@ -408,28 +626,83 @@ const fetchConceptCandidates = async () => {
   }
 }
 
+const fetchPathCandidates = async () => {
+  pathCandidateLoading.value = true
+  try {
+    const response = await api.get(`/problems/${route.params.id}/path-candidates`)
+    pathCandidates.value = response.data || []
+  } catch (e) {
+    console.error('Failed to fetch path candidates:', e)
+    pathCandidates.value = []
+  } finally {
+    pathCandidateLoading.value = false
+  }
+}
+
 const fetchLearningPath = async () => {
   const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
   learningPath.value = pathRes.data
 }
 
+const fetchLearningPaths = async () => {
+  const response = await api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] }))
+  allLearningPaths.value = response.data || []
+}
+
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, responsesRes, candidatesRes] = await Promise.all([
+    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
+      api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/concept-candidates`).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/path-candidates`).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/turns`, {
+        params: { learning_mode: 'exploration' },
+      }).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/socratic-question`).catch(() => ({ data: null })),
     ])
 
     problem.value = problemRes.data
+    learningMode.value = problemRes.data?.learning_mode || 'socratic'
     learningPath.value = pathRes.data
+    allLearningPaths.value = pathListRes.data || []
     responses.value = responsesRes.data
     conceptCandidates.value = candidatesRes.data || []
+    pathCandidates.value = pathCandidatesRes.data || []
+    qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
+    socraticQuestion.value = socraticRes.data || null
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
     loading.value = false
+  }
+}
+
+const setLearningMode = async (mode: 'socratic' | 'exploration') => {
+  if (switchingMode.value || learningMode.value === mode) return
+
+  const previousMode = learningMode.value
+  learningMode.value = mode
+  if (problem.value) {
+    problem.value.learning_mode = mode
+  }
+
+  switchingMode.value = true
+  try {
+    await api.put(`/problems/${route.params.id}`, { learning_mode: mode })
+    if (mode === 'socratic') {
+      await fetchSocraticQuestion()
+    }
+  } catch (e) {
+    console.error('Failed to switch learning mode:', e)
+    learningMode.value = previousMode
+    if (problem.value) {
+      problem.value.learning_mode = previousMode
+    }
+  } finally {
+    switchingMode.value = false
   }
 }
 
@@ -440,12 +713,17 @@ const submitResponse = async () => {
     const response = await api.post(`/problems/${route.params.id}/responses`, {
       problem_id: route.params.id,
       user_response: responseText.value,
+      learning_mode: learningMode.value,
+      question_kind: socraticQuestion.value?.question_kind,
+      socratic_question: socraticQuestion.value?.question,
     })
     responses.value.push(response.data)
     await Promise.all([
       fetchConceptCandidates(),
+      fetchPathCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
     responseText.value = ''
@@ -467,6 +745,7 @@ const submitResponse = async () => {
     if (problem.value?.status === 'new' && !response.data?.auto_advanced) {
       problem.value.status = 'in-progress'
     }
+    await fetchSocraticQuestion()
   } catch (e) {
     console.error('Failed to submit response:', e)
   } finally {
@@ -483,6 +762,10 @@ const updateCurrentStep = async (nextStep: number) => {
       current_step: nextStep,
     })
     learningPath.value = response.data
+    await fetchLearningPaths()
+    if (learningMode.value === 'socratic') {
+      await fetchSocraticQuestion()
+    }
 
     if (problem.value) {
       if (totalSteps.value > 0 && nextStep >= totalSteps.value) {
@@ -547,15 +830,18 @@ const askLearningQuestion = async () => {
 
   askingQuestion.value = true
   try {
-    const response = await api.post(`/problems/${route.params.id}/ask`, {
+    await api.post(`/problems/${route.params.id}/ask`, {
       question: learningQuestion.value.trim(),
+      learning_mode: learningMode.value,
       answer_mode: answerMode.value,
     })
-    qaHistory.value.unshift(response.data)
     await Promise.all([
       fetchConceptCandidates(),
+      fetchPathCandidates(),
+      fetchExplorationTurns(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
     learningQuestion.value = ''
@@ -574,6 +860,7 @@ const acceptCandidate = async (candidateId: string) => {
       fetchConceptCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
   } catch (e) {
@@ -595,7 +882,39 @@ const rejectCandidate = async (candidateId: string) => {
   }
 }
 
-const rollbackConcept = async (candidateId: string, conceptText: string) => {
+const postponeCandidate = async (candidateId: string) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/postpone`)
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to postpone concept candidate:', e)
+  } finally {
+    candidateSubmittingId.value = null
+  }
+}
+
+const mergeCandidate = async ({ candidateId, targetConcept }: { candidateId: string; targetConcept: string }) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/merge`, {
+      target_concept_text: targetConcept,
+    })
+    await Promise.all([
+      fetchConceptCandidates(),
+      api.get(`/problems/${route.params.id}`).then((res) => {
+        problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
+      }).catch(() => null),
+    ])
+  } catch (e) {
+    console.error('Failed to merge concept candidate:', e)
+  } finally {
+    candidateSubmittingId.value = null
+  }
+}
+
+const rollbackConcept = async ({ candidateId, conceptText }: { candidateId: string; conceptText: string }) => {
   candidateSubmittingId.value = candidateId
   try {
     await api.post(`/problems/${route.params.id}/concepts/rollback`, {
@@ -606,12 +925,65 @@ const rollbackConcept = async (candidateId: string, conceptText: string) => {
       fetchConceptCandidates(),
       api.get(`/problems/${route.params.id}`).then((res) => {
         problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
       }).catch(() => null),
     ])
   } catch (e) {
     console.error('Failed to rollback concept:', e)
   } finally {
     candidateSubmittingId.value = null
+  }
+}
+
+const decidePathCandidate = async (candidateId: string, action: string) => {
+  pathCandidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/path-candidates/${candidateId}/decide`, { action })
+    await Promise.all([
+      fetchPathCandidates(),
+      fetchLearningPath(),
+      fetchLearningPaths(),
+    ])
+  } catch (e) {
+    console.error('Failed to decide path candidate:', e)
+  } finally {
+    pathCandidateSubmittingId.value = null
+  }
+}
+
+const activateLearningPathById = async (pathId: string) => {
+  if (updatingPath.value) return
+
+  updatingPath.value = true
+  try {
+    const response = await api.post(`/problems/${route.params.id}/learning-paths/${pathId}/activate`)
+    learningPath.value = response.data
+    await Promise.all([
+      fetchLearningPaths(),
+      learningMode.value === 'socratic' ? fetchSocraticQuestion() : Promise.resolve(),
+    ])
+  } catch (e) {
+    console.error('Failed to activate learning path:', e)
+  } finally {
+    updatingPath.value = false
+  }
+}
+
+const returnToParentPath = async () => {
+  if (updatingPath.value || !canReturnToParent.value) return
+
+  updatingPath.value = true
+  try {
+    const response = await api.post(`/problems/${route.params.id}/learning-path/return`)
+    learningPath.value = response.data
+    await Promise.all([
+      fetchLearningPaths(),
+      learningMode.value === 'socratic' ? fetchSocraticQuestion() : Promise.resolve(),
+    ])
+  } catch (e) {
+    console.error('Failed to return to parent learning path:', e)
+  } finally {
+    updatingPath.value = false
   }
 }
 
@@ -655,9 +1027,47 @@ onMounted(fetchProblem)
   margin-top: 0.75rem;
 }
 
+.mode-badge {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.1);
+  color: #bfdbfe;
+}
+
 .problem-content {
   display: grid;
   gap: 1.5rem;
+}
+
+.workspace-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.workspace-stage {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-main-column {
+  min-width: 0;
+}
+
+.workspace-side-column {
+  min-width: 0;
+}
+
+.workspace-side-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-mode-toggle .btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .card h2 {
@@ -744,6 +1154,33 @@ onMounted(fetchProblem)
   font-weight: 600;
 }
 
+.path-structure-panel {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.path-structure-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.path-nav-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.75rem;
+}
+
+.path-nav-button.active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .completed-panel {
   margin-top: 1rem;
 }
@@ -788,6 +1225,39 @@ onMounted(fetchProblem)
 
 .response-form {
   margin-bottom: 1rem;
+}
+
+.socratic-question-panel {
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.question-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.question-copy {
+  margin: 0;
+  color: var(--text);
+  white-space: pre-wrap;
 }
 
 .response-actions {
@@ -867,6 +1337,40 @@ onMounted(fetchProblem)
   margin-top: 0.55rem;
 }
 
+.qa-actions-block {
+  margin-top: 0.75rem;
+}
+
+.qa-actions-block ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.qa-actions-block li + li {
+  margin-top: 0.25rem;
+}
+
+.path-suggestion-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+}
+
+.path-suggestion-item {
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.path-suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
 .qa-block p {
   margin-top: 0.25rem;
   white-space: pre-wrap;
@@ -875,6 +1379,12 @@ onMounted(fetchProblem)
 .qa-focus-line {
   margin-top: 0.55rem;
   color: var(--text-muted);
+}
+
+.mode-line {
+  margin-bottom: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 .system-feedback {
@@ -1000,6 +1510,26 @@ onMounted(fetchProblem)
 
 .candidate-accepted {
   border-color: rgba(34, 197, 94, 0.35);
+}
+
+.candidate-planned {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.candidate-bookmarked {
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.candidate-dismissed {
+  border-color: rgba(148, 163, 184, 0.28);
+  opacity: 0.8;
+}
+
+@media (min-width: 980px) {
+  .workspace-stage {
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+    align-items: start;
+  }
 }
 
 .status {

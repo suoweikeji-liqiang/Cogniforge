@@ -49,6 +49,8 @@ async def test_problem_response_records_mastery_and_events(client, db_session):
     )
     assert response.status_code == 200
     body = response.json()
+    assert body["learning_mode"] == "socratic"
+    assert body["mode_metadata"]["turn_source"] == "response"
     assert body["trace_id"]
     assert body["llm_calls"] >= 1
     assert "mastery_score" in body["structured_feedback"]
@@ -68,7 +70,237 @@ async def test_problem_response_records_mastery_and_events(client, db_session):
             LearningEvent.event_type == "problem_response_evaluated",
         )
     )
-    assert event_result.scalar_one_or_none() is not None
+    event = event_result.scalar_one_or_none()
+    assert event is not None
+    assert event.learning_mode == "socratic"
+
+
+@pytest.mark.asyncio
+async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client, db_session):
+    from app.models.entities.user import ProblemTurn
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Mode switch")
+
+    update_response = await client.put(
+        f"/api/problems/{problem['id']}",
+        json={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["learning_mode"] == "exploration"
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What concept should I study next?",
+            "learning_mode": "exploration",
+            "answer_mode": "guided",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    ask_body = ask_response.json()
+    assert ask_body["learning_mode"] == "exploration"
+    assert ask_body["mode_metadata"]["turn_source"] == "ask"
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={
+            "problem_id": problem["id"],
+            "user_response": "Here is my attempted answer.",
+            "learning_mode": "socratic",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    response_body = response.json()
+    assert response_body["learning_mode"] == "socratic"
+
+    turns_response = await client.get(
+        f"/api/problems/{problem['id']}/turns",
+        headers=headers,
+    )
+    assert turns_response.status_code == 200
+    turns = turns_response.json()
+    assert len(turns) >= 2
+    assert any(item["learning_mode"] == "exploration" for item in turns)
+    assert any(item["learning_mode"] == "socratic" for item in turns)
+
+    exploration_turns = await client.get(
+        f"/api/problems/{problem['id']}/turns",
+        params={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert exploration_turns.status_code == 200
+    assert all(item["learning_mode"] == "exploration" for item in exploration_turns.json())
+
+    turn_rows = await db_session.execute(
+        select(ProblemTurn).where(ProblemTurn.problem_id == problem["id"])
+    )
+    stored_turns = turn_rows.scalars().all()
+    assert len(stored_turns) >= 2
+    assert any(turn.learning_mode == "exploration" for turn in stored_turns)
+    assert any(turn.learning_mode == "socratic" for turn in stored_turns)
+
+
+@pytest.mark.asyncio
+async def test_socratic_question_endpoint_returns_probe_by_default(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Question protocol")
+
+    async def fake_generate_question(*args, **kwargs):
+        return "What mechanism explains the first step?"
+
+    monkeypatch.setattr(model_os_service, "generate_socratic_question", fake_generate_question)
+
+    response = await client.get(
+        f"/api/problems/{problem['id']}/socratic-question",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["learning_mode"] == "socratic"
+    assert body["question_kind"] == "probe"
+    assert body["question"] == "What mechanism explains the first step?"
+    assert body["mode_metadata"]["step_index"] == 0
+    assert body["llm_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_probe_response_never_triggers_advancement(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Probe response")
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": "correct",
+            "misconceptions": [],
+            "suggestions": ["name the causal link explicitly"],
+            "next_question": "What evidence would confirm that link?",
+            "mastery_score": 92,
+            "dimension_scores": {"accuracy": 92, "completeness": 90, "transfer": 88, "rigor": 89},
+            "confidence": 0.93,
+            "pass_stage": True,
+            "decision_reason": "Understanding looks strong but this was only a probe.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "Here is my first answer."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["question_kind"] == "probe"
+    assert body["decision"]["progression_ran"] is False
+    assert body["decision"]["advance"] is False
+    assert body["auto_advanced"] is False
+    assert body["follow_up"]["needed"] is True
+    assert body["follow_up"]["question_kind"] == "checkpoint"
+
+    path_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert path_response.status_code == 200
+    assert path_response.json()["current_step"] == 0
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_response_can_advance_after_probe(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Checkpoint response")
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": "correct",
+            "misconceptions": [],
+            "suggestions": ["keep the explanation compact"],
+            "next_question": "What tradeoff matters most next?",
+            "mastery_score": 90,
+            "dimension_scores": {"accuracy": 90, "completeness": 88, "transfer": 87, "rigor": 86},
+            "confidence": 0.9,
+            "pass_stage": True,
+            "decision_reason": "Stable understanding demonstrated.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    first_response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "First answer."},
+        headers=headers,
+    )
+    assert first_response.status_code == 200
+    assert first_response.json()["question_kind"] == "probe"
+    assert first_response.json()["auto_advanced"] is False
+
+    second_response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "Second answer."},
+        headers=headers,
+    )
+    assert second_response.status_code == 200
+    second_body = second_response.json()
+    assert second_body["question_kind"] == "checkpoint"
+    assert second_body["decision"]["progression_ran"] is True
+    assert second_body["decision"]["advance"] is True
+    assert second_body["auto_advanced"] is True
+    assert second_body["new_current_step"] == 1
+    assert second_body["follow_up"]["needed"] is False
+
+    responses = await client.get(
+        f"/api/problems/{problem['id']}/responses",
+        headers=headers,
+    )
+    assert responses.status_code == 200
+    history = responses.json()
+    assert history[0]["question_kind"] == "probe"
+    assert history[1]["question_kind"] == "checkpoint"
+    assert history[1]["decision"]["progression_ran"] is True
+
+    path_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert path_response.status_code == 200
+    assert path_response.json()["current_step"] == 1
+
+
+@pytest.mark.asyncio
+async def test_learning_step_hint_still_works_after_mode_switch(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Hint mode switch")
+
+    update_response = await client.put(
+        f"/api/problems/{problem['id']}",
+        json={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+
+    hint_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path/hint",
+        headers=headers,
+    )
+    assert hint_response.status_code == 200
+    hint_body = hint_response.json()
+    assert "step_index" in hint_body
+    assert "structured_hint" in hint_body
 
 
 @pytest.mark.asyncio
@@ -200,6 +432,8 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
     )
     assert ask_response.status_code == 200
     ask_body = ask_response.json()
+    assert ask_body["learning_mode"] == "exploration"
+    assert ask_body["mode_metadata"]["turn_source"] == "ask"
     assert ask_body["trace_id"]
     assert ask_body["llm_calls"] >= 1
     assert "suggested_next_focus" in ask_body
@@ -214,7 +448,9 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
             LearningEvent.event_type == "problem_inline_qa",
         )
     )
-    assert events_result.scalar_one_or_none() is not None
+    event = events_result.scalar_one_or_none()
+    assert event is not None
+    assert event.learning_mode == "exploration"
 
     candidates_response = await client.get(
         f"/api/problems/{problem['id']}/concept-candidates",
@@ -222,7 +458,333 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
         headers=headers,
     )
     assert candidates_response.status_code == 200
-    assert any(item["source"] == "ask" for item in candidates_response.json())
+    assert any(
+        item["source"] == "ask"
+        and item["learning_mode"] == "exploration"
+        and item["source_turn_id"] is not None
+        for item in candidates_response.json()
+    )
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_returns_structured_exploration_artifacts(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Exploration artifacts")
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "Model Predictive Control depends on a state-space model and uses "
+            "receding horizon optimization to handle constraints."
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Model Predictive Control",
+            "State-space model",
+            "Receding horizon optimization",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What should I learn before Model Predictive Control?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["learning_mode"] == "exploration"
+    assert body["answer_type"] == "prerequisite_explanation"
+    assert "Model Predictive Control" in body["answered_concepts"]
+    assert "State-space model" in body["related_concepts"]
+    assert len(body["next_learning_actions"]) >= 2
+    assert body["path_suggestions"]
+    assert body["path_suggestions"][0]["type"] == "prerequisite"
+    assert body["return_to_main_path_hint"] is False
+    assert body["derived_candidates"]
+    assert any(item["name"] == "Model Predictive Control" for item in body["derived_candidates"])
+    assert body["mode_metadata"]["answer_type"] == "prerequisite_explanation"
+    assert body["mode_metadata"]["path_suggestions"][0]["type"] == "prerequisite"
+
+    turns_response = await client.get(
+        f"/api/problems/{problem['id']}/turns",
+        params={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert turns_response.status_code == 200
+    turns = turns_response.json()
+    assert turns
+    latest_turn = turns[0]
+    assert latest_turn["mode_metadata"]["answer_type"] == "prerequisite_explanation"
+    assert latest_turn["mode_metadata"]["answered_concepts"][0] == "Model Predictive Control"
+    assert latest_turn["mode_metadata"]["return_to_main_path_hint"] is False
+
+
+@pytest.mark.asyncio
+async def test_problem_response_generates_path_candidates_in_socratic_mode(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Socratic path candidates")
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": "partially correct",
+            "misconceptions": ["Missing prerequisite foundation"],
+            "suggestions": ["Compare the current concept with its prerequisite"],
+            "next_question": "What is the difference between the prerequisite and this concept?",
+            "mastery_score": 52,
+            "dimension_scores": {"accuracy": 52, "completeness": 50, "transfer": 48, "rigor": 49},
+            "confidence": 0.61,
+            "pass_stage": False,
+            "decision_reason": "The learner still lacks foundation.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "I am still mixing up the prerequisite."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["learning_mode"] == "socratic"
+    assert body["derived_path_candidates"]
+    assert body["derived_path_candidates"][0]["type"] == "prerequisite"
+    assert body["derived_path_candidates"][0]["source_turn_id"] == body["turn_id"]
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/path-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    candidates = candidates_response.json()
+    assert any(
+        item["learning_mode"] == "socratic"
+        and item["source_turn_id"] == body["turn_id"]
+        for item in candidates
+    )
+
+
+@pytest.mark.asyncio
+async def test_problem_path_candidates_from_exploration_can_be_decided(client, db_session, monkeypatch):
+    from app.models.entities.user import ProblemPathCandidate
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Exploration path candidates")
+
+    async def fake_answer(*args, **kwargs):
+        return "Model Predictive Control depends on state-space modeling first."
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Model Predictive Control",
+            "State-space model",
+            "Constraint handling",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What should I learn before Model Predictive Control?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["derived_path_candidates"]
+    candidate = body["derived_path_candidates"][0]
+    assert candidate["type"] == "prerequisite"
+    assert candidate["recommended_insertion"] == "insert_before_current_main"
+    assert candidate["source_turn_id"] == body["turn_id"]
+
+    decision_response = await client.post(
+        f"/api/problems/{problem['id']}/path-candidates/{candidate['id']}/decide",
+        json={"action": "insert_before_current_main"},
+        headers=headers,
+    )
+    assert decision_response.status_code == 200
+    decision_body = decision_response.json()
+    assert decision_body["candidate"]["status"] == "planned"
+    assert decision_body["candidate"]["selected_insertion"] == "insert_before_current_main"
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/path-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    candidates = candidates_response.json()
+    assert any(
+        item["id"] == candidate["id"]
+        and item["learning_mode"] == "exploration"
+        and item["status"] == "planned"
+        for item in candidates
+    )
+
+    result = await db_session.execute(
+        select(ProblemPathCandidate).where(ProblemPathCandidate.id == candidate["id"])
+    )
+    stored = result.scalar_one()
+    assert stored.status == "planned"
+    assert stored.selected_insertion == "insert_before_current_main"
+
+
+@pytest.mark.asyncio
+async def test_save_as_branch_creates_navigable_learning_path_and_return_flow(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Branch navigation")
+
+    async def fake_answer(*args, **kwargs):
+        return "Model Predictive Control depends on state-space modeling first."
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Model Predictive Control",
+            "State-space model",
+            "Constraint handling",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What should I learn before Model Predictive Control?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    candidate = ask_response.json()["derived_path_candidates"][0]
+
+    decide_response = await client.post(
+        f"/api/problems/{problem['id']}/path-candidates/{candidate['id']}/decide",
+        json={"action": "save_as_side_branch"},
+        headers=headers,
+    )
+    assert decide_response.status_code == 200
+    assert decide_response.json()["candidate"]["status"] == "planned"
+    assert decide_response.json()["candidate"]["selected_insertion"] == "save_as_side_branch"
+
+    active_path = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert active_path.status_code == 200
+    active_body = active_path.json()
+    assert active_body["kind"] == "prerequisite"
+    assert active_body["parent_path_id"] is not None
+    assert active_body["return_step_id"] == 0
+    assert active_body["is_active"] is True
+
+    path_list = await client.get(
+        f"/api/problems/{problem['id']}/learning-paths",
+        headers=headers,
+    )
+    assert path_list.status_code == 200
+    paths = path_list.json()
+    assert any(item["kind"] == "main" for item in paths)
+    assert any(item["kind"] == "prerequisite" for item in paths)
+    main_path = next(item for item in paths if item["kind"] == "main")
+
+    return_response = await client.post(
+        f"/api/problems/{problem['id']}/learning-path/return",
+        headers=headers,
+    )
+    assert return_response.status_code == 200
+    assert return_response.json()["kind"] == "main"
+    assert return_response.json()["id"] == main_path["id"]
+
+    activate_branch = await client.post(
+        f"/api/problems/{problem['id']}/learning-paths/{active_body['id']}/activate",
+        headers=headers,
+    )
+    assert activate_branch.status_code == 200
+    assert activate_branch.json()["id"] == active_body["id"]
+    assert activate_branch.json()["kind"] == "prerequisite"
+
+
+@pytest.mark.asyncio
+async def test_insert_before_current_main_updates_main_path(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Main path insertion")
+
+    before_path = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert before_path.status_code == 200
+    before_body = before_path.json()
+    before_count = len(before_body["path_data"])
+
+    async def fake_answer(*args, **kwargs):
+        return "Model Predictive Control depends on state-space modeling first."
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Model Predictive Control",
+            "State-space model",
+            "Constraint handling",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What should I learn before Model Predictive Control?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    candidate = ask_response.json()["derived_path_candidates"][0]
+
+    decide_response = await client.post(
+        f"/api/problems/{problem['id']}/path-candidates/{candidate['id']}/decide",
+        json={"action": "insert_before_current_main"},
+        headers=headers,
+    )
+    assert decide_response.status_code == 200
+    assert decide_response.json()["candidate"]["selected_insertion"] == "insert_before_current_main"
+
+    after_path = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert after_path.status_code == 200
+    after_body = after_path.json()
+    assert after_body["kind"] == "main"
+    assert len(after_body["path_data"]) >= before_count + 2
+    assert after_body["current_step"] == 0
+    assert "State-space model" in after_body["path_data"][0]["concept"] or candidate["title"] in after_body["path_data"][0]["concept"]
 
 
 @pytest.mark.asyncio

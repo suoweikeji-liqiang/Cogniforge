@@ -11,8 +11,10 @@ from app.models.entities.user import (
     ConceptAlias,
     ConceptRelation,
     ConceptEvidence,
+    ProblemTurn,
     ProblemMasteryEvent,
     ProblemConceptCandidate,
+    ProblemPathCandidate,
     LearningEvent,
 )
 from app.models.entities.email_config import EmailConfig
@@ -32,8 +34,10 @@ __all__ = [
     "ConceptAlias",
     "ConceptRelation",
     "ConceptEvidence",
+    "ProblemTurn",
     "ProblemMasteryEvent",
     "ProblemConceptCandidate",
+    "ProblemPathCandidate",
     "LearningEvent",
     "EmailConfig",
     "SystemSettings",
