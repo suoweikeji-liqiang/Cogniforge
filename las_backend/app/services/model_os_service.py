@@ -219,6 +219,99 @@ class ModelOSService:
             "contrast it with the closest confusing concept, then apply it in one concrete example."
         )
 
+    def build_socratic_question_fallback(
+        self,
+        step_concept: str,
+        question_kind: str,
+        latest_feedback: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        concept = str(step_concept or "this concept").strip()
+        feedback = latest_feedback or {}
+        next_question = str(feedback.get("next_question") or "").strip()
+        misconception = ""
+        misconceptions = feedback.get("misconceptions") or []
+        if misconceptions:
+            misconception = str(misconceptions[0] or "").strip()
+
+        if next_question:
+            return next_question
+
+        if question_kind == "checkpoint":
+            return (
+                f"Checkpoint: explain '{concept}' with one concrete example and one boundary case "
+                "that would make your explanation fail."
+            )
+
+        if misconception:
+            return (
+                f"Probe: you mentioned '{misconception}'. Re-explain how it relates to '{concept}' "
+                "in your own words."
+            )
+
+        return (
+            f"Probe: before moving on, what is the core idea of '{concept}', and what is the most likely confusion point?"
+        )
+
+    async def generate_socratic_question(
+        self,
+        problem_title: str,
+        problem_description: str,
+        step_concept: str,
+        step_description: str,
+        question_kind: str,
+        recent_responses: Optional[List[str]] = None,
+        latest_feedback: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        recent_block = ""
+        if recent_responses:
+            recent_block = "\nRecent learner answers:\n" + "\n".join(
+                f"- {item}" for item in recent_responses if item
+            )
+        feedback_block = ""
+        if latest_feedback:
+            feedback_block = (
+                "\nLatest feedback context:"
+                f"\n- Correctness: {latest_feedback.get('correctness') or 'N/A'}"
+                f"\n- Misconceptions: {'; '.join(latest_feedback.get('misconceptions') or []) or 'N/A'}"
+                f"\n- Suggestions: {'; '.join(latest_feedback.get('suggestions') or []) or 'N/A'}"
+            )
+
+        language_instruction = self._build_language_instruction(
+            problem_title,
+            problem_description,
+            step_concept,
+            step_description,
+            *(recent_responses or []),
+        )
+        prompt = f"""You are preparing one Socratic learning question.
+
+Problem: {problem_title}
+Problem description: {problem_description}
+Current step concept: {step_concept}
+Current step description: {step_description}
+Question kind: {question_kind}
+{recent_block}
+{feedback_block}
+
+Rules:
+1. Return exactly one question.
+2. If question kind is probe, ask for clarification or causal explanation.
+3. If question kind is checkpoint, ask a stronger evaluation question that can justify progression.
+4. Do not answer the question.
+5. Keep it concise and concrete.
+
+{language_instruction}"""
+
+        result = await self.llm.generate(prompt)
+        question = str(result or "").strip()
+        if not question:
+            return self.build_socratic_question_fallback(
+                step_concept=step_concept,
+                question_kind=question_kind,
+                latest_feedback=latest_feedback,
+            )
+        return question
+
     def _hint_tokens(self, text: str) -> set[str]:
         tokens = set(re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]", (text or "").lower()))
         return {token for token in tokens if token.strip()}

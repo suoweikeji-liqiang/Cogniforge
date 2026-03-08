@@ -4,6 +4,7 @@ from uuid import UUID
 from datetime import datetime
 
 LearningMode = Literal["socratic", "exploration"]
+SocraticQuestionKind = Literal["probe", "checkpoint"]
 
 
 class ProblemBase(BaseModel):
@@ -43,6 +44,27 @@ class ProblemResponseCreate(BaseModel):
     problem_id: UUID
     user_response: str
     learning_mode: LearningMode = "socratic"
+    question_kind: Optional[SocraticQuestionKind] = None
+    socratic_question: Optional[str] = Field(default=None, max_length=2000)
+
+
+class TurnEvaluationResponse(BaseModel):
+    mastery_score: int
+    dimension_scores: Dict[str, int] = Field(default_factory=dict)
+    confidence: float
+    correctness: str = ""
+
+
+class TurnDecisionResponse(BaseModel):
+    advance: bool
+    progression_ran: bool
+    reason: str = ""
+
+
+class TurnFollowUpResponse(BaseModel):
+    needed: bool
+    question: Optional[str] = None
+    question_kind: Optional[SocraticQuestionKind] = None
 
 
 class ProblemResponseResponse(BaseModel):
@@ -53,6 +75,11 @@ class ProblemResponseResponse(BaseModel):
     turn_id: Optional[UUID] = None
     learning_mode: LearningMode
     mode_metadata: Dict[str, Any] = Field(default_factory=dict)
+    question_kind: Optional[SocraticQuestionKind] = None
+    socratic_question: Optional[str] = None
+    evaluation: Optional[TurnEvaluationResponse] = None
+    decision: Optional[TurnDecisionResponse] = None
+    follow_up: Optional[TurnFollowUpResponse] = None
     user_response: str
     system_feedback: Optional[str]
     structured_feedback: Optional[dict] = None
@@ -94,6 +121,19 @@ class LearningStepHintResponse(BaseModel):
     step_concept: str
     hint: str
     structured_hint: Optional[dict] = None
+
+
+class SocraticQuestionResponse(BaseModel):
+    learning_mode: LearningMode
+    step_index: int
+    step_concept: str
+    question_kind: SocraticQuestionKind
+    question: str
+    mode_metadata: Dict[str, Any] = Field(default_factory=dict)
+    trace_id: Optional[str] = None
+    llm_calls: Optional[int] = None
+    llm_latency_ms: Optional[int] = None
+    fallback_reason: Optional[str] = None
 
 
 class LearningQuestionRequest(BaseModel):

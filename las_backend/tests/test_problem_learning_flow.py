@@ -146,6 +146,141 @@ async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client
 
 
 @pytest.mark.asyncio
+async def test_socratic_question_endpoint_returns_probe_by_default(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Question protocol")
+
+    async def fake_generate_question(*args, **kwargs):
+        return "What mechanism explains the first step?"
+
+    monkeypatch.setattr(model_os_service, "generate_socratic_question", fake_generate_question)
+
+    response = await client.get(
+        f"/api/problems/{problem['id']}/socratic-question",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["learning_mode"] == "socratic"
+    assert body["question_kind"] == "probe"
+    assert body["question"] == "What mechanism explains the first step?"
+    assert body["mode_metadata"]["step_index"] == 0
+    assert body["llm_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_probe_response_never_triggers_advancement(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Probe response")
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": "correct",
+            "misconceptions": [],
+            "suggestions": ["name the causal link explicitly"],
+            "next_question": "What evidence would confirm that link?",
+            "mastery_score": 92,
+            "dimension_scores": {"accuracy": 92, "completeness": 90, "transfer": 88, "rigor": 89},
+            "confidence": 0.93,
+            "pass_stage": True,
+            "decision_reason": "Understanding looks strong but this was only a probe.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "Here is my first answer."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["question_kind"] == "probe"
+    assert body["decision"]["progression_ran"] is False
+    assert body["decision"]["advance"] is False
+    assert body["auto_advanced"] is False
+    assert body["follow_up"]["needed"] is True
+    assert body["follow_up"]["question_kind"] == "checkpoint"
+
+    path_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert path_response.status_code == 200
+    assert path_response.json()["current_step"] == 0
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_response_can_advance_after_probe(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Checkpoint response")
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": "correct",
+            "misconceptions": [],
+            "suggestions": ["keep the explanation compact"],
+            "next_question": "What tradeoff matters most next?",
+            "mastery_score": 90,
+            "dimension_scores": {"accuracy": 90, "completeness": 88, "transfer": 87, "rigor": 86},
+            "confidence": 0.9,
+            "pass_stage": True,
+            "decision_reason": "Stable understanding demonstrated.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    first_response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "First answer."},
+        headers=headers,
+    )
+    assert first_response.status_code == 200
+    assert first_response.json()["question_kind"] == "probe"
+    assert first_response.json()["auto_advanced"] is False
+
+    second_response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "Second answer."},
+        headers=headers,
+    )
+    assert second_response.status_code == 200
+    second_body = second_response.json()
+    assert second_body["question_kind"] == "checkpoint"
+    assert second_body["decision"]["progression_ran"] is True
+    assert second_body["decision"]["advance"] is True
+    assert second_body["auto_advanced"] is True
+    assert second_body["new_current_step"] == 1
+    assert second_body["follow_up"]["needed"] is False
+
+    responses = await client.get(
+        f"/api/problems/{problem['id']}/responses",
+        headers=headers,
+    )
+    assert responses.status_code == 200
+    history = responses.json()
+    assert history[0]["question_kind"] == "probe"
+    assert history[1]["question_kind"] == "checkpoint"
+    assert history[1]["decision"]["progression_ran"] is True
+
+    path_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert path_response.status_code == 200
+    assert path_response.json()["current_step"] == 1
+
+
+@pytest.mark.asyncio
 async def test_learning_step_hint_still_works_after_mode_switch(client):
     tokens = await register_and_login(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}

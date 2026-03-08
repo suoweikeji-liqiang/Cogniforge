@@ -107,6 +107,14 @@
           <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
           <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
 
+          <div v-if="socraticQuestion" class="socratic-question-panel">
+            <div class="question-head">
+              <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
+              <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
+            </div>
+            <p class="question-copy">{{ socraticQuestion.question }}</p>
+          </div>
+
           <form @submit.prevent="submitResponse" class="response-form">
             <div class="form-group">
               <label>{{ t('problemDetail.progressInputLabel') }}</label>
@@ -147,6 +155,12 @@
             <p class="mode-line">
               <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(latestResponse?.learning_mode) }}
             </p>
+            <p v-if="latestResponse?.question_kind" class="mode-line">
+              <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(latestResponse.question_kind) }}
+            </p>
+            <p v-if="latestResponse?.socratic_question" class="mode-line">
+              <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ latestResponse.socratic_question }}
+            </p>
             <p v-if="latestFeedback.correctness">
               <strong>{{ t('feedback.correctness') }}:</strong> {{ latestFeedback.correctness }}
             </p>
@@ -167,6 +181,15 @@
             </p>
             <p v-if="latestFeedback.decision_reason">
               <strong>{{ t('problemDetail.decisionReason') }}:</strong> {{ latestFeedback.decision_reason }}
+            </p>
+            <p v-if="latestResponse?.decision" class="mode-line">
+              <strong>{{ t('problemDetail.progressionDecision') }}:</strong>
+              {{ latestResponse.decision.advance ? t('problemDetail.advanceYes') : t('problemDetail.advanceNo') }}
+              · {{ latestResponse.decision.progression_ran ? t('problemDetail.progressionRan') : t('problemDetail.progressionSkipped') }}
+            </p>
+            <p v-if="latestResponse?.follow_up?.needed && latestResponse?.follow_up?.question" class="mode-line">
+              <strong>{{ t('problemDetail.followUpQuestion') }}:</strong>
+              {{ latestResponse.follow_up.question }}
             </p>
             <p v-if="latestResponse?.accepted_concepts?.length" class="new-concepts-line">
               <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong>
@@ -193,6 +216,12 @@
                 <div class="user-response">
                   <p class="mode-line">
                     <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
+                  </p>
+                  <p v-if="response.question_kind" class="mode-line">
+                    <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(response.question_kind) }}
+                  </p>
+                  <p v-if="response.socratic_question" class="mode-line">
+                    <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ response.socratic_question }}
                   </p>
                   <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
                   <p>{{ response.user_response }}</p>
@@ -402,6 +431,7 @@ const autoAdvanceMessage = ref('')
 const canUndoAutoAdvance = ref(false)
 const undoTargetStep = ref<number | null>(null)
 const stepHint = ref<any | null>(null)
+const socraticQuestion = ref<any | null>(null)
 const learningQuestion = ref('')
 const askingQuestion = ref(false)
 const answerMode = ref<'direct' | 'guided'>('direct')
@@ -443,6 +473,12 @@ const formatLearningMode = (mode: string | undefined | null) => {
     : t('problemDetail.modeSocratic')
 }
 
+const formatQuestionKind = (kind: string | undefined | null) => {
+  return kind === 'checkpoint'
+    ? t('problemDetail.questionKindCheckpoint')
+    : t('problemDetail.questionKindProbe')
+}
+
 const normalizeExplorationTurn = (turn: any) => ({
   turn_id: turn.turn_id || turn.id || null,
   learning_mode: turn.learning_mode || 'exploration',
@@ -474,6 +510,16 @@ const fetchExplorationTurns = async () => {
   }
 }
 
+const fetchSocraticQuestion = async () => {
+  try {
+    const response = await api.get(`/problems/${route.params.id}/socratic-question`)
+    socraticQuestion.value = response.data || null
+  } catch (e) {
+    console.error('Failed to fetch socratic question:', e)
+    socraticQuestion.value = null
+  }
+}
+
 const fetchConceptCandidates = async () => {
   candidateLoading.value = true
   try {
@@ -494,7 +540,7 @@ const fetchLearningPath = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, responsesRes, candidatesRes, turnsRes] = await Promise.all([
+    const [problemRes, pathRes, responsesRes, candidatesRes, turnsRes, socraticRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
@@ -502,6 +548,7 @@ const fetchProblem = async () => {
       api.get(`/problems/${route.params.id}/turns`, {
         params: { learning_mode: 'exploration' },
       }).catch(() => ({ data: [] })),
+      api.get(`/problems/${route.params.id}/socratic-question`).catch(() => ({ data: null })),
     ])
 
     problem.value = problemRes.data
@@ -510,6 +557,7 @@ const fetchProblem = async () => {
     responses.value = responsesRes.data
     conceptCandidates.value = candidatesRes.data || []
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
+    socraticQuestion.value = socraticRes.data || null
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -529,6 +577,9 @@ const setLearningMode = async (mode: 'socratic' | 'exploration') => {
   switchingMode.value = true
   try {
     await api.put(`/problems/${route.params.id}`, { learning_mode: mode })
+    if (mode === 'socratic') {
+      await fetchSocraticQuestion()
+    }
   } catch (e) {
     console.error('Failed to switch learning mode:', e)
     learningMode.value = previousMode
@@ -548,6 +599,8 @@ const submitResponse = async () => {
       problem_id: route.params.id,
       user_response: responseText.value,
       learning_mode: learningMode.value,
+      question_kind: socraticQuestion.value?.question_kind,
+      socratic_question: socraticQuestion.value?.question,
     })
     responses.value.push(response.data)
     await Promise.all([
@@ -576,6 +629,7 @@ const submitResponse = async () => {
     if (problem.value?.status === 'new' && !response.data?.auto_advanced) {
       problem.value.status = 'in-progress'
     }
+    await fetchSocraticQuestion()
   } catch (e) {
     console.error('Failed to submit response:', e)
   } finally {
@@ -592,6 +646,9 @@ const updateCurrentStep = async (nextStep: number) => {
       current_step: nextStep,
     })
     learningPath.value = response.data
+    if (learningMode.value === 'socratic') {
+      await fetchSocraticQuestion()
+    }
 
     if (problem.value) {
       if (totalSteps.value > 0 && nextStep >= totalSteps.value) {
@@ -921,6 +978,39 @@ onMounted(fetchProblem)
 
 .response-form {
   margin-bottom: 1rem;
+}
+
+.socratic-question-panel {
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.question-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.question-copy {
+  margin: 0;
+  color: var(--text);
+  white-space: pre-wrap;
 }
 
 .response-actions {
