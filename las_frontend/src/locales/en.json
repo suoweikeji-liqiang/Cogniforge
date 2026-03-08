@@ -24,6 +24,7 @@
     "nextQuestion": "Next Question"
   },
   "nav": {
+    "home": "Home",
     "dashboard": "Dashboard",
     "problems": "Problems",
     "modelCards": "Model Cards",

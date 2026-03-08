@@ -22,29 +22,31 @@
         </div>
       </div>
 
-      <div class="nav-row nav-row-primary">
+      <div class="nav-row nav-row-primary" data-testid="primary-nav">
         <router-link
           v-for="item in primaryNavItems"
           :key="item.to"
           :to="item.to"
           class="nav-pill"
           :class="{ active: isRouteActive(item.to) }"
+          :data-testid="`primary-nav-item-${item.key}`"
         >
           {{ t(item.label) }}
         </router-link>
 
-        <button class="nav-toggle" @click="secondaryExpanded = !secondaryExpanded">
+        <button class="nav-toggle" data-testid="secondary-nav-toggle" @click="secondaryExpanded = !secondaryExpanded">
           {{ secondaryExpanded ? t('nav.less') : t('nav.more') }}
         </button>
       </div>
 
-      <div v-if="secondaryExpanded" class="nav-row nav-row-secondary">
+      <div v-if="secondaryExpanded" class="nav-row nav-row-secondary" data-testid="secondary-nav">
         <router-link
           v-for="item in secondaryNavItems"
           :key="item.to"
           :to="item.to"
           class="nav-secondary-link"
           :class="{ active: isRouteActive(item.to) }"
+          :data-testid="`secondary-nav-item-${item.key}`"
         >
           {{ t(item.label) }}
         </router-link>
@@ -71,26 +73,26 @@ const route = useRoute()
 const secondaryExpanded = ref(false)
 
 const primaryNavItems = [
-  { to: '/dashboard', label: 'nav.dashboard' },
-  { to: '/problems', label: 'nav.problems' },
-  { to: '/model-cards', label: 'nav.modelCards' },
-  { to: '/srs-review', label: 'nav.srsReview' },
-  { to: '/reviews', label: 'nav.reviews' },
+  { key: 'home', to: '/dashboard', label: 'nav.home' },
+  { key: 'problems', to: '/problems', label: 'nav.problems' },
+  { key: 'model-cards', to: '/model-cards', label: 'nav.modelCards' },
+  { key: 'review', to: '/reviews', label: 'nav.reviews' },
 ]
 
 const secondaryNavItems = computed(() => {
   const items = [
-    { to: '/practice', label: 'nav.practice' },
-    { to: '/chat', label: 'nav.chat' },
-    { to: '/challenges', label: 'nav.challenges' },
-    { to: '/resources', label: 'nav.resources' },
-    { to: '/notes', label: 'nav.notes' },
-    { to: '/knowledge-graph', label: 'nav.graph' },
-    { to: '/cog-test', label: 'nav.cogTest' },
+    { key: 'srs-review', to: '/srs-review', label: 'nav.srsReview' },
+    { key: 'practice', to: '/practice', label: 'nav.practice' },
+    { key: 'chat', to: '/chat', label: 'nav.chat' },
+    { key: 'resources', to: '/resources', label: 'nav.resources' },
+    { key: 'notes', to: '/notes', label: 'nav.notes' },
+    { key: 'graph', to: '/knowledge-graph', label: 'nav.graph' },
+    { key: 'challenges', to: '/challenges', label: 'nav.challenges' },
+    { key: 'cog-test', to: '/cog-test', label: 'nav.cogTest' },
   ]
 
   if (authStore.user?.role === 'admin') {
-    items.push({ to: '/admin', label: 'nav.admin' })
+    items.push({ key: 'admin', to: '/admin', label: 'nav.admin' })
   }
 
   return items

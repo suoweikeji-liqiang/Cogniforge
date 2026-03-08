@@ -24,6 +24,7 @@
     "nextQuestion": "下一问"
   },
   "nav": {
+    "home": "首页",
     "dashboard": "仪表盘",
     "problems": "问题",
     "modelCards": "模型卡",
