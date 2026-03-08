@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 import uuid
 from datetime import datetime
@@ -128,6 +129,296 @@ def _normalize_question_kind(raw_kind: Optional[str], default: str = "probe") ->
     if kind not in {"probe", "checkpoint"}:
         return default
     return kind
+
+
+def _contains_cjk_text(*texts: Optional[str]) -> bool:
+    return any(bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", str(text or ""))) for text in texts)
+
+
+def _normalize_exploration_answer_type(
+    raw_type: Optional[str],
+    default: str = "concept_explanation",
+) -> str:
+    answer_type = str(raw_type or default).strip().lower().replace(" ", "_")
+    if answer_type not in {
+        "concept_explanation",
+        "boundary_clarification",
+        "misconception_correction",
+        "comparison",
+        "prerequisite_explanation",
+        "worked_example",
+    }:
+        return default
+    return answer_type
+
+
+def _normalize_path_suggestion_type(
+    raw_type: Optional[str],
+    default: str = "branch_deep_dive",
+) -> str:
+    path_type = str(raw_type or default).strip().lower().replace(" ", "_")
+    if path_type not in {"prerequisite", "branch_deep_dive", "comparison_path"}:
+        return default
+    return path_type
+
+
+def _infer_exploration_answer_type(question: str) -> str:
+    text = str(question or "").strip().casefold()
+    if any(marker in text for marker in ["difference between", "compare", "versus", " vs ", "区别", "对比"]):
+        return "comparison"
+    if any(marker in text for marker in ["before", "prerequisite", "prereq", "先学", "前置", "基础"]):
+        return "prerequisite_explanation"
+    if any(marker in text for marker in ["example", "walk through", "worked example", "举例", "例子", "演示"]):
+        return "worked_example"
+    if any(marker in text for marker in ["misconception", "wrong", "误解", "错误", "confused", "是不是"]):
+        return "misconception_correction"
+    if any(marker in text for marker in ["boundary", "edge case", "when should", "when not", "边界", "什么时候不"]):
+        return "boundary_clarification"
+    return "concept_explanation"
+
+
+def _select_answered_concepts(
+    *,
+    question: str,
+    step_concept: str,
+    inferred_concepts: List[str],
+    answer_type: str,
+) -> List[str]:
+    concept_pool = model_os_service.normalize_concepts(
+        [*inferred_concepts, step_concept],
+        limit=6,
+    )
+    if not concept_pool:
+        return model_os_service.normalize_concepts([step_concept], limit=1)
+
+    question_key = model_os_service.normalize_concept_key(question)
+    mentioned = []
+    for concept in concept_pool:
+        concept_key = model_os_service.normalize_concept_key(concept)
+        if concept_key and concept_key in question_key:
+            mentioned.append(concept)
+
+    if answer_type == "comparison":
+        selected = mentioned[:2] or concept_pool[:2]
+    else:
+        selected = mentioned[:1] or concept_pool[:1]
+    return model_os_service.normalize_concepts(selected or [step_concept], limit=2)
+
+
+def _select_related_concepts(
+    *,
+    answered_concepts: List[str],
+    step_concept: str,
+    inferred_concepts: List[str],
+) -> List[str]:
+    concept_pool = model_os_service.normalize_concepts(
+        [*inferred_concepts, step_concept],
+        limit=8,
+    )
+    answered_keys = {
+        model_os_service.normalize_concept_key(item)
+        for item in answered_concepts
+        if model_os_service.normalize_concept_key(item)
+    }
+    return [
+        concept
+        for concept in concept_pool
+        if model_os_service.normalize_concept_key(concept) not in answered_keys
+    ][:4]
+
+
+def _build_exploration_next_actions(
+    *,
+    answer_type: str,
+    question: str,
+    step_concept: str,
+    answered_concepts: List[str],
+    related_concepts: List[str],
+) -> List[str]:
+    cjk = _contains_cjk_text(question, step_concept, *answered_concepts, *related_concepts)
+    primary = answered_concepts[0] if answered_concepts else step_concept or "this concept"
+    secondary = (
+        answered_concepts[1]
+        if len(answered_concepts) > 1
+        else (related_concepts[0] if related_concepts else step_concept or primary)
+    )
+
+    if cjk:
+        if answer_type == "comparison":
+            return [
+                f"用 2-3 句话对比“{primary}”和“{secondary}”的关键区别。",
+                f"分别写一个场景，说明什么时候该用“{primary}”或“{secondary}”。",
+                "回到当前主线步骤，判断现在真正需要哪个概念。",
+            ]
+        if answer_type == "prerequisite_explanation":
+            return [
+                f"先补“{secondary}”的基础定义和一个最小例子。",
+                f"再重述“{primary}”与当前学习步骤的关系。",
+                "确认补完前置后是否可以回到主线继续推进。",
+            ]
+        if answer_type == "worked_example":
+            return [
+                f"围绕“{primary}”手写一个最小 worked example。",
+                "标出每一步为什么成立，而不是只写结论。",
+                f"再把这个例子映射回当前步骤“{step_concept}”。",
+            ]
+        if answer_type == "misconception_correction":
+            return [
+                f"先写出你之前对“{primary}”最容易混淆的一点。",
+                "用一个反例说明错误理解为什么会失败。",
+                "回到当前步骤，重写一版更准确的表述。",
+            ]
+        if answer_type == "boundary_clarification":
+            return [
+                f"列出“{primary}”成立与不成立的边界条件。",
+                f"补一个“{primary}”失效的反例。",
+                "确认这些边界会如何影响当前主线步骤。",
+            ]
+        return [
+            f"先用你自己的话重新解释“{primary}”。",
+            f"再把它和“{secondary}”做一个简短区分。",
+            f"最后说明它在当前步骤“{step_concept}”里起什么作用。",
+        ]
+
+    if answer_type == "comparison":
+        return [
+            f"Write a 2-3 sentence comparison between '{primary}' and '{secondary}'.",
+            f"Give one case where '{primary}' is the better fit and one for '{secondary}'.",
+            "Return to the current step and decide which concept matters now.",
+        ]
+    if answer_type == "prerequisite_explanation":
+        return [
+            f"Review the basic definition of '{secondary}' and one minimal example.",
+            f"Restate how '{primary}' depends on that prerequisite.",
+            "Decide whether you can return to the main path after that review.",
+        ]
+    if answer_type == "worked_example":
+        return [
+            f"Work through one minimal example for '{primary}'.",
+            "Annotate why each step is valid instead of only writing the result.",
+            f"Map that example back to the current step '{step_concept}'.",
+        ]
+    if answer_type == "misconception_correction":
+        return [
+            f"Write down the misconception you had about '{primary}'.",
+            "Add one counter-example that breaks the incorrect version.",
+            "Rewrite your explanation using the corrected framing.",
+        ]
+    if answer_type == "boundary_clarification":
+        return [
+            f"List the conditions where '{primary}' applies and where it does not.",
+            f"Add one edge case that exposes the boundary of '{primary}'.",
+            f"Check how that boundary affects the current step '{step_concept}'.",
+        ]
+    return [
+        f"Restate '{primary}' in your own words.",
+        f"Contrast it briefly with '{secondary}'.",
+        f"Explain how it helps with the current step '{step_concept}'.",
+    ]
+
+
+def _build_exploration_path_suggestions(
+    *,
+    answer_type: str,
+    question: str,
+    step_concept: str,
+    answered_concepts: List[str],
+    related_concepts: List[str],
+) -> List[dict]:
+    cjk = _contains_cjk_text(question, step_concept, *answered_concepts, *related_concepts)
+    primary = answered_concepts[0] if answered_concepts else step_concept or "this concept"
+    secondary = (
+        answered_concepts[1]
+        if len(answered_concepts) > 1
+        else (related_concepts[0] if related_concepts else step_concept or primary)
+    )
+
+    suggestions: List[dict] = []
+    if answer_type == "prerequisite_explanation":
+        suggestions.append(
+            {
+                "type": "prerequisite",
+                "title": (
+                    f"先补“{secondary}”，再回到“{primary}”"
+                    if cjk
+                    else f"Study '{secondary}' before returning to '{primary}'"
+                ),
+                "reason": (
+                    f"这个问题暴露了对“{primary}”前置知识的依赖。"
+                    if cjk
+                    else f"This question suggests '{primary}' depends on prerequisite knowledge first."
+                ),
+            }
+        )
+    elif answer_type == "comparison":
+        suggestions.append(
+            {
+                "type": "comparison_path",
+                "title": (
+                    f"开一条“{primary} vs {secondary}”对比支线"
+                    if cjk
+                    else f"Open a comparison path for '{primary}' vs '{secondary}'"
+                ),
+                "reason": (
+                    "这类问题更适合通过并列比较来稳定边界。"
+                    if cjk
+                    else "A short comparison branch will make the boundary between the two concepts clearer."
+                ),
+            }
+        )
+    elif answer_type == "worked_example":
+        suggestions.append(
+            {
+                "type": "branch_deep_dive",
+                "title": (
+                    f"围绕“{primary}”做一个例题深挖"
+                    if cjk
+                    else f"Open a worked-example deep dive for '{primary}'"
+                ),
+                "reason": (
+                    "这个问题更适合通过具体例子固化理解。"
+                    if cjk
+                    else "A worked-example branch would likely consolidate this explanation faster."
+                ),
+            }
+        )
+
+    normalized_suggestions = []
+    for suggestion in suggestions:
+        normalized_suggestions.append(
+            {
+                "type": _normalize_path_suggestion_type(suggestion.get("type")),
+                "title": str(suggestion.get("title") or "").strip(),
+                "reason": str(suggestion.get("reason") or "").strip() or None,
+            }
+        )
+    return normalized_suggestions
+
+
+async def _list_turn_concept_candidates(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    problem_id: str,
+    source_turn_id: str,
+) -> List[dict]:
+    result = await db.execute(
+        select(ProblemConceptCandidate)
+        .where(
+            ProblemConceptCandidate.user_id == user_id,
+            ProblemConceptCandidate.problem_id == problem_id,
+            ProblemConceptCandidate.source_turn_id == source_turn_id,
+        )
+        .order_by(desc(ProblemConceptCandidate.confidence), desc(ProblemConceptCandidate.created_at))
+    )
+    return [
+        {
+            "name": row.concept_text,
+            "confidence": round(float(row.confidence or 0.0), 4),
+            "status": row.status,
+        }
+        for row in result.scalars().all()
+    ]
 
 
 def _build_turn_evaluation(structured_feedback: dict) -> TurnEvaluationResponse:
@@ -1768,9 +2059,54 @@ Learner question: {payload.question}
         retrieval_context=retrieval_context,
         evidence_snippet=evidence_snippet,
     )
-    suggested_next_focus = f"Use your question to refine one boundary of '{step_concept}'."
+    await db.flush()
+    answer_type = _normalize_exploration_answer_type(_infer_exploration_answer_type(payload.question))
+    concept_pool = model_os_service.normalize_concepts(
+        [*ask_concepts, *accepted_concepts, *pending_concepts],
+        limit=8,
+    )
+    answered_concepts = _select_answered_concepts(
+        question=payload.question,
+        step_concept=step_concept,
+        inferred_concepts=concept_pool,
+        answer_type=answer_type,
+    )
+    related_concepts = _select_related_concepts(
+        answered_concepts=answered_concepts,
+        step_concept=step_concept,
+        inferred_concepts=concept_pool,
+    )
+    derived_candidates = await _list_turn_concept_candidates(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        source_turn_id=str(db_turn.id),
+    )
+    next_learning_actions = _build_exploration_next_actions(
+        answer_type=answer_type,
+        question=payload.question,
+        step_concept=step_concept,
+        answered_concepts=answered_concepts,
+        related_concepts=related_concepts,
+    )
+    path_suggestions = _build_exploration_path_suggestions(
+        answer_type=answer_type,
+        question=payload.question,
+        step_concept=step_concept,
+        answered_concepts=answered_concepts,
+        related_concepts=related_concepts,
+    )
+    return_to_main_path_hint = not bool(path_suggestions)
+    suggested_next_focus = next_learning_actions[0] if next_learning_actions else f"Use your question to refine one boundary of '{step_concept}'."
     mode_metadata = {
         **mode_metadata,
+        "answer_type": answer_type,
+        "answered_concepts": answered_concepts,
+        "related_concepts": related_concepts,
+        "derived_candidates": derived_candidates,
+        "next_learning_actions": next_learning_actions,
+        "path_suggestions": path_suggestions,
+        "return_to_main_path_hint": return_to_main_path_hint,
         "accepted_concepts": accepted_concepts,
         "pending_concepts": pending_concepts,
         "suggested_next_focus": suggested_next_focus,
@@ -1803,6 +2139,13 @@ Learner question: {payload.question}
         "question": payload.question,
         "answer": answer,
         "answer_mode": mode,
+        "answer_type": answer_type,
+        "answered_concepts": answered_concepts,
+        "related_concepts": related_concepts,
+        "derived_candidates": derived_candidates,
+        "next_learning_actions": next_learning_actions,
+        "path_suggestions": path_suggestions,
+        "return_to_main_path_hint": return_to_main_path_hint,
         "step_index": step_index,
         "step_concept": step_concept,
         "suggested_next_focus": suggested_next_focus,

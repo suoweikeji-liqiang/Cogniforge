@@ -5,6 +5,15 @@ from datetime import datetime
 
 LearningMode = Literal["socratic", "exploration"]
 SocraticQuestionKind = Literal["probe", "checkpoint"]
+ExplorationAnswerType = Literal[
+    "concept_explanation",
+    "boundary_clarification",
+    "misconception_correction",
+    "comparison",
+    "prerequisite_explanation",
+    "worked_example",
+]
+PathSuggestionType = Literal["prerequisite", "branch_deep_dive", "comparison_path"]
 
 
 class ProblemBase(BaseModel):
@@ -142,6 +151,18 @@ class LearningQuestionRequest(BaseModel):
     answer_mode: str = Field(default="direct")
 
 
+class ExplorationDerivedCandidateResponse(BaseModel):
+    name: str
+    confidence: float
+    status: Optional[str] = None
+
+
+class ExplorationPathSuggestionResponse(BaseModel):
+    type: PathSuggestionType
+    title: str
+    reason: Optional[str] = None
+
+
 class LearningQuestionResponse(BaseModel):
     turn_id: Optional[UUID] = None
     learning_mode: LearningMode
@@ -149,6 +170,13 @@ class LearningQuestionResponse(BaseModel):
     question: str
     answer: str
     answer_mode: str
+    answer_type: ExplorationAnswerType = "concept_explanation"
+    answered_concepts: List[str] = Field(default_factory=list)
+    related_concepts: List[str] = Field(default_factory=list)
+    derived_candidates: List[ExplorationDerivedCandidateResponse] = Field(default_factory=list)
+    next_learning_actions: List[str] = Field(default_factory=list)
+    path_suggestions: List[ExplorationPathSuggestionResponse] = Field(default_factory=list)
+    return_to_main_path_hint: bool = True
     step_index: int
     step_concept: str
     suggested_next_focus: Optional[str] = None

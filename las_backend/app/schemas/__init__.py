@@ -23,6 +23,8 @@ from app.schemas.problem import (
     LearningStepHintResponse,
     LearningQuestionRequest,
     LearningQuestionResponse,
+    ExplorationDerivedCandidateResponse,
+    ExplorationPathSuggestionResponse,
     ProblemConceptCandidateResponse,
     ProblemConceptCandidateActionResponse,
     ProblemConceptRollbackRequest,

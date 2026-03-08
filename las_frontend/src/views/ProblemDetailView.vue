@@ -356,6 +356,9 @@
             <p class="mode-line">
               <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(latestQA.learning_mode) }}
             </p>
+            <p v-if="latestQA.answer_type" class="mode-line">
+              <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(latestQA.answer_type) }}
+            </p>
             <p class="qa-meta">{{ t('problemDetail.stepIndicator', { current: latestQA.step_index + 1, total: totalSteps || latestQA.step_index + 1 }) }} · {{ latestQA.step_concept }}</p>
             <div class="qa-block">
               <strong>{{ t('problemDetail.questionLabel') }}</strong>
@@ -367,6 +370,38 @@
             </div>
             <p v-if="latestQA.suggested_next_focus" class="qa-focus-line">
               <strong>{{ t('problemDetail.suggestedNextFocus') }}:</strong> {{ latestQA.suggested_next_focus }}
+            </p>
+            <p v-if="latestQA.answered_concepts?.length" class="mode-line">
+              <strong>{{ t('problemDetail.answeredConcepts') }}:</strong> {{ latestQA.answered_concepts.join(' / ') }}
+            </p>
+            <p v-if="latestQA.related_concepts?.length" class="mode-line">
+              <strong>{{ t('problemDetail.relatedConcepts') }}:</strong> {{ latestQA.related_concepts.join(' / ') }}
+            </p>
+            <div v-if="latestQA.next_learning_actions?.length" class="qa-actions-block">
+              <strong>{{ t('problemDetail.nextLearningActions') }}</strong>
+              <ul>
+                <li v-for="(action, index) in latestQA.next_learning_actions" :key="`${index}-${action}`">{{ action }}</li>
+              </ul>
+            </div>
+            <div v-if="latestQA.path_suggestions?.length" class="qa-actions-block">
+              <strong>{{ t('problemDetail.pathSuggestions') }}</strong>
+              <div class="path-suggestion-list">
+                <div
+                  v-for="(suggestion, index) in latestQA.path_suggestions"
+                  :key="`${index}-${suggestion.title}`"
+                  class="path-suggestion-item"
+                >
+                  <div class="path-suggestion-head">
+                    <span class="question-kind-badge">{{ formatPathSuggestionType(suggestion.type) }}</span>
+                    <strong>{{ suggestion.title }}</strong>
+                  </div>
+                  <p v-if="suggestion.reason">{{ suggestion.reason }}</p>
+                </div>
+              </div>
+            </div>
+            <p class="mode-line">
+              <strong>{{ t('problemDetail.returnToMainPath') }}:</strong>
+              {{ latestQA.return_to_main_path_hint ? t('problemDetail.returnToMainPathYes') : t('problemDetail.returnToMainPathNo') }}
             </p>
             <p v-if="latestQA.accepted_concepts?.length" class="new-concepts-line">
               <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ latestQA.accepted_concepts.join(' / ') }}
@@ -390,6 +425,9 @@
               <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
                 <p class="mode-line">
                   <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
+                </p>
+                <p v-if="item.answer_type" class="mode-line">
+                  <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(item.answer_type) }}
                 </p>
                 <div class="qa-block">
                   <strong>{{ t('problemDetail.questionLabel') }}</strong>
@@ -479,6 +517,21 @@ const formatQuestionKind = (kind: string | undefined | null) => {
     : t('problemDetail.questionKindProbe')
 }
 
+const formatAnswerType = (answerType: string | undefined | null) => {
+  if (answerType === 'boundary_clarification') return t('problemDetail.answerTypeBoundaryClarification')
+  if (answerType === 'misconception_correction') return t('problemDetail.answerTypeMisconceptionCorrection')
+  if (answerType === 'comparison') return t('problemDetail.answerTypeComparison')
+  if (answerType === 'prerequisite_explanation') return t('problemDetail.answerTypePrerequisiteExplanation')
+  if (answerType === 'worked_example') return t('problemDetail.answerTypeWorkedExample')
+  return t('problemDetail.answerTypeConceptExplanation')
+}
+
+const formatPathSuggestionType = (pathType: string | undefined | null) => {
+  if (pathType === 'prerequisite') return t('problemDetail.pathSuggestionPrerequisite')
+  if (pathType === 'comparison_path') return t('problemDetail.pathSuggestionComparisonPath')
+  return t('problemDetail.pathSuggestionBranchDeepDive')
+}
+
 const normalizeExplorationTurn = (turn: any) => ({
   turn_id: turn.turn_id || turn.id || null,
   learning_mode: turn.learning_mode || 'exploration',
@@ -486,6 +539,13 @@ const normalizeExplorationTurn = (turn: any) => ({
   question: turn.question ?? turn.user_text ?? '',
   answer: turn.answer ?? turn.assistant_text ?? '',
   answer_mode: turn.answer_mode ?? turn.mode_metadata?.answer_mode ?? 'direct',
+  answer_type: turn.answer_type ?? turn.mode_metadata?.answer_type ?? 'concept_explanation',
+  answered_concepts: turn.answered_concepts ?? turn.mode_metadata?.answered_concepts ?? [],
+  related_concepts: turn.related_concepts ?? turn.mode_metadata?.related_concepts ?? [],
+  derived_candidates: turn.derived_candidates ?? turn.mode_metadata?.derived_candidates ?? [],
+  next_learning_actions: turn.next_learning_actions ?? turn.mode_metadata?.next_learning_actions ?? [],
+  path_suggestions: turn.path_suggestions ?? turn.mode_metadata?.path_suggestions ?? [],
+  return_to_main_path_hint: turn.return_to_main_path_hint ?? turn.mode_metadata?.return_to_main_path_hint ?? true,
   step_index: Number(turn.step_index ?? turn.mode_metadata?.step_index ?? 0),
   step_concept: turn.step_concept ?? turn.mode_metadata?.step_concept ?? problem.value?.title ?? '',
   suggested_next_focus: turn.suggested_next_focus ?? turn.mode_metadata?.suggested_next_focus ?? null,
@@ -1088,6 +1148,40 @@ onMounted(fetchProblem)
 
 .qa-block + .qa-block {
   margin-top: 0.55rem;
+}
+
+.qa-actions-block {
+  margin-top: 0.75rem;
+}
+
+.qa-actions-block ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.qa-actions-block li + li {
+  margin-top: 0.25rem;
+}
+
+.path-suggestion-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+}
+
+.path-suggestion-item {
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(96, 165, 250, 0.06);
+}
+
+.path-suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
 }
 
 .qa-block p {

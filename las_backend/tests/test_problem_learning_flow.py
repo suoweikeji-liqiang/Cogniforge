@@ -467,6 +467,68 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_returns_structured_exploration_artifacts(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Exploration artifacts")
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "Model Predictive Control depends on a state-space model and uses "
+            "receding horizon optimization to handle constraints."
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Model Predictive Control",
+            "State-space model",
+            "Receding horizon optimization",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What should I learn before Model Predictive Control?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["learning_mode"] == "exploration"
+    assert body["answer_type"] == "prerequisite_explanation"
+    assert "Model Predictive Control" in body["answered_concepts"]
+    assert "State-space model" in body["related_concepts"]
+    assert len(body["next_learning_actions"]) >= 2
+    assert body["path_suggestions"]
+    assert body["path_suggestions"][0]["type"] == "prerequisite"
+    assert body["return_to_main_path_hint"] is False
+    assert body["derived_candidates"]
+    assert any(item["name"] == "Model Predictive Control" for item in body["derived_candidates"])
+    assert body["mode_metadata"]["answer_type"] == "prerequisite_explanation"
+    assert body["mode_metadata"]["path_suggestions"][0]["type"] == "prerequisite"
+
+    turns_response = await client.get(
+        f"/api/problems/{problem['id']}/turns",
+        params={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert turns_response.status_code == 200
+    turns = turns_response.json()
+    assert turns
+    latest_turn = turns[0]
+    assert latest_turn["mode_metadata"]["answer_type"] == "prerequisite_explanation"
+    assert latest_turn["mode_metadata"]["answered_concepts"][0] == "Model Predictive Control"
+    assert latest_turn["mode_metadata"]["return_to_main_path_hint"] is False
+
+
+@pytest.mark.asyncio
 async def test_problem_response_budget_guard_skips_low_priority_calls(client, monkeypatch):
     from app.api.routes import problems as problems_route
     from app.services.model_os_service import model_os_service
