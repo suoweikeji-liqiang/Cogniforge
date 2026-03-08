@@ -215,6 +215,7 @@ class ProblemConceptCandidate(Base):
     source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
     confidence = Column(Float, nullable=False, default=0.0)
     status = Column(String(20), nullable=False, default="pending", index=True)
+    merged_into_concept = Column(String(120), nullable=True)
     evidence_snippet = Column(Text, nullable=True)
     reviewer_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)

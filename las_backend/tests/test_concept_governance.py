@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models.entities.user import Problem, ProblemConceptCandidate
+from app.models.entities.user import ConceptAlias, Problem, ProblemConceptCandidate, ProblemTurn
 
 
 @pytest.mark.asyncio
@@ -145,6 +145,110 @@ async def test_reject_concept_candidate(client: AsyncClient, auth_headers: dict,
 
 
 @pytest.mark.asyncio
+async def test_merge_concept_candidate_into_existing_concept(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session: AsyncSession,
+    test_user,
+):
+    """Merging should preserve the existing concept and attach the candidate as an alias."""
+    problem = Problem(
+        user_id=str(test_user.id),
+        title="Test Problem",
+        associated_concepts=["neural network"],
+    )
+    db_session.add(problem)
+    await db_session.flush()
+
+    turn = ProblemTurn(
+        user_id=str(test_user.id),
+        problem_id=str(problem.id),
+        learning_mode="exploration",
+        step_index=0,
+        user_text="How is an MLP different from a neural network?",
+        assistant_text="",
+        mode_metadata={"turn_source": "ask"},
+    )
+    db_session.add(turn)
+    await db_session.flush()
+
+    candidate = ProblemConceptCandidate(
+        user_id=str(test_user.id),
+        problem_id=str(problem.id),
+        concept_text="MLP",
+        normalized_text="mlp",
+        source="ask",
+        learning_mode="exploration",
+        source_turn_id=str(turn.id),
+        confidence=0.72,
+        status="pending",
+        evidence_snippet="The learner compared MLP with neural network.",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/merge",
+        headers=auth_headers,
+        json={"target_concept_text": "neural network"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["candidate"]["status"] == "merged"
+    assert data["candidate"]["merged_into_concept"] == "neural network"
+    assert data["candidate"]["source_turn_preview"].startswith("How is an MLP different")
+
+    alias_result = await db_session.execute(
+        select(ConceptAlias).where(ConceptAlias.normalized_alias == "mlp")
+    )
+    alias = alias_result.scalar_one_or_none()
+    assert alias is not None
+
+    await db_session.refresh(problem)
+    assert "neural network" in problem.associated_concepts
+    assert "MLP" not in problem.associated_concepts
+
+
+@pytest.mark.asyncio
+async def test_postpone_concept_candidate(client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user):
+    """Postponing a candidate should keep it visible with postponed status."""
+    problem = Problem(
+        user_id=str(test_user.id),
+        title="Test Problem",
+        associated_concepts=["existing"],
+    )
+    db_session.add(problem)
+    await db_session.flush()
+
+    candidate = ProblemConceptCandidate(
+        user_id=str(test_user.id),
+        problem_id=str(problem.id),
+        concept_text="uncertain concept",
+        normalized_text="uncertain concept",
+        source="response",
+        learning_mode="socratic",
+        confidence=0.44,
+        status="pending",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/postpone",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["candidate"]["status"] == "postponed"
+    assert data["candidate"]["reviewed_at"] is not None
+
+    await db_session.refresh(candidate)
+    assert candidate.status == "postponed"
+
+
+@pytest.mark.asyncio
 async def test_rollback_accepted_concept(client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user):
     """Rolling back should remove concept from problem and mark candidates as reverted"""
     problem = Problem(
@@ -181,6 +285,38 @@ async def test_rollback_accepted_concept(client: AsyncClient, auth_headers: dict
 
     await db_session.refresh(candidate)
     assert candidate.status == "reverted"
+
+
+@pytest.mark.asyncio
+async def test_list_concept_candidates_includes_source_turn_preview(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session: AsyncSession,
+):
+    """Listing candidates should surface source mode and source turn preview for the workspace panel."""
+    problem_response = await client.post(
+        "/api/problems/",
+        headers=auth_headers,
+        json={"title": "Test Problem", "associated_concepts": []},
+    )
+    problem_id = problem_response.json()["id"]
+
+    submit_response = await client.post(
+        f"/api/problems/{problem_id}/responses",
+        headers=auth_headers,
+        json={"problem_id": problem_id, "user_response": "I think gradient descent updates the weights."},
+    )
+    assert submit_response.status_code == 200
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem_id}/concept-candidates",
+        headers=auth_headers,
+    )
+    assert candidates_response.status_code == 200
+    candidates = candidates_response.json()
+    assert candidates
+    assert any(candidate["learning_mode"] == "socratic" for candidate in candidates)
+    assert any(candidate.get("source_turn_preview") for candidate in candidates)
 
 
 @pytest.mark.asyncio

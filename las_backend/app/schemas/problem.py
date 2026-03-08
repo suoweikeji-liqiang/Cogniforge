@@ -21,6 +21,7 @@ PathInsertionBehavior = Literal[
 ]
 PathCandidateStatus = Literal["pending", "planned", "bookmarked", "dismissed"]
 LearningPathKind = Literal["main", "branch", "prerequisite", "comparison"]
+ConceptCandidateStatus = Literal["pending", "accepted", "rejected", "reverted", "postponed", "merged"]
 
 
 class ProblemBase(BaseModel):
@@ -247,8 +248,11 @@ class ProblemConceptCandidateResponse(BaseModel):
     learning_mode: LearningMode
     source_turn_id: Optional[UUID] = None
     confidence: float
-    status: str
+    status: ConceptCandidateStatus
+    merged_into_concept: Optional[str] = None
     evidence_snippet: Optional[str] = None
+    source_turn_preview: Optional[str] = None
+    source_turn_created_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     created_at: datetime
 
@@ -270,6 +274,10 @@ class ProblemConceptCandidateActionResponse(BaseModel):
     candidate: ProblemConceptCandidateResponse
     accepted_concepts: List[str] = Field(default_factory=list)
     trace_id: Optional[str] = None
+
+
+class ProblemConceptCandidateMergeRequest(BaseModel):
+    target_concept_text: str = Field(..., min_length=1, max_length=120)
 
 
 class ProblemConceptRollbackRequest(BaseModel):

@@ -236,65 +236,25 @@
               </details>
               <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
             </div>
-            <ProblemTurnOutcomePanel
-              class="workspace-side-column"
-              :learning-mode="learningMode"
-              :latest-response="latestResponse"
-              :latest-feedback="latestFeedback"
-              :latest-qa="latestQA"
-            />
-          </div>
-        </section>
-
-        <section class="card concept-governance-section">
-          <h2>{{ t('problemDetail.conceptGovernanceTitle') }}</h2>
-          <p class="section-subtitle">{{ t('problemDetail.conceptGovernanceSubtitle') }}</p>
-
-          <div v-if="candidateLoading" class="loading">{{ t('common.loading') }}</div>
-          <p v-else-if="!conceptCandidates.length" class="empty">{{ t('problemDetail.noConceptCandidates') }}</p>
-          <div v-else class="candidate-list">
-            <div
-              v-for="candidate in conceptCandidates"
-              :key="candidate.id"
-              class="candidate-item"
-              :class="`candidate-${candidate.status}`"
-            >
-              <div class="candidate-head">
-                <strong>{{ candidate.concept_text }}</strong>
-                <span class="candidate-status">{{ candidate.status }}</span>
-                <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
-                <span class="candidate-source">{{ candidate.source }}</span>
-              </div>
-              <p v-if="candidate.evidence_snippet" class="candidate-evidence">{{ candidate.evidence_snippet }}</p>
-              <div class="candidate-actions">
-                <button
-                  v-if="candidate.status === 'pending'"
-                  type="button"
-                  class="btn btn-primary"
-                  :disabled="candidateSubmittingId === candidate.id"
-                  @click="acceptCandidate(candidate.id)"
-                >
-                  {{ t('problemDetail.acceptCandidate') }}
-                </button>
-                <button
-                  v-if="candidate.status === 'pending'"
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="candidateSubmittingId === candidate.id"
-                  @click="rejectCandidate(candidate.id)"
-                >
-                  {{ t('problemDetail.rejectCandidate') }}
-                </button>
-                <button
-                  v-if="candidate.status === 'accepted'"
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="candidateSubmittingId === candidate.id"
-                  @click="rollbackConcept(candidate.id, candidate.concept_text)"
-                >
-                  {{ t('problemDetail.rollbackConcept') }}
-                </button>
-              </div>
+            <div class="workspace-side-column workspace-side-stack">
+              <ProblemTurnOutcomePanel
+                :learning-mode="learningMode"
+                :latest-response="latestResponse"
+                :latest-feedback="latestFeedback"
+                :latest-qa="latestQA"
+              />
+              <ProblemDerivedConceptsPanel
+                :candidates="conceptCandidates"
+                :loading="candidateLoading"
+                :current-turn-id="activeConceptTurnId"
+                :merge-targets="conceptMergeTargets"
+                :action-pending-id="candidateSubmittingId"
+                @accept="acceptCandidate"
+                @reject="rejectCandidate"
+                @postpone="postponeCandidate"
+                @merge="mergeCandidate"
+                @rollback="rollbackConcept"
+              />
             </div>
           </div>
         </section>
@@ -429,13 +389,26 @@
                 </div>
               </details>
             </div>
-            <ProblemTurnOutcomePanel
-              class="workspace-side-column"
-              :learning-mode="learningMode"
-              :latest-response="latestResponse"
-              :latest-feedback="latestFeedback"
-              :latest-qa="latestQA"
-            />
+            <div class="workspace-side-column workspace-side-stack">
+              <ProblemTurnOutcomePanel
+                :learning-mode="learningMode"
+                :latest-response="latestResponse"
+                :latest-feedback="latestFeedback"
+                :latest-qa="latestQA"
+              />
+              <ProblemDerivedConceptsPanel
+                :candidates="conceptCandidates"
+                :loading="candidateLoading"
+                :current-turn-id="activeConceptTurnId"
+                :merge-targets="conceptMergeTargets"
+                :action-pending-id="candidateSubmittingId"
+                @accept="acceptCandidate"
+                @reject="rejectCandidate"
+                @postpone="postponeCandidate"
+                @merge="mergeCandidate"
+                @rollback="rollbackConcept"
+              />
+            </div>
           </div>
         </section>
       </div>
@@ -449,6 +422,7 @@ import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
+import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -500,6 +474,27 @@ const progressPercent = computed(() => {
 const completedStepList = computed(() => (learningPath.value?.path_data || []).slice(0, completedSteps.value))
 const latestResponse = computed(() => responses.value[responses.value.length - 1] || null)
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
+const activeConceptTurnId = computed(() => {
+  if (learningMode.value === 'exploration') {
+    return latestQA.value?.turn_id || null
+  }
+  return latestResponse.value?.turn_id || null
+})
+const conceptMergeTargets = computed(() => {
+  const values = [
+    ...(problem.value?.associated_concepts || []),
+    ...conceptCandidates.value
+      .filter((candidate) => ['accepted', 'merged'].includes(candidate.status))
+      .map((candidate) => candidate.merged_into_concept || candidate.concept_text),
+  ]
+  const seen = new Set<string>()
+  return values.filter((item) => {
+    const key = String(item || '').trim().toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
 
 const formatConfidence = (value: number | string | undefined | null) => {
   const parsed = Number(value ?? 0)
@@ -873,7 +868,39 @@ const rejectCandidate = async (candidateId: string) => {
   }
 }
 
-const rollbackConcept = async (candidateId: string, conceptText: string) => {
+const postponeCandidate = async (candidateId: string) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/postpone`)
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to postpone concept candidate:', e)
+  } finally {
+    candidateSubmittingId.value = null
+  }
+}
+
+const mergeCandidate = async ({ candidateId, targetConcept }: { candidateId: string; targetConcept: string }) => {
+  candidateSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/merge`, {
+      target_concept_text: targetConcept,
+    })
+    await Promise.all([
+      fetchConceptCandidates(),
+      api.get(`/problems/${route.params.id}`).then((res) => {
+        problem.value = res.data
+        learningMode.value = res.data?.learning_mode || learningMode.value
+      }).catch(() => null),
+    ])
+  } catch (e) {
+    console.error('Failed to merge concept candidate:', e)
+  } finally {
+    candidateSubmittingId.value = null
+  }
+}
+
+const rollbackConcept = async ({ candidateId, conceptText }: { candidateId: string; conceptText: string }) => {
   candidateSubmittingId.value = candidateId
   try {
     await api.post(`/problems/${route.params.id}/concepts/rollback`, {
@@ -1017,6 +1044,11 @@ onMounted(fetchProblem)
 
 .workspace-side-column {
   min-width: 0;
+}
+
+.workspace-side-stack {
+  display: grid;
+  gap: 1rem;
 }
 
 .workspace-mode-toggle .btn.active {

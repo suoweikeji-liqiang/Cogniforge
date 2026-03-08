@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, desc
+from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import List, Optional
 
@@ -44,6 +45,7 @@ from app.schemas.problem import (
     ProblemTurnResponse,
     ProblemConceptCandidateResponse,
     ProblemConceptCandidateActionResponse,
+    ProblemConceptCandidateMergeRequest,
     ProblemPathCandidateResponse,
     ProblemPathCandidateDecisionRequest,
     ProblemPathCandidateDecisionResponse,
@@ -1064,6 +1066,43 @@ def _normalize_path_insertion(action: Optional[str], default: str = "bookmark_fo
     if normalized not in {"insert_before_current_main", "save_as_side_branch", "bookmark_for_later"}:
         return default
     return normalized
+
+
+def _normalize_concept_candidate_status(status: Optional[str]) -> str:
+    normalized = str(status or "pending").strip().lower()
+    if normalized not in {"pending", "accepted", "rejected", "reverted", "postponed", "merged"}:
+        return "pending"
+    return normalized
+
+
+def _build_turn_preview(turn: Optional[ProblemTurn]) -> Optional[str]:
+    if not turn:
+        return None
+    raw = str(turn.user_text or turn.assistant_text or "").strip()
+    if not raw:
+        return None
+    compact = re.sub(r"\s+", " ", raw)
+    return compact[:180] + ("..." if len(compact) > 180 else "")
+
+
+def _serialize_problem_concept_candidate(candidate: ProblemConceptCandidate) -> dict:
+    turn = getattr(candidate, "source_turn", None)
+    return {
+        "id": candidate.id,
+        "problem_id": candidate.problem_id,
+        "concept_text": candidate.concept_text,
+        "source": candidate.source,
+        "learning_mode": _normalize_learning_mode(candidate.learning_mode, "socratic"),
+        "source_turn_id": candidate.source_turn_id,
+        "confidence": round(float(candidate.confidence or 0.0), 4),
+        "status": _normalize_concept_candidate_status(candidate.status),
+        "merged_into_concept": candidate.merged_into_concept,
+        "evidence_snippet": candidate.evidence_snippet,
+        "source_turn_preview": _build_turn_preview(turn),
+        "source_turn_created_at": turn.created_at.isoformat() if turn and turn.created_at else None,
+        "reviewed_at": candidate.reviewed_at.isoformat() if candidate.reviewed_at else None,
+        "created_at": candidate.created_at.isoformat() if candidate.created_at else None,
+    }
 
 
 def _serialize_problem_path_candidate(candidate: ProblemPathCandidate) -> dict:
@@ -2154,6 +2193,7 @@ async def list_problem_concept_candidates(
 
     query = (
         select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
         .where(
             ProblemConceptCandidate.problem_id == str(problem_id),
             ProblemConceptCandidate.user_id == str(current_user.id),
@@ -2161,10 +2201,10 @@ async def list_problem_concept_candidates(
         .order_by(ProblemConceptCandidate.created_at.desc())
     )
     if status:
-        query = query.where(ProblemConceptCandidate.status == status.strip().lower())
+        query = query.where(ProblemConceptCandidate.status == _normalize_concept_candidate_status(status))
 
     result = await db.execute(query)
-    return list(result.scalars().all())
+    return [_serialize_problem_concept_candidate(row) for row in result.scalars().all()]
 
 
 @router.post(
@@ -2189,7 +2229,9 @@ async def accept_problem_concept_candidate(
         raise HTTPException(status_code=404, detail="Problem not found")
 
     candidate_result = await db.execute(
-        select(ProblemConceptCandidate).where(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(
             ProblemConceptCandidate.id == str(candidate_id),
             ProblemConceptCandidate.problem_id == str(problem_id),
             ProblemConceptCandidate.user_id == str(current_user.id),
@@ -2200,6 +2242,7 @@ async def accept_problem_concept_candidate(
         raise HTTPException(status_code=404, detail="Concept candidate not found")
 
     candidate.status = "accepted"
+    candidate.merged_into_concept = None
     candidate.reviewer_id = str(current_user.id)
     candidate.reviewed_at = datetime.utcnow()
 
@@ -2262,9 +2305,14 @@ async def accept_problem_concept_candidate(
     )
 
     await db.commit()
-    await db.refresh(candidate)
+    refreshed_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(ProblemConceptCandidate.id == str(candidate.id))
+    )
+    refreshed_candidate = refreshed_result.scalar_one()
     return {
-        "candidate": candidate,
+        "candidate": _serialize_problem_concept_candidate(refreshed_candidate),
         "accepted_concepts": accepted_concepts,
         "trace_id": trace_id,
     }
@@ -2282,7 +2330,9 @@ async def reject_problem_concept_candidate(
 ):
     trace_id = str(uuid.uuid4())
     candidate_result = await db.execute(
-        select(ProblemConceptCandidate).where(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(
             ProblemConceptCandidate.id == str(candidate_id),
             ProblemConceptCandidate.problem_id == str(problem_id),
             ProblemConceptCandidate.user_id == str(current_user.id),
@@ -2293,6 +2343,7 @@ async def reject_problem_concept_candidate(
         raise HTTPException(status_code=404, detail="Concept candidate not found")
 
     candidate.status = "rejected"
+    candidate.merged_into_concept = None
     candidate.reviewer_id = str(current_user.id)
     candidate.reviewed_at = datetime.utcnow()
 
@@ -2311,9 +2362,245 @@ async def reject_problem_concept_candidate(
     )
 
     await db.commit()
-    await db.refresh(candidate)
+    refreshed_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(ProblemConceptCandidate.id == str(candidate.id))
+    )
+    refreshed_candidate = refreshed_result.scalar_one()
     return {
-        "candidate": candidate,
+        "candidate": _serialize_problem_concept_candidate(refreshed_candidate),
+        "accepted_concepts": [],
+        "trace_id": trace_id,
+    }
+
+
+@router.post(
+    "/{problem_id}/concept-candidates/{candidate_id}/merge",
+    response_model=ProblemConceptCandidateActionResponse,
+)
+async def merge_problem_concept_candidate(
+    problem_id: UUID,
+    candidate_id: UUID,
+    payload: ProblemConceptCandidateMergeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    trace_id = str(uuid.uuid4())
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    candidate_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(
+            ProblemConceptCandidate.id == str(candidate_id),
+            ProblemConceptCandidate.problem_id == str(problem_id),
+            ProblemConceptCandidate.user_id == str(current_user.id),
+        )
+    )
+    candidate = candidate_result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Concept candidate not found")
+
+    normalized_target = model_os_service.normalize_concepts([payload.target_concept_text], limit=1)
+    if not normalized_target:
+        raise HTTPException(status_code=400, detail="Target concept is required")
+    target_concept_text = normalized_target[0]
+    target_key = model_os_service.normalize_concept_key(target_concept_text)
+    if target_key == candidate.normalized_text:
+        raise HTTPException(status_code=400, detail="Merge target must be an existing concept")
+
+    existing_problem_targets = {
+        model_os_service.normalize_concept_key(item)
+        for item in model_os_service.normalize_concepts(
+            problem.associated_concepts or [],
+            limit=max(6, int(settings.PROBLEM_MAX_ASSOCIATED_CONCEPTS)),
+        )
+    }
+    target_exists = target_key in existing_problem_targets
+    if not target_exists:
+        concept_result = await db.execute(
+            select(Concept).where(
+                Concept.user_id == str(current_user.id),
+                Concept.normalized_name == target_key,
+            )
+        )
+        target_exists = concept_result.scalar_one_or_none() is not None
+    if not target_exists:
+        alias_result = await db.execute(
+            select(ConceptAlias)
+            .join(Concept, Concept.id == ConceptAlias.concept_id)
+            .where(
+                Concept.user_id == str(current_user.id),
+                ConceptAlias.normalized_alias == target_key,
+            )
+        )
+        target_exists = alias_result.scalar_one_or_none() is not None
+    if not target_exists:
+        raise HTTPException(status_code=400, detail="Merge target must already exist")
+
+    target_concept_result = await db.execute(
+        select(Concept).where(
+            Concept.user_id == str(current_user.id),
+            Concept.normalized_name == target_key,
+        )
+    )
+    target_concept = target_concept_result.scalar_one_or_none()
+    if target_concept is None:
+        alias_concept_result = await db.execute(
+            select(Concept)
+            .join(ConceptAlias, Concept.id == ConceptAlias.concept_id)
+            .where(
+                Concept.user_id == str(current_user.id),
+                ConceptAlias.normalized_alias == target_key,
+            )
+        )
+        target_concept = alias_concept_result.scalar_one_or_none()
+    if target_concept is None:
+        target_concept = await _ensure_concept_record(
+            db=db,
+            user_id=str(current_user.id),
+            concept_text=target_concept_text,
+            source_type="candidate_merge_target",
+            source_id=str(problem.id),
+            confidence=max(0.7, float(candidate.confidence or 0.0)),
+            snippet=candidate.evidence_snippet,
+        )
+    if not target_concept:
+        raise HTTPException(status_code=400, detail="Failed to resolve merge target")
+
+    alias_result = await db.execute(
+        select(ConceptAlias).where(
+            ConceptAlias.concept_id == target_concept.id,
+            ConceptAlias.normalized_alias == candidate.normalized_text,
+        )
+    )
+    if alias_result.scalar_one_or_none() is None:
+        db.add(
+            ConceptAlias(
+                concept_id=target_concept.id,
+                alias=candidate.concept_text,
+                normalized_alias=candidate.normalized_text,
+            )
+        )
+
+    db.add(
+        ConceptEvidence(
+            user_id=str(current_user.id),
+            concept_id=target_concept.id,
+            source_type="candidate_merge",
+            source_id=str(problem.id),
+            snippet=(candidate.evidence_snippet or "")[:500] or None,
+            confidence=max(0.0, min(1.0, float(candidate.confidence or 0.0))),
+        )
+    )
+
+    canonical_existing = model_os_service.normalize_concepts(
+        problem.associated_concepts or [],
+        limit=max(6, int(settings.PROBLEM_MAX_ASSOCIATED_CONCEPTS)),
+    )
+    merged_problem_concepts = model_os_service.normalize_concepts(
+        canonical_existing + [target_concept.canonical_name],
+        limit=max(6, int(settings.PROBLEM_MAX_ASSOCIATED_CONCEPTS)),
+    )
+    if merged_problem_concepts != canonical_existing:
+        problem.associated_concepts = merged_problem_concepts
+        model_os_service.refresh_problem_embedding(problem)
+
+    candidate.status = "merged"
+    candidate.merged_into_concept = target_concept.canonical_name
+    candidate.reviewer_id = str(current_user.id)
+    candidate.reviewed_at = datetime.utcnow()
+
+    await _log_learning_event(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        event_type="concept_candidate_merged",
+        learning_mode=candidate.learning_mode,
+        trace_id=trace_id,
+        payload={
+            "candidate_id": str(candidate.id),
+            "concept_text": candidate.concept_text,
+            "merged_into_concept": target_concept.canonical_name,
+            "confidence": candidate.confidence,
+        },
+    )
+
+    await db.commit()
+    refreshed_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(ProblemConceptCandidate.id == str(candidate.id))
+    )
+    refreshed_candidate = refreshed_result.scalar_one()
+    return {
+        "candidate": _serialize_problem_concept_candidate(refreshed_candidate),
+        "accepted_concepts": [],
+        "trace_id": trace_id,
+    }
+
+
+@router.post(
+    "/{problem_id}/concept-candidates/{candidate_id}/postpone",
+    response_model=ProblemConceptCandidateActionResponse,
+)
+async def postpone_problem_concept_candidate(
+    problem_id: UUID,
+    candidate_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    trace_id = str(uuid.uuid4())
+    candidate_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(
+            ProblemConceptCandidate.id == str(candidate_id),
+            ProblemConceptCandidate.problem_id == str(problem_id),
+            ProblemConceptCandidate.user_id == str(current_user.id),
+        )
+    )
+    candidate = candidate_result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Concept candidate not found")
+
+    candidate.status = "postponed"
+    candidate.merged_into_concept = None
+    candidate.reviewer_id = str(current_user.id)
+    candidate.reviewed_at = datetime.utcnow()
+
+    await _log_learning_event(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem_id),
+        event_type="concept_candidate_postponed",
+        learning_mode=candidate.learning_mode,
+        trace_id=trace_id,
+        payload={
+            "candidate_id": str(candidate.id),
+            "concept_text": candidate.concept_text,
+            "confidence": candidate.confidence,
+        },
+    )
+
+    await db.commit()
+    refreshed_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(ProblemConceptCandidate.id == str(candidate.id))
+    )
+    refreshed_candidate = refreshed_result.scalar_one()
+    return {
+        "candidate": _serialize_problem_concept_candidate(refreshed_candidate),
         "accepted_concepts": [],
         "trace_id": trace_id,
     }

@@ -30,6 +30,7 @@ from app.schemas.problem import (
     ExplorationPathSuggestionResponse,
     ProblemConceptCandidateResponse,
     ProblemConceptCandidateActionResponse,
+    ProblemConceptCandidateMergeRequest,
     ProblemConceptRollbackRequest,
     ProblemConceptRollbackResponse,
 )
