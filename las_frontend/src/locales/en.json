@@ -487,6 +487,7 @@
   },
   "resources": {
     "title": "Learning Resources",
+    "archiveSubtitle": "Primary resource capture now lives inside ProblemDetail. This page is your archive for general and problem-linked references.",
     "searchResources": "Search resources...",
     "urlPlaceholder": "Enter a web or video link...",
     "titlePlaceholder": "Title (optional)",
@@ -498,7 +499,18 @@
     "completed": "Completed",
     "aiSummary": "AI Summary",
     "interpret": "AI Interpret",
-    "noResources": "No resources yet. Add one to get started!"
+    "noResources": "No resources yet. Add one to get started!",
+    "workspaceTitle": "Workspace References",
+    "workspaceSubtitle": "Attach links to this problem so they stay tied to the learning context that produced them.",
+    "saveToProblem": "Save Reference",
+    "contextLabel": "Attachment scope",
+    "currentTurnContext": "This reference is attached to the current turn and this problem.",
+    "problemOnlyContext": "This reference is attached to this problem.",
+    "currentTurnResource": "Current turn",
+    "noProblemResources": "No references attached to this problem yet.",
+    "captureInProblem": "Attach in ProblemDetail",
+    "problemResource": "Problem reference",
+    "generalResource": "General reference"
   },
   "notes": {
     "title": "Quick Notes",

@@ -487,6 +487,7 @@
   },
   "resources": {
     "title": "学习资源",
+    "archiveSubtitle": "主要记录入口现在在 ProblemDetail 中，这里保留为通用资源和问题上下文资源的归档页。",
     "searchResources": "搜索资源...",
     "urlPlaceholder": "输入网页或视频链接...",
     "titlePlaceholder": "标题（可选）",
@@ -498,7 +499,18 @@
     "completed": "已完成",
     "aiSummary": "AI 解读",
     "interpret": "AI 解读",
-    "noResources": "暂无学习资源，添加一个开始吧！"
+    "noResources": "暂无学习资源，添加一个开始吧！",
+    "workspaceTitle": "工作区参考资料",
+    "workspaceSubtitle": "把链接直接附着到当前问题上，让参考资料跟随产生它的学习上下文。",
+    "saveToProblem": "保存资料",
+    "contextLabel": "附着范围",
+    "currentTurnContext": "这条资料会同时附着到当前回合和当前问题。",
+    "problemOnlyContext": "这条资料会附着到当前问题。",
+    "currentTurnResource": "当前回合",
+    "noProblemResources": "这个问题下还没有参考资料。",
+    "captureInProblem": "去 ProblemDetail 附加",
+    "problemResource": "问题资料",
+    "generalResource": "通用资料"
   },
   "notes": {
     "title": "随手记",

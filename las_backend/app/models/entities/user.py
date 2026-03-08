@@ -418,6 +418,8 @@ class ResourceLink(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=True, index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
     url = Column(Text, nullable=False)
     title = Column(String(500))
     link_type = Column(String(20), default="webpage")  # webpage, video
@@ -428,6 +430,8 @@ class ResourceLink(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", backref="resource_links")
+    problem = relationship("Problem")
+    source_turn = relationship("ProblemTurn")
 
 
 class QuickNote(Base):

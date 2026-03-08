@@ -8,6 +8,8 @@ class ResourceLinkCreate(BaseModel):
     url: str
     title: Optional[str] = None
     link_type: str = "webpage"
+    problem_id: Optional[UUID] = None
+    source_turn_id: Optional[UUID] = None
 
 
 class ResourceLinkUpdate(BaseModel):
@@ -20,6 +22,8 @@ class ResourceLinkResponse(BaseModel):
 
     id: UUID
     user_id: UUID
+    problem_id: Optional[UUID]
+    source_turn_id: Optional[UUID]
     url: str
     title: Optional[str]
     link_type: str

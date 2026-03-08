@@ -127,6 +127,10 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('save-workspace-note').click()
     await expect(page.getByTestId('workspace-notes-panel')).toContainText(/Current turn/i)
     await expect(page.getByTestId('workspace-notes-panel')).toContainText(/precision and recall tradeoff/i)
+    await page.getByTestId('workspace-resource-url').fill('https://example.com/precision-recall')
+    await page.getByTestId('save-workspace-resource').click()
+    await expect(page.getByTestId('workspace-resources-panel')).toContainText(/Current turn/i)
+    await expect(page.getByTestId('workspace-resources-panel')).toContainText(/precision-recall/i)
 
     await page.getByTestId('accept-derived-concept').first().click()
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
