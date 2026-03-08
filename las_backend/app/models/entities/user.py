@@ -435,12 +435,16 @@ class QuickNote(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=True, index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
     content = Column(Text, nullable=False)
     source = Column(String(20), default="text")  # text, voice
     tags = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", backref="quick_notes")
+    problem = relationship("Problem")
+    source_turn = relationship("ProblemTurn")
 
 
 class PasswordResetToken(Base):

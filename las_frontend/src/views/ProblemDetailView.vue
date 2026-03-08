@@ -266,6 +266,13 @@
                 @open-card="openModelCard"
                 @schedule-review="scheduleCandidateReview"
               />
+              <ProblemWorkspaceNotesPanel
+                :notes="workspaceNotes"
+                :saving="noteSaving"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceNote"
+                @delete="deleteWorkspaceNote"
+              />
             </div>
           </div>
         </section>
@@ -432,6 +439,13 @@
                 @open-card="openModelCard"
                 @schedule-review="scheduleCandidateReview"
               />
+              <ProblemWorkspaceNotesPanel
+                :notes="workspaceNotes"
+                :saving="noteSaving"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceNote"
+                @delete="deleteWorkspaceNote"
+              />
             </div>
           </div>
         </section>
@@ -447,6 +461,7 @@ import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
 import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
+import ProblemWorkspaceNotesPanel from '@/components/problem-workspace/ProblemWorkspaceNotesPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -480,6 +495,8 @@ const handoffSubmittingId = ref<string | null>(null)
 const pathCandidateLoading = ref(false)
 const pathCandidateSubmittingId = ref<string | null>(null)
 const scheduledModelCardIds = ref<string[]>([])
+const workspaceNotes = ref<any[]>([])
+const noteSaving = ref(false)
 const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
@@ -662,6 +679,20 @@ const fetchReviewSchedules = async () => {
   }
 }
 
+const fetchWorkspaceNotes = async () => {
+  try {
+    const response = await api.get('/notes/', {
+      params: {
+        problem_id: route.params.id,
+      },
+    })
+    workspaceNotes.value = response.data || []
+  } catch (e) {
+    console.error('Failed to fetch workspace notes:', e)
+    workspaceNotes.value = []
+  }
+}
+
 const fetchLearningPath = async () => {
   const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
   learningPath.value = pathRes.data
@@ -674,7 +705,7 @@ const fetchLearningPaths = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes, schedulesRes] = await Promise.all([
+    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes, schedulesRes, notesRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
@@ -686,6 +717,9 @@ const fetchProblem = async () => {
       }).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/socratic-question`).catch(() => ({ data: null })),
       api.get('/srs/schedules').catch(() => ({ data: [] })),
+      api.get('/notes/', {
+        params: { problem_id: route.params.id },
+      }).catch(() => ({ data: [] })),
     ])
 
     problem.value = problemRes.data
@@ -698,6 +732,7 @@ const fetchProblem = async () => {
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
     socraticQuestion.value = socraticRes.data || null
     scheduledModelCardIds.value = (schedulesRes.data || []).map((schedule: any) => String(schedule.model_card_id))
+    workspaceNotes.value = notesRes.data || []
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -992,6 +1027,33 @@ const scheduleCandidateReview = async (candidateId: string) => {
     console.error('Failed to schedule concept candidate review:', e)
   } finally {
     handoffSubmittingId.value = null
+  }
+}
+
+const saveWorkspaceNote = async ({ content, tags }: { content: string; tags: string[] }) => {
+  noteSaving.value = true
+  try {
+    await api.post('/notes/', {
+      content,
+      source: 'text',
+      tags,
+      problem_id: route.params.id,
+      source_turn_id: activeConceptTurnId.value || undefined,
+    })
+    await fetchWorkspaceNotes()
+  } catch (e) {
+    console.error('Failed to save workspace note:', e)
+  } finally {
+    noteSaving.value = false
+  }
+}
+
+const deleteWorkspaceNote = async (noteId: string) => {
+  try {
+    await api.delete(`/notes/${noteId}`)
+    workspaceNotes.value = workspaceNotes.value.filter((note) => note.id !== noteId)
+  } catch (e) {
+    console.error('Failed to delete workspace note:', e)
   }
 }
 

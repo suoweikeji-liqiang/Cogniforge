@@ -123,6 +123,10 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(latestTurnOutcome(page)).toContainText(/Comparison/i)
     await expect(latestTurnOutcome(page)).toContainText(/Precision measures/i)
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+    await page.getByTestId('workspace-note-input').fill('Capture the precision and recall tradeoff before branching.')
+    await page.getByTestId('save-workspace-note').click()
+    await expect(page.getByTestId('workspace-notes-panel')).toContainText(/Current turn/i)
+    await expect(page.getByTestId('workspace-notes-panel')).toContainText(/precision and recall tradeoff/i)
 
     await page.getByTestId('accept-derived-concept').first().click()
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)

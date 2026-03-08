@@ -502,12 +502,24 @@
   },
   "notes": {
     "title": "Quick Notes",
+    "archiveSubtitle": "Primary note capture now lives inside ProblemDetail. This page is your archive for general and problem-linked notes.",
     "placeholder": "Write down your thoughts...",
     "tagPlaceholder": "Add tag, press Enter",
     "startRecording": "Voice Input",
     "stopRecording": "Stop Recording",
     "voiceNotSupported": "Your browser does not support speech recognition",
-    "noNotes": "No notes yet. Write your first thought!"
+    "noNotes": "No notes yet. Write your first thought!",
+    "workspaceTitle": "Workspace Notes",
+    "workspaceSubtitle": "Attach a note to this problem and, when available, to the current learning turn.",
+    "saveToProblem": "Save Note",
+    "contextLabel": "Capture scope",
+    "currentTurnContext": "This note is attached to the current turn and this problem.",
+    "problemOnlyContext": "This note is attached to this problem.",
+    "currentTurnNote": "Current turn",
+    "noProblemNotes": "No notes attached to this problem yet.",
+    "captureInProblem": "Capture in ProblemDetail",
+    "problemNote": "Problem note",
+    "generalNote": "General note"
   },
   "settings": {
     "serverConfig": "Server Configuration",

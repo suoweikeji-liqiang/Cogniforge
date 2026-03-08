@@ -502,12 +502,24 @@
   },
   "notes": {
     "title": "随手记",
+    "archiveSubtitle": "主要记录入口现在在 ProblemDetail 中，这里保留为通用笔记和问题上下文笔记的归档页。",
     "placeholder": "记录你的想法...",
     "tagPlaceholder": "添加标签后回车",
     "startRecording": "语音录入",
     "stopRecording": "停止录音",
     "voiceNotSupported": "您的浏览器不支持语音识别",
-    "noNotes": "暂无记录，写下你的第一个想法吧！"
+    "noNotes": "暂无记录，写下你的第一个想法吧！",
+    "workspaceTitle": "工作区笔记",
+    "workspaceSubtitle": "把笔记直接挂到当前问题上；如果已有学习回合，也会一并挂到当前回合。",
+    "saveToProblem": "保存笔记",
+    "contextLabel": "记录范围",
+    "currentTurnContext": "这条笔记会同时附着到当前回合和当前问题。",
+    "problemOnlyContext": "这条笔记会附着到当前问题。",
+    "currentTurnNote": "当前回合",
+    "noProblemNotes": "这个问题下还没有笔记。",
+    "captureInProblem": "去 ProblemDetail 记录",
+    "problemNote": "问题笔记",
+    "generalNote": "通用笔记"
   },
   "settings": {
     "serverConfig": "服务器配置",
