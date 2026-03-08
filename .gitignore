@@ -24,6 +24,8 @@ build/
 .env
 .env.local
 .env.*.local
+test.env
+*.env
 
 # IDE
 .vscode/
@@ -46,3 +48,5 @@ yarn-error.log*
 dist/
 /ref
 output/playwright/
+.playwright-cli/
+.agents/
