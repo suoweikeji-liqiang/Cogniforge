@@ -22,12 +22,16 @@
               {
                 'candidate-current': isCurrentTurnCandidate(candidate),
                 'candidate-needs-reinforcement': needsReinforcement(candidate),
+                'candidate-focus-target': isFocusTarget(candidate),
               },
             ]"
-            data-testid="derived-concept-card"
+            :data-testid="isFocusTarget(candidate) ? 'derived-concept-focus-target' : 'derived-concept-card'"
           >
             <div class="candidate-head">
               <strong>{{ candidate.concept_text }}</strong>
+              <span v-if="isFocusTarget(candidate)" class="handoff-badge handoff-badge-alert">
+                {{ t('problemDetail.reinforcementFocusBadge') }}
+              </span>
               <span class="candidate-status">{{ formatCandidateStatus(candidate.status) }}</span>
               <span class="candidate-mode">{{ formatLearningMode(candidate.learning_mode) }}</span>
               <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
@@ -204,6 +208,9 @@ const props = defineProps<{
   handoffPendingId?: string | null
   scheduledModelCardIds?: string[]
   scheduledReviewsByModelCardId?: Record<string, any>
+  focusCandidateId?: string | null
+  focusTurnId?: string | null
+  focusConceptText?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -223,6 +230,15 @@ const selectedMergeTargets = ref<Record<string, string>>({})
 const normalizeKey = (value: string | undefined | null) => String(value || '').trim().toLowerCase()
 
 const isCurrentTurnCandidate = (candidate: any) => Boolean(props.currentTurnId && candidate.source_turn_id === props.currentTurnId)
+const isFocusTarget = (candidate: any) => {
+  if (!candidate) return false
+  if (props.focusCandidateId && String(candidate.id) === String(props.focusCandidateId)) return true
+  if (!props.focusTurnId || String(candidate.source_turn_id || '') !== String(props.focusTurnId)) return false
+  if (props.focusConceptText) {
+    return normalizeKey(candidate.concept_text) === normalizeKey(props.focusConceptText)
+  }
+  return true
+}
 
 const statusRank = (status: string | undefined | null) => {
   if (status === 'pending') return 0
@@ -235,6 +251,10 @@ const statusRank = (status: string | undefined | null) => {
 
 const sortedCandidates = computed(() => {
   return [...(props.candidates || [])].sort((left, right) => {
+    const leftFocus = isFocusTarget(left) ? 0 : 1
+    const rightFocus = isFocusTarget(right) ? 0 : 1
+    if (leftFocus !== rightFocus) return leftFocus - rightFocus
+
     const leftCurrent = isCurrentTurnCandidate(left) ? 0 : 1
     const rightCurrent = isCurrentTurnCandidate(right) ? 0 : 1
     if (leftCurrent !== rightCurrent) return leftCurrent - rightCurrent
@@ -441,6 +461,11 @@ const emitMerge = (candidateId: string) => {
 
 .candidate-current {
   box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+
+.candidate-focus-target {
+  border-color: rgba(248, 113, 113, 0.42);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.18);
 }
 
 .candidate-head {

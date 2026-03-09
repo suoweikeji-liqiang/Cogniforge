@@ -140,7 +140,20 @@
                 </article>
               </div>
 
-              <p v-if="activeReinforcementTarget.source_turn_preview" class="reinforcement-preview">
+              <article class="workspace-summary-card reinforcement-focus-card" data-testid="workspace-reinforcement-focus">
+                <span class="workspace-summary-label">{{ t('problemDetail.reinforcementFocusTitle') }}</span>
+                <strong>{{ reinforcementFocusTitle }}</strong>
+                <p>{{ reinforcementFocusDescription }}</p>
+                <p v-if="reinforcementFocusTurnPreview" class="reinforcement-preview">
+                  <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                  {{ reinforcementFocusTurnPreview }}
+                </p>
+              </article>
+
+              <p
+                v-if="activeReinforcementTarget.source_turn_preview && activeReinforcementTarget.source_turn_preview !== reinforcementFocusTurnPreview"
+                class="reinforcement-preview"
+              >
                 <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
                 {{ activeReinforcementTarget.source_turn_preview }}
               </p>
@@ -441,6 +454,9 @@
               :candidates="conceptCandidates"
               :loading="candidateLoading"
               :current-turn-id="activeConceptTurnId"
+              :focus-candidate-id="reinforcementFocusCandidateId"
+              :focus-turn-id="reinforcementFocusTurnId"
+              :focus-concept-text="activeReinforcementTarget?.concept_text || null"
               :merge-targets="conceptMergeTargets"
               :action-pending-id="candidateSubmittingId"
               :handoff-pending-id="handoffSubmittingId"
@@ -485,7 +501,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
@@ -646,6 +662,9 @@ const scheduledReviewsByModelCardId = computed(() => {
     scheduledReviews.value.map((schedule: any) => [String(schedule.model_card_id), schedule])
   )
 })
+const routeFocusModelCardId = computed(() => String(route.query.focus_model_card || ''))
+const routeFocusCandidateId = computed(() => String(route.query.focus_candidate || ''))
+const routeFocusTurnId = computed(() => String(route.query.focus_turn || ''))
 const problemReviewEntries = computed(() => {
   const problemId = String(route.params.id || '')
   return [...scheduledReviews.value]
@@ -668,11 +687,26 @@ const reinforcementReviewEntries = computed(() => {
     })
 })
 const activeReinforcementEntry = computed(() => {
+  const routeFocusedEntry = reinforcementReviewEntries.value.find((schedule: any) => {
+    if (routeFocusModelCardId.value && String(schedule.model_card_id || '') === routeFocusModelCardId.value) return true
+    if (routeFocusCandidateId.value && String(schedule.reinforcement_target?.concept_candidate_id || schedule.origin?.concept_candidate_id || '') === routeFocusCandidateId.value) return true
+    if (routeFocusTurnId.value && String(schedule.reinforcement_target?.source_turn_id || schedule.origin?.source_turn_id || '') === routeFocusTurnId.value) return true
+    return false
+  })
+  if (routeFocusedEntry) return routeFocusedEntry
   return currentTurnReviewEntries.value.find((schedule: any) => Boolean(schedule.needs_reinforcement))
     || reinforcementReviewEntries.value[0]
     || null
 })
 const activeReinforcementTarget = computed(() => activeReinforcementEntry.value?.reinforcement_target || null)
+const reinforcementFocusCandidateId = computed(() => {
+  const value = routeFocusCandidateId.value || String(activeReinforcementTarget.value?.concept_candidate_id || '')
+  return value || null
+})
+const reinforcementFocusTurnId = computed(() => {
+  const value = routeFocusTurnId.value || String(activeReinforcementTarget.value?.source_turn_id || '')
+  return value || null
+})
 const reinforcementTargetPathId = computed(() => String(activeReinforcementTarget.value?.resume_path_id || ''))
 const canSwitchToReinforcementPath = computed(() => {
   return Boolean(
@@ -738,6 +772,66 @@ const workspaceReviewDescription = computed(() => {
     concept: conceptLabel,
     date: formatDateTime(latest.next_review_at),
   })
+})
+const focusedReinforcementCandidate = computed(() => {
+  if (reinforcementFocusCandidateId.value) {
+    const exactCandidate = conceptCandidates.value.find(
+      (candidate: any) => String(candidate.id || '') === String(reinforcementFocusCandidateId.value)
+    )
+    if (exactCandidate) return exactCandidate
+  }
+
+  if (reinforcementFocusTurnId.value) {
+    const turnMatches = conceptCandidates.value.filter(
+      (candidate: any) => String(candidate.source_turn_id || '') === String(reinforcementFocusTurnId.value)
+    )
+    if (turnMatches.length === 1) return turnMatches[0]
+
+    const targetConcept = String(activeReinforcementTarget.value?.concept_text || '').trim().toLowerCase()
+    const conceptMatch = turnMatches.find(
+      (candidate: any) => String(candidate.concept_text || '').trim().toLowerCase() === targetConcept
+    )
+    if (conceptMatch) return conceptMatch
+    if (turnMatches.length) return turnMatches[0]
+  }
+
+  return null
+})
+const focusedReinforcementTurn = computed(() => {
+  if (!reinforcementFocusTurnId.value) return null
+  return qaHistory.value.find((turn: any) => String(turn.turn_id || '') === String(reinforcementFocusTurnId.value)) || null
+})
+const reinforcementFocusTitle = computed(() => {
+  return focusedReinforcementCandidate.value?.concept_text
+    || activeReinforcementTarget.value?.concept_text
+    || t('problemDetail.derivedConceptsTitle')
+})
+const reinforcementFocusDescription = computed(() => {
+  if (focusedReinforcementCandidate.value) {
+    return t('problemDetail.reinforcementFocusCandidate', {
+      status: formatCandidateStatus(focusedReinforcementCandidate.value.status),
+      source: formatCandidateSource(focusedReinforcementCandidate.value.source),
+    })
+  }
+  if (focusedReinforcementTurn.value?.answer_type) {
+    return t('problemDetail.reinforcementFocusTurn', {
+      answerType: formatAnswerType(focusedReinforcementTurn.value.answer_type),
+    })
+  }
+  return t('problemDetail.reinforcementFocusFallback')
+})
+const reinforcementFocusTurnPreview = computed(() => {
+  if (focusedReinforcementCandidate.value?.source_turn_preview) {
+    return focusedReinforcementCandidate.value.source_turn_preview
+  }
+  if (activeReinforcementTarget.value?.source_turn_preview) {
+    return activeReinforcementTarget.value.source_turn_preview
+  }
+  if (!focusedReinforcementTurn.value) return ''
+  const question = String(focusedReinforcementTurn.value.question || '').trim()
+  const answer = String(focusedReinforcementTurn.value.answer || '').trim()
+  if (question && answer) return `${question.slice(0, 110)} -> ${answer.slice(0, 110)}`
+  return question || answer
 })
 
 const formatConfidence = (value: number | string | undefined | null) => {
@@ -824,6 +918,21 @@ const formatLearningPathKind = (kind: string | undefined | null) => {
   if (kind === 'comparison') return t('problemDetail.pathKindComparison')
   if (kind === 'branch') return t('problemDetail.pathKindBranch')
   return t('problemDetail.pathKindMain')
+}
+
+const formatCandidateStatus = (status: string | undefined | null) => {
+  if (status === 'accepted') return t('problemDetail.conceptStatusAccepted')
+  if (status === 'rejected') return t('problemDetail.conceptStatusRejected')
+  if (status === 'reverted') return t('problemDetail.conceptStatusReverted')
+  if (status === 'postponed') return t('problemDetail.conceptStatusPostponed')
+  if (status === 'merged') return t('problemDetail.conceptStatusMerged')
+  return t('problemDetail.conceptStatusPending')
+}
+
+const formatCandidateSource = (source: string | undefined | null) => {
+  if (source === 'problem_inline_qa' || source === 'ask') return t('problemDetail.derivedConceptSourceAsk')
+  if (source === 'problem_response' || source === 'response') return t('problemDetail.derivedConceptSourceResponse')
+  return source || t('problemDetail.derivedConceptSourceUnknown')
 }
 
 const formatQuestionKind = (kind: string | undefined | null) => {
@@ -1386,6 +1495,7 @@ const handlePathCandidateDecision = ({ candidateId, action }: { candidateId: str
 const switchToReinforcementPath = async () => {
   if (!canSwitchToReinforcementPath.value) return
   await activateLearningPathById(reinforcementTargetPathId.value)
+  await scrollToReinforcementFocus()
 }
 
 const activateLearningPathById = async (pathId: string) => {
@@ -1414,6 +1524,16 @@ const applyResumePathFromQuery = async () => {
   await activateLearningPathById(resumePathId)
 }
 
+const scrollToReinforcementFocus = async () => {
+  await nextTick()
+  const target = document.querySelector('[data-testid="derived-concept-focus-target"]')
+    || document.querySelector('[data-testid="workspace-reinforcement-focus"]')
+    || document.querySelector('[data-testid="workspace-reinforcement-target"]')
+  if (target && 'scrollIntoView' in target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
 const returnToParentPath = async () => {
   if (updatingPath.value || !canReturnToParent.value) return
 
@@ -1435,6 +1555,7 @@ const returnToParentPath = async () => {
 onMounted(async () => {
   await fetchProblem()
   await applyResumePathFromQuery()
+  await scrollToReinforcementFocus()
 })
 </script>
 
@@ -1633,6 +1754,11 @@ onMounted(async () => {
   gap: 0.65rem;
   flex-wrap: wrap;
   margin-top: 0.85rem;
+}
+
+.reinforcement-focus-card {
+  margin-top: 0.85rem;
+  border-color: rgba(248, 113, 113, 0.34);
 }
 
 .workspace-mode-copy {
