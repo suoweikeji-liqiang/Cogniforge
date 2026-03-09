@@ -23,9 +23,50 @@
       </div>
     </div>
 
+    <section v-if="lastReviewOutcome" class="review-outcome-card" data-testid="srs-last-review-outcome">
+      <span class="outcome-eyebrow">{{ t('srs.lastReviewTitle') }}</span>
+      <strong>{{ lastReviewOutcome.title }}</strong>
+      <p>{{ formatReviewOutcome(lastReviewOutcome) }}</p>
+      <div class="origin-links">
+        <router-link
+          v-if="lastReviewOutcome.origin?.problem_id"
+          :to="`/problems/${lastReviewOutcome.origin.problem_id}`"
+          class="btn btn-secondary"
+        >
+          {{ t('srs.openWorkspace') }}
+        </router-link>
+        <router-link :to="`/model-cards/${lastReviewOutcome.model_card_id}`" class="btn btn-secondary">
+          {{ t('problemDetail.openModelCard') }}
+        </router-link>
+      </div>
+    </section>
+
     <!-- Review Card -->
     <div v-if="currentCard" class="review-card">
       <h2>{{ currentCard.title }}</h2>
+      <div v-if="currentCard.origin" class="origin-card" data-testid="srs-origin-panel">
+        <div class="origin-head">
+          <div>
+            <span class="outcome-eyebrow">{{ t('srs.originLabel') }}</span>
+            <strong>{{ formatOriginHeading(currentCard) }}</strong>
+          </div>
+          <div class="origin-links">
+            <router-link
+              v-if="currentCard.origin?.problem_id"
+              :to="`/problems/${currentCard.origin.problem_id}`"
+              class="btn btn-secondary"
+            >
+              {{ t('srs.openWorkspace') }}
+            </router-link>
+            <router-link :to="`/model-cards/${currentCard.model_card_id}`" class="btn btn-secondary">
+              {{ t('problemDetail.openModelCard') }}
+            </router-link>
+          </div>
+        </div>
+        <p class="origin-copy">{{ formatOriginReason(currentCard) }}</p>
+        <p v-if="currentCard.origin?.source_turn_preview" class="origin-copy">{{ currentCard.origin.source_turn_preview }}</p>
+        <p v-if="currentCard.origin?.evidence_snippet" class="origin-copy">{{ currentCard.origin.evidence_snippet }}</p>
+      </div>
       <p class="review-prompt">{{ t('srs.recallPrompt') }}</p>
 
       <div v-if="!showAnswer" class="review-action">
@@ -85,8 +126,42 @@ const allSchedules = ref<any[]>([])
 const loading = ref(true)
 const showAnswer = ref(false)
 const currentIndex = ref(0)
+const lastReviewOutcome = ref<any | null>(null)
 
 const currentCard = computed(() => dueCards.value[currentIndex.value] || null)
+
+const formatDateTime = (dateValue: string | undefined | null) => {
+  if (!dateValue) return '-'
+  return new Date(dateValue).toLocaleString()
+}
+
+const formatOriginHeading = (entry: any) => {
+  const origin = entry?.origin
+  if (!origin?.problem_title) return entry?.title || ''
+  const conceptLabel = origin.concept_text || entry.title
+  return `${conceptLabel} · ${origin.problem_title}`
+}
+
+const formatOriginReason = (entry: any) => {
+  const origin = entry?.origin
+  if (origin?.learning_mode === 'exploration') return t('srs.originModeExploration')
+  if (origin?.learning_mode === 'socratic') return t('srs.originModeSocratic')
+  return t('srs.originModeUnknown')
+}
+
+const formatQualityLabel = (quality: number) => {
+  if (quality === 0) return `0 - ${t('srs.forgot')}`
+  if (quality === 3) return `3 - ${t('srs.ok')}`
+  if (quality === 5) return `5 - ${t('srs.perfect')}`
+  return String(quality)
+}
+
+const formatReviewOutcome = (outcome: any) => {
+  return t('srs.lastReviewSummary', {
+    quality: formatQualityLabel(outcome.quality),
+    date: formatDateTime(outcome.next_review_at),
+  })
+}
 
 const fetchData = async () => {
   try {
@@ -107,7 +182,14 @@ const submitReview = async (quality: number) => {
   const card = currentCard.value
   if (!card) return
   try {
-    await api.post(`/srs/review/${card.schedule_id}?quality=${quality}`)
+    const response = await api.post(`/srs/review/${card.schedule_id}?quality=${quality}`)
+    lastReviewOutcome.value = {
+      title: card.title,
+      quality,
+      next_review_at: response.data?.next_review_at,
+      origin: card.origin || null,
+      model_card_id: card.model_card_id,
+    }
     showAnswer.value = false
     currentIndex.value++
   } catch (e) {
@@ -144,6 +226,53 @@ onMounted(fetchData)
   text-align: center;
   max-width: 600px;
   margin: 0 auto;
+}
+
+.review-outcome-card,
+.origin-card {
+  background: rgba(18, 18, 34, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+}
+
+.review-outcome-card {
+  max-width: 720px;
+  margin: 0 auto 1rem;
+}
+
+.origin-card {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.origin-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.outcome-eyebrow {
+  color: var(--primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.origin-copy {
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.origin-links {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
 .review-card h2 { margin-bottom: 1rem; }

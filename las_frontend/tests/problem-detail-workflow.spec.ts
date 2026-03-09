@@ -8,6 +8,7 @@ type Session = {
   accessToken: string
   refreshToken: string
   problemId: string
+  problemTitle: string
 }
 
 async function prepareAuthenticatedProblem(page: Page, request: APIRequestContext): Promise<Session> {
@@ -64,6 +65,7 @@ async function prepareAuthenticatedProblem(page: Page, request: APIRequestContex
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
     problemId: problem.id,
+    problemTitle: problem.title,
   }
 }
 
@@ -140,12 +142,18 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()
     await page.getByTestId('schedule-derived-concept-review').first().click()
     await expect(page.getByTestId('derived-concept-review-scheduled').first()).toBeVisible()
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/entered recall|in recall/i)
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/next recall|last reviewed/i)
 
     await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
     await expect(page.getByTestId('path-candidate-card').first()).toBeVisible()
     await page.getByTestId('path-candidate-save-branch').first().click()
 
     await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
+
+    await page.goto('/reviews')
+    await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)
+    await expect(page.getByTestId('review-model-cards-panel')).toContainText(/exploration-derived concept|exploration/i)
   })
 
   test('Scenario 3: Branch path can return to the main path', async ({ page, request }) => {
