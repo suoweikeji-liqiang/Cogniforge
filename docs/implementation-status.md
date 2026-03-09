@@ -4,11 +4,12 @@
 
 ## Current Major Milestone
 
-### v1.1 Problem-Centered Learning Loop Core
+### v1.2 Learning Asset Evolution
 
 This is the current major milestone for the repository.
 
 It reflects the codebase as it exists now, not an aspirational product description.
+The milestone is functionally complete enough to close out.
 
 ## What Is Implemented
 
@@ -43,36 +44,56 @@ The current learning flow can already produce:
 - Model cards can be scheduled into review.
 - Review items are traceable back to the originating problem and learning turn.
 
-### 6. Recall Consequence Visibility
+### 6. Reinforcement Routing
 
-- Recall is no longer only about queue/origin visibility.
-- The current repo now surfaces recall consequences such as:
-  - stability state
-  - recent recall outcome
-  - recommended next action
-- Those signals are visible in:
-  - `ProblemDetail`
-  - derived concept handoff state
-  - model-card surfaces
-  - recall session outcome UI
+- Weak recall now creates durable reinforcement targets.
+- Those targets can return the learner to:
+  - the right problem
+  - the right learning path
+  - the right focused concept / turn
+- `ProblemDetail` can show a concrete first reinforcement action.
+
+### 7. Source / Error / Evidence Grounding
+
+- Reinforcement starters are no longer generic.
+- The current repo can ground them by:
+  - source-turn context
+  - likely confusion / error assertions
+  - focused candidate evidence when the signal is reliable
+
+### 8. Model-Card Evolution State
+
+- Model cards no longer show only review presence and timeline events.
+- The current repo now surfaces model-card state such as:
+  - needs revision
+  - rebuilding
+  - reinforced recently
+  - stable base
+  - first recall queued
+  - repeated confusion
+
+### 9. Revision Direction Hints
+
+- `ModelCardDetail` now shows a lightweight revision focus hint.
+- The hint uses current recall / reinforcement / evolution signals to point toward a first revision direction without rewriting the card automatically.
 
 ## What Is Still Thin
 
 These areas are still intentionally limited:
 
 1. recall does not automatically rewrite model-card content
-2. review prioritization is still lightweight
-3. model evolution is present, but recall-driven evolution is not yet a strong closed loop
+2. revision focus hints are not yet a full revision workflow
+3. review prioritization is still lightweight
 4. legacy / secondary surfaces still exist in the codebase
 
 ## Next Milestone
 
-### v1.2 Learning Asset Evolution
+### v1.3 Guided Knowledge Revision
 
-The next milestone should focus on turning learning evidence and recall evidence into more deliberate model-card evolution and follow-up learning actions.
+The next milestone should focus on turning the current state and revision-focus hints into lightweight, traceable knowledge-revision actions.
 
 The expected center of gravity for that milestone is:
 
-- stronger feedback from weak recall back into the right workspace context
-- clearer model-card evolution from learning and recall evidence
-- better review prioritization without broadening the product surface
+- turning revision focus hints into explicit edit intent
+- keeping revisions traceable to learning / recall evidence
+- feeding revision outcomes back into the learning loop without broadening the product surface
