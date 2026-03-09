@@ -123,6 +123,10 @@
                 <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
                 {{ formatReviewSchedule(candidate) }}
               </p>
+              <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                {{ formatRecallConsequence(candidate) }}
+              </p>
               <div class="candidate-actions">
                 <button
                   v-if="!isLinkedToModelCard(candidate)"
@@ -302,6 +306,31 @@ const formatReviewSchedule = (candidate: any) => {
     return t('problemDetail.reviewScheduledLastReviewedAt', { date: formattedDate })
   }
   return t('problemDetail.reviewScheduledNextAt', { date: formattedDate })
+}
+
+const formatRecallState = (state: string | undefined | null) => {
+  if (state === 'fragile') return t('problemDetail.recallStateFragile')
+  if (state === 'rebuilding') return t('problemDetail.recallStateRebuilding')
+  if (state === 'reinforcing') return t('problemDetail.recallStateReinforcing')
+  if (state === 'stable') return t('problemDetail.recallStateStable')
+  return t('problemDetail.recallStateScheduled')
+}
+
+const formatRecommendedAction = (action: string | undefined | null) => {
+  if (action === 'revisit_workspace') return t('problemDetail.reviewActionRevisitWorkspace')
+  if (action === 'reinforce_soon') return t('problemDetail.reviewActionReinforceSoon')
+  if (action === 'keep_spacing') return t('problemDetail.reviewActionKeepSpacing')
+  if (action === 'extend_or_compare') return t('problemDetail.reviewActionExtendOrCompare')
+  return t('problemDetail.reviewActionCompleteFirstRecall')
+}
+
+const formatRecallConsequence = (candidate: any) => {
+  const schedule = getReviewSchedule(candidate)
+  if (!schedule) return t('problemDetail.reviewActionCompleteFirstRecall')
+  return t('problemDetail.reviewConsequenceSummary', {
+    state: formatRecallState(schedule.recall_state),
+    action: formatRecommendedAction(schedule.recommended_action),
+  })
 }
 
 const emitMerge = (candidateId: string) => {

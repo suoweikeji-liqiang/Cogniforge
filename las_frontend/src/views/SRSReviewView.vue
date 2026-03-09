@@ -27,6 +27,10 @@
       <span class="outcome-eyebrow">{{ t('srs.lastReviewTitle') }}</span>
       <strong>{{ lastReviewOutcome.title }}</strong>
       <p>{{ formatReviewOutcome(lastReviewOutcome) }}</p>
+      <div class="outcome-meta-grid">
+        <span>{{ t('srs.recallStateLabel') }}: {{ formatRecallState(lastReviewOutcome.recall_state) }}</span>
+        <span>{{ t('srs.nextActionLabel') }}: {{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</span>
+      </div>
       <div class="origin-links">
         <router-link
           v-if="lastReviewOutcome.origin?.problem_id"
@@ -149,6 +153,30 @@ const formatOriginReason = (entry: any) => {
   return t('srs.originModeUnknown')
 }
 
+const formatRecallState = (state: string | undefined | null) => {
+  if (state === 'fragile') return t('srs.recallStateFragile')
+  if (state === 'rebuilding') return t('srs.recallStateRebuilding')
+  if (state === 'reinforcing') return t('srs.recallStateReinforcing')
+  if (state === 'stable') return t('srs.recallStateStable')
+  return t('srs.recallStateScheduled')
+}
+
+const formatRecentOutcome = (outcome: string | undefined | null) => {
+  if (outcome === 'struggled') return t('srs.recallOutcomeStruggled')
+  if (outcome === 'held_with_effort') return t('srs.recallOutcomeHeldWithEffort')
+  if (outcome === 'held') return t('srs.recallOutcomeHeld')
+  if (outcome === 'strong') return t('srs.recallOutcomeStrong')
+  return t('srs.recallOutcomePending')
+}
+
+const formatRecommendedAction = (action: string | undefined | null) => {
+  if (action === 'revisit_workspace') return t('srs.recallActionRevisitWorkspace')
+  if (action === 'reinforce_soon') return t('srs.recallActionReinforceSoon')
+  if (action === 'keep_spacing') return t('srs.recallActionKeepSpacing')
+  if (action === 'extend_or_compare') return t('srs.recallActionExtendOrCompare')
+  return t('srs.recallActionCompleteFirstRecall')
+}
+
 const formatQualityLabel = (quality: number) => {
   if (quality === 0) return `0 - ${t('srs.forgot')}`
   if (quality === 3) return `3 - ${t('srs.ok')}`
@@ -159,6 +187,7 @@ const formatQualityLabel = (quality: number) => {
 const formatReviewOutcome = (outcome: any) => {
   return t('srs.lastReviewSummary', {
     quality: formatQualityLabel(outcome.quality),
+    outcome: formatRecentOutcome(outcome.recent_outcome),
     date: formatDateTime(outcome.next_review_at),
   })
 }
@@ -185,11 +214,19 @@ const submitReview = async (quality: number) => {
     const response = await api.post(`/srs/review/${card.schedule_id}?quality=${quality}`)
     lastReviewOutcome.value = {
       title: card.title,
-      quality,
+      quality: response.data?.quality ?? quality,
       next_review_at: response.data?.next_review_at,
+      recall_state: response.data?.recall_state,
+      recent_outcome: response.data?.recent_outcome,
+      recommended_action: response.data?.recommended_action,
       origin: card.origin || null,
       model_card_id: card.model_card_id,
     }
+    allSchedules.value = allSchedules.value.map((schedule: any) =>
+      schedule.schedule_id === card.schedule_id
+        ? { ...schedule, ...response.data }
+        : schedule
+    )
     showAnswer.value = false
     currentIndex.value++
   } catch (e) {
@@ -273,6 +310,14 @@ onMounted(fetchData)
   display: flex;
   gap: 0.55rem;
   flex-wrap: wrap;
+}
+
+.outcome-meta-grid {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
 }
 
 .review-card h2 { margin-bottom: 1rem; }

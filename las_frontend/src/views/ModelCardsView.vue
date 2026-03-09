@@ -33,6 +33,15 @@
           <span v-if="card.examples?.length">{{ card.examples.length }} {{ t('modelCards.examples') }}</span>
           <span v-if="card.counter_examples?.length">{{ card.counter_examples.length }} {{ t('modelCards.counterExamples') }}</span>
         </div>
+        <div v-if="card.isScheduled" class="recall-strip">
+          <span class="recall-pill" :class="`recall-${card.reviewSchedule?.recall_state || 'scheduled'}`">
+            {{ formatRecallState(card.reviewSchedule?.recall_state) }}
+          </span>
+          <span class="recall-copy">{{ formatRecentOutcome(card.reviewSchedule?.recent_outcome) }}</span>
+        </div>
+        <p v-if="card.isScheduled" class="recall-next-action">
+          {{ formatRecommendedAction(card.reviewSchedule?.recommended_action) }}
+        </p>
         
         <div class="card-actions">
           <button @click="viewCard(card)" class="btn btn-secondary">{{ t('modelCards.viewCard') }}</button>
@@ -140,12 +149,14 @@ const fetchCards = async () => {
       }),
       api.get('/srs/schedules').catch(() => ({ data: [] })),
     ])
-    scheduledCardIds.value = new Set(
-      schedulesRes.data.map((schedule: any) => schedule.model_card_id)
+    const schedulesByCardId = Object.fromEntries(
+      (schedulesRes.data || []).map((schedule: any) => [String(schedule.model_card_id), schedule])
     )
+    scheduledCardIds.value = new Set(Object.keys(schedulesByCardId))
     modelCards.value = cardsRes.data.map((c: any) => ({
       ...c,
       isScheduled: scheduledCardIds.value.has(c.id),
+      reviewSchedule: schedulesByCardId[String(c.id)] || null,
       scheduling: false,
       showCounterExamples: false,
       showMigrations: false,
@@ -224,13 +235,45 @@ const scheduleReview = async (card: any) => {
   card.scheduling = true
 
   try {
-    await api.post(`/srs/schedule/${card.id}`)
+    const response = await api.post(`/srs/schedule/${card.id}`)
     card.isScheduled = true
+    card.reviewSchedule = {
+      model_card_id: card.id,
+      next_review_at: response.data?.next_review_at,
+      last_reviewed_at: null,
+      recall_state: 'scheduled',
+      recent_outcome: 'pending',
+      recommended_action: 'complete_first_recall',
+    }
   } catch (e) {
     console.error('Failed to schedule review:', e)
   } finally {
     card.scheduling = false
   }
+}
+
+const formatRecallState = (state: string | undefined | null) => {
+  if (state === 'fragile') return t('modelCards.recallStateFragile')
+  if (state === 'rebuilding') return t('modelCards.recallStateRebuilding')
+  if (state === 'reinforcing') return t('modelCards.recallStateReinforcing')
+  if (state === 'stable') return t('modelCards.recallStateStable')
+  return t('modelCards.recallStateScheduled')
+}
+
+const formatRecentOutcome = (outcome: string | undefined | null) => {
+  if (outcome === 'struggled') return t('modelCards.recallOutcomeStruggled')
+  if (outcome === 'held_with_effort') return t('modelCards.recallOutcomeHeldWithEffort')
+  if (outcome === 'held') return t('modelCards.recallOutcomeHeld')
+  if (outcome === 'strong') return t('modelCards.recallOutcomeStrong')
+  return t('modelCards.recallOutcomePending')
+}
+
+const formatRecommendedAction = (action: string | undefined | null) => {
+  if (action === 'revisit_workspace') return t('modelCards.recallActionRevisitWorkspace')
+  if (action === 'reinforce_soon') return t('modelCards.recallActionReinforceSoon')
+  if (action === 'keep_spacing') return t('modelCards.recallActionKeepSpacing')
+  if (action === 'extend_or_compare') return t('modelCards.recallActionExtendOrCompare')
+  return t('modelCards.recallActionCompleteFirstRecall')
 }
 
 onMounted(() => {
@@ -298,6 +341,59 @@ watch([searchQuery, filterMode], () => {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-bottom: 1rem;
+}
+
+.recall-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.recall-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.recall-scheduled {
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #bfdbfe;
+}
+
+.recall-fragile {
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fca5a5;
+}
+
+.recall-rebuilding {
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+}
+
+.recall-reinforcing {
+  border-color: rgba(74, 222, 128, 0.24);
+  color: #bbf7d0;
+}
+
+.recall-stable {
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
+}
+
+.recall-copy,
+.recall-next-action {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.recall-next-action {
+  margin-bottom: 0.9rem;
 }
 
 .card-actions {

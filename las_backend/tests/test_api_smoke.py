@@ -377,6 +377,9 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     assert schedules[0]["title"] == "Retrieval Practice"
     assert schedules[0]["interval_days"] == 1
     assert schedules[0]["origin"] is None
+    assert schedules[0]["recall_state"] == "scheduled"
+    assert schedules[0]["recent_outcome"] == "pending"
+    assert schedules[0]["recommended_action"] == "complete_first_recall"
 
     from datetime import datetime, timedelta
 
@@ -394,6 +397,7 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     assert due_cards[0]["schedule_id"] == schedule_id
     assert due_cards[0]["title"] == "Retrieval Practice"
     assert due_cards[0]["origin"] is None
+    assert due_cards[0]["recall_state"] == "scheduled"
 
     review_response = await client.post(
         f"/api/srs/review/{schedule_id}",
@@ -402,9 +406,13 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     )
     assert review_response.status_code == 200
     reviewed = review_response.json()
+    assert reviewed["quality"] == 5
     assert reviewed["repetitions"] == 1
     assert reviewed["interval_days"] == 1
     assert reviewed["ease_factor"] >= 2500
+    assert reviewed["recall_state"] == "rebuilding"
+    assert reviewed["recent_outcome"] == "held_with_effort"
+    assert reviewed["recommended_action"] == "reinforce_soon"
 
 
 @pytest.mark.asyncio

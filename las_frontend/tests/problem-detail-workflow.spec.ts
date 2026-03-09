@@ -145,11 +145,37 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/entered recall|in recall/i)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/next recall|last reviewed/i)
 
+    const schedulesResponse = await request.get('/api/srs/schedules', {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    })
+    expect(schedulesResponse.ok()).toBeTruthy()
+    const schedules = await schedulesResponse.json()
+    expect(schedules.length).toBeGreaterThan(0)
+
+    const firstSchedule = schedules[0]
+    const reviewResponse = await request.post(`/api/srs/review/${firstSchedule.schedule_id}?quality=0`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+    })
+    expect(reviewResponse.ok()).toBeTruthy()
+
+    await page.goto(`/problems/${session.problemId}`)
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/fragile|reinforcement/i)
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/revisit|reinforce/i)
+    await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Fragile|revisit the workspace/i)
+
     await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
     await expect(page.getByTestId('path-candidate-card').first()).toBeVisible()
     await page.getByTestId('path-candidate-save-branch').first().click()
 
     await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
+
+    await page.goto(`/model-cards/${firstSchedule.model_card_id}`)
+    await expect(page.getByTestId('model-card-recall-status')).toContainText(/Fragile|rebuilding/i)
+    await expect(page.getByTestId('model-card-recall-status')).toContainText(/revisit|reinforce/i)
 
     await page.goto('/reviews')
     await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)

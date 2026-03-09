@@ -47,6 +47,27 @@
             {{ t('modelCards.openReviewHub') }}
           </router-link>
         </div>
+        <div v-if="reviewSchedule" class="recall-status-card" data-testid="model-card-recall-status">
+          <div class="recall-status-head">
+            <div>
+              <span class="recall-eyebrow">{{ t('modelCards.recallStatusTitle') }}</span>
+              <strong>{{ formatRecallState(reviewSchedule.recall_state) }}</strong>
+              <p>{{ formatRecallOutcome(reviewSchedule) }}</p>
+            </div>
+            <router-link
+              v-if="reviewSchedule.origin?.problem_id"
+              :to="`/problems/${reviewSchedule.origin.problem_id}`"
+              class="btn btn-secondary review-hub-link"
+            >
+              {{ t('reviews.openWorkspace') }}
+            </router-link>
+          </div>
+          <div class="recall-meta-grid">
+            <span>{{ t('modelCards.lastRecallAt') }}: {{ formatDateTime(reviewSchedule.last_reviewed_at) }}</span>
+            <span>{{ t('modelCards.nextRecallAt') }}: {{ formatDateTime(reviewSchedule.next_review_at) }}</span>
+            <span>{{ t('modelCards.recallNextAction') }}: {{ formatRecommendedAction(reviewSchedule.recommended_action) }}</span>
+          </div>
+        </div>
         <div class="cog-test-action">
           <button class="btn btn-secondary" @click="startCogTest">
             {{ t('modelCards.runDiagnostic') }}
@@ -134,8 +155,41 @@ const similarCards = ref<any[]>([])
 const loading = ref(true)
 const schedulingReview = ref(false)
 const isScheduled = ref(false)
+const reviewSchedule = ref<any | null>(null)
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString()
+const formatDateTime = (d: string | undefined | null) => (d ? new Date(d).toLocaleString() : '-')
+
+const formatRecallState = (state: string | undefined | null) => {
+  if (state === 'fragile') return t('modelCards.recallStateFragile')
+  if (state === 'rebuilding') return t('modelCards.recallStateRebuilding')
+  if (state === 'reinforcing') return t('modelCards.recallStateReinforcing')
+  if (state === 'stable') return t('modelCards.recallStateStable')
+  return t('modelCards.recallStateScheduled')
+}
+
+const formatRecentOutcome = (outcome: string | undefined | null) => {
+  if (outcome === 'struggled') return t('modelCards.recallOutcomeStruggled')
+  if (outcome === 'held_with_effort') return t('modelCards.recallOutcomeHeldWithEffort')
+  if (outcome === 'held') return t('modelCards.recallOutcomeHeld')
+  if (outcome === 'strong') return t('modelCards.recallOutcomeStrong')
+  return t('modelCards.recallOutcomePending')
+}
+
+const formatRecommendedAction = (action: string | undefined | null) => {
+  if (action === 'revisit_workspace') return t('modelCards.recallActionRevisitWorkspace')
+  if (action === 'reinforce_soon') return t('modelCards.recallActionReinforceSoon')
+  if (action === 'keep_spacing') return t('modelCards.recallActionKeepSpacing')
+  if (action === 'extend_or_compare') return t('modelCards.recallActionExtendOrCompare')
+  return t('modelCards.recallActionCompleteFirstRecall')
+}
+
+const formatRecallOutcome = (schedule: any) => {
+  return t('modelCards.recallOutcomeSummary', {
+    outcome: formatRecentOutcome(schedule?.recent_outcome),
+    action: formatRecommendedAction(schedule?.recommended_action),
+  })
+}
 
 const fetchCard = async () => {
   try {
@@ -151,7 +205,8 @@ const fetchCard = async () => {
     evolutionLogs.value = logsRes.data
     evolutionCompare.value = compareRes.data
     similarCards.value = similarRes.data
-    isScheduled.value = schedulesRes.data.some((schedule: any) => schedule.model_card_id === id)
+    reviewSchedule.value = schedulesRes.data.find((schedule: any) => schedule.model_card_id === id) || null
+    isScheduled.value = Boolean(reviewSchedule.value)
   } catch (e) {
     console.error('Failed to fetch model card:', e)
   } finally {
@@ -165,8 +220,18 @@ const scheduleReview = async () => {
   schedulingReview.value = true
 
   try {
-    await api.post(`/srs/schedule/${card.value.id}`)
+    const response = await api.post(`/srs/schedule/${card.value.id}`)
     isScheduled.value = true
+    reviewSchedule.value = {
+      model_card_id: card.value.id,
+      title: card.value.title,
+      next_review_at: response.data?.next_review_at,
+      last_reviewed_at: null,
+      recall_state: 'scheduled',
+      recent_outcome: 'pending',
+      recommended_action: 'complete_first_recall',
+      origin: null,
+    }
   } catch (e) {
     console.error('Failed to schedule review:', e)
   } finally {
@@ -222,6 +287,40 @@ onMounted(fetchCard)
 
 .review-hub-link {
   text-decoration: none;
+}
+
+.recall-status-card {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 222, 128, 0.24);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.recall-status-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.recall-eyebrow {
+  display: inline-flex;
+  color: var(--primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.recall-meta-grid {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
 }
 
 .evolution-section { margin-top: 2rem; }
