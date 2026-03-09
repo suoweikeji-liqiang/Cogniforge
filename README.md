@@ -1,39 +1,73 @@
 # Cogniforge
 
-**Cogniforge is a cognitive learning engine designed to turn understanding into structured models.**
+Cogniforge is a problem-centered learning system for structured cognition building.
 
-Most learning tools focus on consuming information.
-Cogniforge focuses on forging cognition.
+The current product surface is organized around the learning loop:
 
-It helps users:
+- `Problems` as the entry point
+- `ProblemDetail` as the main learning workspace
+- dual learning modes: `socratic` and `exploration`
+- derived concepts and derived learning path candidates
+- model cards as long-term knowledge artifacts
+- review / recall as reinforcement of learning outcomes
 
-* Transform ideas into structured models
-* Stress-test assumptions through contradiction
-* Discover cross-domain structural similarities
-* Track cognitive evolution over time
-* Close the loop between theory and real-world practice
+This repository is not currently centered on generic chat, note-taking, or PKM-style workflows. Those surfaces may still exist in the codebase, but the main product direction is the structured learning loop above.
 
-Instead of storing notes, Cogniforge builds:
+## Current Major Milestone
 
-* Model Cards
-* Contradiction Logs
-* Cross-domain Transfers
-* Cognitive Evolution Records
+### v1.1 Problem-Centered Learning Loop Core
 
-The system operates on a simple principle:
+This is the current major milestone for the repository.
 
-> Learning is not information acquisition —
-> it is model construction and iterative refinement.
+It means the codebase now supports an end-to-end core learning loop with these properties:
 
-Cogniforge combines:
+1. `ProblemDetail` is the main place for active learning.
+2. Learning modes are explicit first-class concepts:
+   - `socratic`: the system asks, the learner answers, mastery/progression is evaluated
+   - `exploration`: the learner asks, the system explains, concepts and next learning actions are derived
+3. Learning turns can produce structured outputs:
+   - mastery/progression signals
+   - derived concept candidates
+   - derived learning path candidates
+   - review handoff signals
+4. Main path and branch path relationships are navigable and traceable.
+5. Accepted concepts can be promoted into model cards and scheduled into recall.
+6. Review items are traceable back to their problem and turn origins.
+7. Recall outcomes now feed back into workspace and model-card state as visible stability and next-action signals.
 
-* Interactive AI dialogue
-* Structured model abstraction
-* Boundary testing (model collision)
-* Cross-domain mapping
-* Evolution-aware version tracking
+In practical terms, the current repo already contains:
 
-This project aims to build a reusable cognitive operating framework for engineers, researchers, and deep learners who want more than answers — they want mental architecture.
+- focused primary navigation around `Learn`, `Problems`, `Model Cards`, and `Reviews`
+- a unified `ProblemDetail` workspace
+- explicit domain entities such as `ProblemTurn`, `LearningPath`, `ProblemConceptCandidate`, `ProblemPathCandidate`, and `ReviewSchedule`
+- branch/return learning-path support
+- model-card handoff and review scheduling from problem outcomes
+- recall origin and recall consequence display in workspace and model-card surfaces
+
+What this milestone does not mean:
+
+- the app is a generic AI chat product
+- the app is a note manager or file manager
+- recall automatically rewrites model-card content
+- the review system is fully mature or deeply adaptive
+
+## Next Milestone
+
+### v1.2 Learning Asset Evolution
+
+The next milestone should focus on tightening how learning and recall update durable knowledge assets.
+
+In scope for that milestone:
+
+1. make weak recall route learners back to the right problem/path context more precisely
+2. use learning and recall evidence to drive model-card evolution more deliberately
+3. improve how review priority and follow-up actions are derived from recent outcomes
+
+Out of scope for that milestone:
+
+- broad new product surfaces
+- generic analytics expansion
+- unrelated admin or tooling work
 
 ---
 
