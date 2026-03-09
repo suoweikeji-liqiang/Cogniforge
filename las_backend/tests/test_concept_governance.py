@@ -200,6 +200,8 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
     assert schedules[0]["origin"]["concept_text"] == "precision threshold"
     assert schedules[0]["origin"]["source_turn_id"] == str(turn.id)
     assert "calibrating the threshold tradeoff" in schedules[0]["origin"]["source_turn_preview"]
+    assert schedules[0]["recall_state"] == "scheduled"
+    assert schedules[0]["recommended_action"] == "complete_first_recall"
 
 
 @pytest.mark.asyncio

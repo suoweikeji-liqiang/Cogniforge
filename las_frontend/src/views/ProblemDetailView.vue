@@ -539,6 +539,17 @@ const workspaceTurnSummary = computed(() => {
   })
 })
 const workspaceNextAction = computed(() => {
+  const recallEntry = recallPriorityReviewEntry.value
+  const recallConceptLabel = recallEntry?.origin?.concept_text || recallEntry?.title || t('problemDetail.derivedConceptsTitle')
+  if (recallEntry?.recommended_action === 'revisit_workspace') {
+    return t('problemDetail.workspaceNextReviewRevisit', { concept: recallConceptLabel })
+  }
+  if (recallEntry?.recommended_action === 'reinforce_soon') {
+    return t('problemDetail.workspaceNextReviewReinforce', { concept: recallConceptLabel })
+  }
+  if (recallEntry?.recommended_action === 'extend_or_compare' && pendingPathFollowUpCount.value) {
+    return t('problemDetail.workspaceNextReviewExtend', { concept: recallConceptLabel })
+  }
   if (learningMode.value === 'exploration') {
     return latestQA.value?.next_learning_actions?.[0]
       || latestQA.value?.suggested_next_focus
@@ -581,6 +592,19 @@ const currentTurnReviewEntries = computed(() => {
   )
 })
 const latestProblemReviewEntry = computed(() => problemReviewEntries.value[0] || null)
+const latestReviewedProblemEntry = computed(() => {
+  return [...problemReviewEntries.value]
+    .filter((schedule: any) => Boolean(schedule.last_reviewed_at))
+    .sort((left: any, right: any) => String(right.last_reviewed_at || '').localeCompare(String(left.last_reviewed_at || '')))[0] || null
+})
+const recallPriorityReviewEntry = computed(() => {
+  const reviewedEntries = [...problemReviewEntries.value]
+    .filter((schedule: any) => Boolean(schedule.last_reviewed_at))
+    .sort((left: any, right: any) => String(right.last_reviewed_at || '').localeCompare(String(left.last_reviewed_at || '')))
+  return reviewedEntries.find((schedule: any) => ['fragile', 'rebuilding'].includes(schedule.recall_state))
+    || reviewedEntries[0]
+    || latestProblemReviewEntry.value
+})
 const pendingPathFollowUpCount = computed(() => {
   return pathCandidates.value.filter((candidate) => ['planned', 'bookmarked'].includes(candidate.status)).length
 })
@@ -588,13 +612,22 @@ const workspaceReviewSummary = computed(() => {
   if (!problemReviewEntries.value.length) {
     return t('problemDetail.workspaceReviewEmpty')
   }
+  if (recallPriorityReviewEntry.value?.recall_state === 'fragile') {
+    return t('problemDetail.workspaceReviewFragile', { count: problemReviewEntries.value.length })
+  }
+  if (recallPriorityReviewEntry.value?.recall_state === 'rebuilding') {
+    return t('problemDetail.workspaceReviewRebuilding', { count: problemReviewEntries.value.length })
+  }
+  if (latestReviewedProblemEntry.value?.recall_state === 'stable') {
+    return t('problemDetail.workspaceReviewStable', { count: problemReviewEntries.value.length })
+  }
   if (currentTurnReviewEntries.value.length) {
     return t('problemDetail.workspaceReviewCurrentTurn', { count: currentTurnReviewEntries.value.length })
   }
   return t('problemDetail.workspaceReviewScheduled', { count: problemReviewEntries.value.length })
 })
 const workspaceReviewDescription = computed(() => {
-  const latest = latestProblemReviewEntry.value
+  const latest = recallPriorityReviewEntry.value
   if (!latest) {
     if (pendingPathFollowUpCount.value) {
       return t('problemDetail.workspaceReviewPathsPending', { count: pendingPathFollowUpCount.value })
@@ -604,8 +637,10 @@ const workspaceReviewDescription = computed(() => {
 
   const conceptLabel = latest.origin?.concept_text || latest.title || t('problemDetail.derivedConceptsTitle')
   if (latest.last_reviewed_at) {
-    return t('problemDetail.workspaceReviewLastReviewed', {
+    return t('problemDetail.workspaceReviewOutcome', {
       concept: conceptLabel,
+      state: formatRecallState(latest.recall_state),
+      action: formatRecommendedAction(latest.recommended_action),
       date: formatDateTime(latest.last_reviewed_at),
     })
   }
@@ -625,6 +660,22 @@ const formatConfidence = (value: number | string | undefined | null) => {
 const formatDateTime = (dateValue: string | undefined | null) => {
   if (!dateValue) return '-'
   return new Date(dateValue).toLocaleString()
+}
+
+const formatRecallState = (state: string | undefined | null) => {
+  if (state === 'fragile') return t('problemDetail.recallStateFragile')
+  if (state === 'rebuilding') return t('problemDetail.recallStateRebuilding')
+  if (state === 'reinforcing') return t('problemDetail.recallStateReinforcing')
+  if (state === 'stable') return t('problemDetail.recallStateStable')
+  return t('problemDetail.recallStateScheduled')
+}
+
+const formatRecommendedAction = (action: string | undefined | null) => {
+  if (action === 'revisit_workspace') return t('problemDetail.reviewActionRevisitWorkspace')
+  if (action === 'reinforce_soon') return t('problemDetail.reviewActionReinforceSoon')
+  if (action === 'keep_spacing') return t('problemDetail.reviewActionKeepSpacing')
+  if (action === 'extend_or_compare') return t('problemDetail.reviewActionExtendOrCompare')
+  return t('problemDetail.reviewActionCompleteFirstRecall')
 }
 
 const formatLearningMode = (mode: string | undefined | null) => {

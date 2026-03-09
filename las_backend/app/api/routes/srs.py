@@ -47,6 +47,42 @@ def _serialize_review_origin(candidate: ProblemConceptCandidate) -> dict:
     }
 
 
+def _derive_recall_feedback(schedule: ReviewSchedule) -> dict:
+    if schedule.last_reviewed_at is None:
+        return {
+            "recall_state": "scheduled",
+            "recent_outcome": "pending",
+            "recommended_action": "complete_first_recall",
+        }
+
+    if schedule.repetitions == 0:
+        return {
+            "recall_state": "fragile",
+            "recent_outcome": "struggled",
+            "recommended_action": "revisit_workspace",
+        }
+
+    if schedule.repetitions <= 1 or schedule.interval_days <= 1:
+        return {
+            "recall_state": "rebuilding",
+            "recent_outcome": "held_with_effort",
+            "recommended_action": "reinforce_soon",
+        }
+
+    if schedule.repetitions < 3 or schedule.interval_days < 7:
+        return {
+            "recall_state": "reinforcing",
+            "recent_outcome": "held",
+            "recommended_action": "keep_spacing",
+        }
+
+    return {
+        "recall_state": "stable",
+        "recent_outcome": "strong",
+        "recommended_action": "extend_or_compare",
+    }
+
+
 async def _load_cards(db: AsyncSession, model_card_ids: list[str]) -> dict[str, ModelCard]:
     if not model_card_ids:
         return {}
@@ -94,6 +130,7 @@ async def _load_review_origins(
 
 
 def _serialize_schedule(schedule: ReviewSchedule, card: ModelCard | None, origin: dict | None) -> dict:
+    recall_feedback = _derive_recall_feedback(schedule)
     return {
         "schedule_id": schedule.id,
         "model_card_id": schedule.model_card_id,
@@ -107,6 +144,7 @@ def _serialize_schedule(schedule: ReviewSchedule, card: ModelCard | None, origin
         "next_review_at": schedule.next_review_at.isoformat(),
         "last_reviewed_at": schedule.last_reviewed_at.isoformat() if schedule.last_reviewed_at else None,
         "origin": origin,
+        **recall_feedback,
     }
 
 
@@ -175,12 +213,15 @@ async def submit_review(
     schedule = srs_service.process_review(schedule, quality)
     await db.commit()
     await db.refresh(schedule)
+    recall_feedback = _derive_recall_feedback(schedule)
     return {
         "schedule_id": schedule.id,
+        "quality": quality,
         "next_review_at": schedule.next_review_at.isoformat(),
         "interval_days": schedule.interval_days,
         "ease_factor": schedule.ease_factor,
         "repetitions": schedule.repetitions,
+        **recall_feedback,
     }
 
 
