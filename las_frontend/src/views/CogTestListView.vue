@@ -12,7 +12,7 @@
     />
     <div class="header-actions">
       <h1>{{ t('cogTest.history') }}</h1>
-      <router-link to="/cog-test/session" class="btn btn-primary">
+      <router-link to="/cog-test/session" class="btn btn-secondary">
         {{ t('cogTest.startNew') || 'Start New Session' }}
       </router-link>
     </div>

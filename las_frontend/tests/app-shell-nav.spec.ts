@@ -96,23 +96,18 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(primaryNav.getByTestId('primary-nav-item-practice')).toHaveCount(0)
   await expect(primaryNav.getByTestId('primary-nav-item-chat')).toHaveCount(0)
   await expect(primaryNav.getByTestId('primary-nav-item-srs-review')).toHaveCount(0)
-
-  await page.getByTestId('secondary-nav-toggle').click()
-  const secondaryNav = page.getByTestId('secondary-nav')
-  await expect(secondaryNav.getByTestId('secondary-nav-section-tools')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-section-experiments')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-item-srs-review')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-item-practice')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-item-chat')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-item-graph')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-item-challenges')).toBeVisible()
-  await expect(secondaryNav.getByTestId('secondary-nav-item-cog-test')).toBeVisible()
+  await expect(page.getByTestId('secondary-nav-toggle')).toHaveCount(0)
+  await expect(page.getByTestId('secondary-nav')).toHaveCount(0)
   await expect(page.getByTestId('dashboard-focus-card')).toBeVisible()
   await expect(page.getByTestId('dashboard-problems-panel')).toBeVisible()
   await expect(page.getByTestId('dashboard-review-panel')).toBeVisible()
   await expect(page.getByTestId('dashboard-model-cards-panel')).toBeVisible()
   await expect(page.locator('.actions-grid a[href="/chat"]')).toHaveCount(0)
   await expect(page.locator('.actions-grid a[href="/practice"]')).toHaveCount(0)
+  await expect(page.locator('.actions-grid a[href="/srs-review"]')).toHaveCount(0)
+  await expect(page.locator('a[href="/notes"]')).toHaveCount(0)
+  await expect(page.locator('a[href="/resources"]')).toHaveCount(0)
+  await expect(page.getByTestId('dashboard-review-action')).toHaveAttribute('href', '/reviews')
   await expect(page.getByTestId('dashboard-exploration-action')).toHaveAttribute('href', /\/problems/)
 })
 
@@ -121,7 +116,7 @@ test('standalone chat is marked as a secondary legacy surface', async ({ page, r
   await page.goto('/chat')
 
   await expect(page.getByTestId('legacy-chat-banner')).toBeVisible()
-  await expect(page.getByText(/secondary surface/i)).toBeVisible()
+  await expect(page.getByText(/outside the primary learning loop/i)).toBeVisible()
   await expect(page.getByRole('link', { name: /Go to Problems/i })).toBeVisible()
 })
 
@@ -138,6 +133,43 @@ test('reviews page centers model-card review and evolution work', async ({ page,
   await expect(page.getByTestId('review-queue-panel')).toContainText('No due reviews right now.')
   await expect(page.getByTestId('review-model-cards-panel')).toContainText('Review Hub Card')
   await expect(page.getByTestId('review-archive-panel')).toContainText('Review archive summary')
+})
+
+test('notes and references are framed as supporting archives', async ({ page, request }) => {
+  await authenticate(page, request)
+
+  await page.goto('/notes')
+  const notesBanner = page.getByTestId('notes-secondary-banner')
+  await expect(notesBanner).toBeVisible()
+  await expect(notesBanner).toContainText(/supporting archive/i)
+  await expect(page.getByRole('heading', { name: /Annotation Archive/i })).toBeVisible()
+  await expect(page.getByText(/secondary archive/i)).toBeVisible()
+  await expect(notesBanner.getByRole('link', { name: /Annotate in ProblemDetail/i })).toBeVisible()
+  await expect(page.getByTestId('notes-add-form')).toHaveCount(0)
+  await page.getByTestId('notes-toggle-add').click()
+  await expect(page.getByTestId('notes-add-form')).toBeVisible()
+
+  await page.goto('/resources')
+  const resourcesBanner = page.getByTestId('resources-secondary-banner')
+  await expect(resourcesBanner).toBeVisible()
+  await expect(resourcesBanner).toContainText(/supporting archive/i)
+  await expect(page.getByRole('heading', { name: /Reference Archive/i })).toBeVisible()
+  await expect(page.getByText(/secondary archive/i)).toBeVisible()
+  await expect(resourcesBanner.getByRole('link', { name: /Attach in ProblemDetail/i })).toBeVisible()
+  await expect(page.getByTestId('resources-add-form')).toHaveCount(0)
+  await expect(page.getByTestId('resources-toggle-add')).toContainText(/Add Reference/i)
+})
+
+test('practice and srs review are framed as supporting subflows', async ({ page, request }) => {
+  await authenticate(page, request)
+
+  await page.goto('/practice')
+  await expect(page.getByTestId('practice-secondary-banner')).toBeVisible()
+  await expect(page.getByTestId('practice-secondary-banner')).toContainText(/supporting drill surface/i)
+
+  await page.goto('/srs-review')
+  await expect(page.getByTestId('srs-secondary-banner')).toBeVisible()
+  await expect(page.getByTestId('srs-secondary-banner')).toContainText(/review subflow/i)
 })
 
 test('graph, challenges, and cog test are framed as secondary surfaces', async ({ page, request }) => {

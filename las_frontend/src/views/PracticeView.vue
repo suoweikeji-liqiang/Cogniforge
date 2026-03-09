@@ -1,5 +1,15 @@
 <template>
   <div class="practice-page">
+    <SecondarySurfaceBanner
+      test-id="practice-secondary-banner"
+      :eyebrow="t('practice.secondaryTitle')"
+      :title="t('practice.secondaryHeading')"
+      :message="t('practice.secondaryMessage')"
+      :primary-label="t('nav.problems')"
+      primary-to="/problems"
+      :secondary-label="t('nav.reviews')"
+      secondary-to="/reviews"
+    />
     <h1>{{ t('practice.title') }}</h1>
     
     <div class="practice-content">
@@ -9,7 +19,7 @@
           <div v-for="task in tasks" :key="task.id" class="task-card card">
             <h3>{{ task.title }}</h3>
             <p>{{ task.description || t('problems.noProblems') }}</p>
-            <button @click="startTask(task)" class="btn btn-primary">
+            <button @click="startTask(task)" class="btn btn-secondary">
               {{ t('practice.submitSolution') }}
             </button>
           </div>
@@ -52,7 +62,7 @@
             <button type="button" class="btn btn-secondary" @click="activeTask = null">
               {{ t('common.close') }}
             </button>
-            <button type="submit" class="btn btn-primary" :disabled="submitting">
+            <button type="submit" class="btn btn-secondary" :disabled="submitting">
               {{ submitting ? t('common.loading') : t('practice.submitSolution') }}
             </button>
           </div>
@@ -66,6 +76,7 @@
 import { ref, onMounted } from 'vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 

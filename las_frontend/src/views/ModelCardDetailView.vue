@@ -48,8 +48,8 @@
           </router-link>
         </div>
         <div class="cog-test-action">
-          <button class="btn btn-primary" @click="startCogTest">
-            {{ t('cogTest.startTest') }}
+          <button class="btn btn-secondary" @click="startCogTest">
+            {{ t('modelCards.runDiagnostic') }}
           </button>
         </div>
       </div>

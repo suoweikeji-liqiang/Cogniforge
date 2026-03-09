@@ -47,7 +47,7 @@
             {{ t('modelCards.counterExamples') }}
           </button>
           <button @click="suggestMigration(card)" class="btn btn-secondary">
-            {{ t('chat.newConversation') }}
+            {{ t('modelCards.suggestTransfer') }}
           </button>
         </div>
         
@@ -59,7 +59,7 @@
         </div>
         
         <div v-if="card.showMigrations" class="generated-content">
-          <h4>{{ t('chat.newConversation') }}:</h4>
+          <h4>{{ t('modelCards.suggestTransfer') }}:</h4>
           <ul>
             <li v-for="(m, i) in card.migration_attempts" :key="i">
               {{ m.target_domain }}
