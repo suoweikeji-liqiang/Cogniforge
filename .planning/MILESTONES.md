@@ -1,25 +1,66 @@
 # Milestones
 
-## v1.0 Cognitive Adversarial Testing MVP (Shipped: 2026-03-01)
+## Current Major Milestone: v1.1 Problem-Centered Learning Loop Core
 
-**Phases:** 4 | **Plans:** 12 | **Tasks:** ~27
-**Files changed:** 50 | **LOC added:** ~7,500
-**Timeline:** 2026-02-16 → 2026-03-01 (13 days)
+**Status:** Current repository milestone
+**Last updated:** 2026-03-09
 
-**Delivered:** A full Socratic cognitive adversarial testing module integrated into the Learning Assistant System — learners launch tests from model cards, two AI tutors (Guide + Challenger) dialogue in real-time via SSE, blind spots are extracted and scored, reports export as Markdown, and blind spot discovery auto-elevates SRS review priority.
+### Definition
 
-**Key accomplishments:**
-1. Four CogTest ORM tables (Session, Turn, BlindSpot, Snapshot) with Alembic migration applied to existing SQLite DB
-2. Async LLM token streaming via `stream_generate()` + sse-starlette `EventSourceResponse` SSE infrastructure
-3. Guide + Challenger Socratic system prompts with `<analysis>` delimiter and Pydantic `AgentOutput` parser
-4. `CogTestEngine.run()` async generator: dual-layer retry (LLM exception + Socratic contract), round-based DB persistence, scoring
-5. Complete FastAPI HTTP surface: 5 endpoints including SSE stream with query-param JWT auth
-6. Vue3 frontend: Pinia SSE store, streaming dialogue UI (guide=green/challenger=amber), session history list, nav entry
-7. Markdown diagnostic report export (GET endpoint + browser Blob download)
-8. Auto-elevate SRS priority via stop endpoint + `_stream_with_elevation` wrapper for stream path
+This milestone is the point where Cogniforge behaves primarily like a structured learning loop, not a generic multi-tool workspace.
 
-**Known gaps:**
-- Report builder `category == "gap"` filter never matches persisted blind spots — "Improvement Suggestions" section always empty (architectural mismatch, v1.1 tech debt)
+The milestone is considered present in the current repository because the codebase now has all of the following:
 
----
+1. `Problems` and `ProblemDetail` are the primary active-learning surfaces.
+2. `socratic` and `exploration` are modeled explicitly across the backend and frontend.
+3. Learning turns can produce structured outputs:
+   - mastery and progression signals
+   - derived concept candidates
+   - derived learning path candidates
+   - review handoff state
+4. Main path, branch path, prerequisite path, and comparison path relationships are navigable.
+5. Accepted concepts can be promoted into model cards.
+6. Review items are traceable back to their originating problem and turn context.
+7. Recall outcomes are visible as consequences in the workspace and model-card surfaces.
 
+### What This Milestone Is Not
+
+This milestone does not imply:
+
+- a fully mature review system
+- automatic model-card rewriting from recall
+- a generic chat-first product
+- a PKM-style notes/resources product
+- broad analytics or admin expansion
+
+### Main Evidence In The Repo
+
+- Frontend navigation is focused on `Learn`, `Problems`, `Model Cards`, and `Reviews`.
+- `ProblemDetail` is the main learning workspace.
+- Core domain models include `ProblemTurn`, `LearningPath`, `ProblemConceptCandidate`, `ProblemPathCandidate`, and `ReviewSchedule`.
+- Recent commits have tightened:
+  - workspace unification
+  - review origin traceability
+  - recall consequence visibility
+
+## Next Major Milestone: v1.2 Learning Asset Evolution
+
+### Brief Definition
+
+The next milestone should make learning and recall update durable knowledge assets more deliberately.
+
+### Expected Focus
+
+1. use recall results to drive clearer follow-up actions back into the right problem/path context
+2. tighten how model cards evolve from learning and recall evidence
+3. improve review prioritization based on recent weakness or stability
+
+### Not A Goal
+
+- adding broad new product surfaces
+- redesigning the whole review system
+- reviving generic chat or PKM-centric identity
+
+## Historical Note
+
+The repository previously tracked an older `v1.0` milestone around cognitive adversarial testing. That work remains in the codebase, but it is no longer the best description of the product's current center of gravity. The current milestone definition is now based on the structured learning loop that dominates the active product surface and recent implementation work.
