@@ -145,6 +145,11 @@ async def fake_generate_with_context(
     **kwargs,
 ):
     question = str(context[-1]["content"] if context else "").strip()
+    if "threshold moves" in question.casefold():
+        return (
+            "When the threshold moves, false negatives usually drop while false positives rise. "
+            "Use that tradeoff as the first evidence anchor before comparing precision and recall."
+        )
     if "difference between" in question.casefold():
         return (
             "Precision measures how many predicted positives are correct. "

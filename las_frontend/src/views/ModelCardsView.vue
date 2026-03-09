@@ -24,7 +24,12 @@
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
     <div v-else-if="modelCards.length" class="cards-grid">
-      <div v-for="card in modelCards" :key="card.id" class="model-card">
+      <div
+        v-for="card in modelCards"
+        :key="card.id"
+        class="model-card"
+        :class="card.evolutionState ? `model-card-${card.evolutionState.tone}` : ''"
+      >
         <h3>{{ card.title }}</h3>
         <p v-if="card.user_notes">{{ card.user_notes }}</p>
         
@@ -32,6 +37,18 @@
           <span>v{{ card.version }}</span>
           <span v-if="card.examples?.length">{{ card.examples.length }} {{ t('modelCards.examples') }}</span>
           <span v-if="card.counter_examples?.length">{{ card.counter_examples.length }} {{ t('modelCards.counterExamples') }}</span>
+        </div>
+        <div
+          v-if="card.evolutionState"
+          class="evolution-state-strip"
+          data-testid="model-card-list-evolution-state"
+        >
+          <span class="evolution-state-pill" :class="`state-${card.evolutionState.tone}`">
+            {{ formatEvolutionStateLabel(card.evolutionState) }}
+          </span>
+          <span class="evolution-state-copy">
+            {{ formatEvolutionStateSummary(card.evolutionState, card.reviewSchedule) }}
+          </span>
         </div>
         <div v-if="card.isScheduled" class="recall-strip">
           <span class="recall-pill" :class="`recall-${card.reviewSchedule?.recall_state || 'scheduled'}`">
@@ -120,6 +137,7 @@ import { ref, onMounted, watch } from 'vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { deriveModelCardEvolutionState, type ModelCardEvolutionState } from '@/utils/modelCardEvolution'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -161,6 +179,7 @@ const fetchCards = async () => {
       ...c,
       isScheduled: scheduledCardIds.value.has(c.id),
       reviewSchedule: schedulesByCardId[String(c.id)] || null,
+      evolutionState: deriveModelCardEvolutionState(schedulesByCardId[String(c.id)] || null),
       scheduling: false,
       showCounterExamples: false,
       showMigrations: false,
@@ -317,6 +336,46 @@ const formatReinforcementResume = (schedule: any) => {
   return pathLabel || t('modelCards.reinforcementResumeCurrentCard')
 }
 
+const formatEvolutionStateLabel = (state: ModelCardEvolutionState | null) => {
+  if (!state) return ''
+  if (state.key === 'needs_revision') return t('modelCards.evolutionStateNeedsRevision')
+  if (state.key === 'rebuilding') return t('modelCards.evolutionStateRebuilding')
+  if (state.key === 'reinforced_recently') return t('modelCards.evolutionStateReinforcedRecently')
+  if (state.key === 'stable_base') return t('modelCards.evolutionStateStableBase')
+  if (state.key === 'repeated_confusion') return t('modelCards.evolutionStateRepeatedConfusion')
+  return t('modelCards.evolutionStateFirstRecallQueued')
+}
+
+const modelCardWorkspaceLabel = (schedule: any) => {
+  return schedule?.reinforcement_target?.problem_title
+    || schedule?.origin?.problem_title
+    || t('modelCards.linkedWorkspaceFallback')
+}
+
+const formatEvolutionStateSummary = (state: ModelCardEvolutionState | null, schedule: any) => {
+  if (!state) return ''
+  const workspace = modelCardWorkspaceLabel(schedule)
+  if (state.key === 'needs_revision') {
+    return t('modelCards.evolutionStateNeedsRevisionSummary', { workspace })
+  }
+  if (state.key === 'rebuilding') {
+    return t('modelCards.evolutionStateRebuildingSummary', { workspace })
+  }
+  if (state.key === 'reinforced_recently') {
+    return t('modelCards.evolutionStateReinforcedRecentlySummary')
+  }
+  if (state.key === 'stable_base') {
+    return t('modelCards.evolutionStateStableBaseSummary')
+  }
+  if (state.key === 'repeated_confusion') {
+    return t('modelCards.evolutionStateRepeatedConfusionSummary', {
+      count: state.reinforcementEventCount,
+      workspace,
+    })
+  }
+  return t('modelCards.evolutionStateFirstRecallQueuedSummary')
+}
+
 const formatReinforcementPath = (target: any) => {
   const title = String(target?.resume_path_title || '').trim()
   const kind = String(target?.resume_path_kind || '').trim()
@@ -376,6 +435,18 @@ watch([searchQuery, filterMode], () => {
   padding: 1.5rem;
 }
 
+.model-card-danger {
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.model-card-warning {
+  border-color: rgba(251, 191, 36, 0.24);
+}
+
+.model-card-success {
+  border-color: rgba(74, 222, 128, 0.24);
+}
+
 .model-card h3 {
   margin-bottom: 0.5rem;
 }
@@ -392,6 +463,48 @@ watch([searchQuery, filterMode], () => {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-bottom: 1rem;
+}
+
+.evolution-state-strip {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.evolution-state-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+
+.evolution-state-pill.state-neutral {
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #bfdbfe;
+}
+
+.evolution-state-pill.state-danger {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+}
+
+.evolution-state-pill.state-warning {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+}
+
+.evolution-state-pill.state-success {
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #86efac;
+}
+
+.evolution-state-copy {
+  color: var(--text-muted);
+  font-size: 0.84rem;
 }
 
 .recall-strip {
