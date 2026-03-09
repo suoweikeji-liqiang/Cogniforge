@@ -17,138 +17,186 @@
       </div>
 
       <div class="problem-content">
-        <section class="card mode-switch-section">
-          <h2>{{ t('problemDetail.modeSwitchTitle') }}</h2>
-          <p class="section-subtitle">
-            {{ learningMode === 'socratic' ? t('problemDetail.modeSocraticHint') : t('problemDetail.modeExplorationHint') }}
-          </p>
-          <div class="workspace-mode-toggle">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :class="{ active: learningMode === 'socratic' }"
-              :disabled="switchingMode || submitting || askingQuestion"
-              data-testid="mode-switch-socratic"
-              @click="setLearningMode('socratic')"
-            >
-              {{ t('problemDetail.modeSocratic') }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :class="{ active: learningMode === 'exploration' }"
-              :disabled="switchingMode || submitting || askingQuestion"
-              data-testid="mode-switch-exploration"
-              @click="setLearningMode('exploration')"
-            >
-              {{ t('problemDetail.modeExploration') }}
-            </button>
-          </div>
-        </section>
-
-        <section class="card current-step-section">
-          <h2>{{ t('problemDetail.currentStepTitle') }}</h2>
-          <div v-if="totalSteps" class="progress-overview">
-            <span>{{ t('problemDetail.stepIndicator', { current: currentStepNumber, total: totalSteps }) }}</span>
-            <div class="progress-track">
-              <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
-            </div>
-          </div>
-
-          <div v-if="learningPath" class="path-structure-panel" data-testid="current-learning-path">
-            <div class="path-structure-head">
-              <span class="mode-badge">{{ t('problemDetail.currentPath') }}: {{ formatLearningPathKind(learningPath.kind) }}</span>
-              <span class="candidate-status">{{ learningPath.title || t('problemDetail.unnamedPath') }}</span>
-              <span
-                v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
-                class="candidate-source"
-              >
-                {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
-              </span>
-            </div>
-            <p v-if="learningPath.branch_reason" class="section-subtitle">{{ learningPath.branch_reason }}</p>
-            <div v-if="allLearningPaths.length > 1" class="path-nav-list">
-              <button
-                v-for="path in allLearningPaths"
-                :key="path.id"
-                type="button"
-                class="btn btn-secondary path-nav-button"
-                :class="{ active: path.is_active }"
-                :disabled="updatingPath"
-                data-testid="learning-path-button"
-                @click="activateLearningPathById(path.id)"
-              >
-                {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
-              </button>
-            </div>
-            <button
-              v-if="canReturnToParent"
-              type="button"
-              class="btn btn-secondary"
-              :disabled="updatingPath"
-              data-testid="return-to-parent-path"
-              @click="returnToParentPath"
-            >
-              {{ t('problemDetail.returnToParentPath') }}
-            </button>
-          </div>
-
-          <div v-if="currentStep" class="step-card">
-            <div class="step-number">{{ currentStepNumber }}</div>
-            <div class="step-content">
-              <h3>{{ currentStep.concept }}</h3>
-              <p>{{ currentStep.description }}</p>
-              <ul v-if="currentStep.resources?.length" class="resources">
-                <li v-for="resource in currentStep.resources" :key="resource">{{ resource }}</li>
-              </ul>
-            </div>
-          </div>
-          <div v-else-if="isPathCompleted && totalSteps" class="completion-banner">
-            {{ t('problemDetail.completedAll') }}
-          </div>
-          <p v-else class="empty">{{ t('problemDetail.noLearningPath') }}</p>
-
-          <div v-if="totalSteps" class="path-actions">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :disabled="updatingPath || completedSteps === 0"
-              @click="updateCurrentStep(completedSteps - 1)"
-            >
-              {{ t('problemDetail.previousStep') }}
-            </button>
-            <button
-              v-if="!isPathCompleted"
-              type="button"
-              class="btn btn-primary"
-              :disabled="updatingPath"
-              data-testid="mark-step-done"
-              @click="updateCurrentStep(completedSteps + 1)"
-            >
-              {{ t('problemDetail.markStepDone') }}
-            </button>
-            <span v-else class="completed-badge">{{ t('problemDetail.completed') }}</span>
-          </div>
-
-          <details v-if="completedStepList.length" class="completed-panel">
-            <summary>{{ t('problemDetail.completedStepsTitle', { count: completedStepList.length }) }}</summary>
-            <div class="completed-list">
-              <div v-for="(step, index) in completedStepList" :key="`${step.concept}-${index}`" class="completed-item">
-                <span class="completed-index">{{ index + 1 }}</span>
+        <div class="workspace-stage workspace-stage-unified">
+          <div class="workspace-main-column workspace-main-stack">
+            <section class="card workspace-overview-card" data-testid="workspace-overview">
+              <div class="workspace-overview-head">
                 <div>
-                  <strong>{{ step.concept }}</strong>
-                  <p>{{ step.description }}</p>
+                  <p class="workspace-eyebrow">{{ t('nav.workspace') }}</p>
+                  <h2>{{ t('problemDetail.workspaceOverviewTitle') }}</h2>
+                  <p class="section-subtitle">{{ t('problemDetail.workspaceOverviewSubtitle') }}</p>
+                </div>
+                <div class="workspace-overview-actions">
+                  <router-link to="/reviews" class="btn btn-secondary workspace-link-action">
+                    {{ t('modelCards.openReviewHub') }}
+                  </router-link>
+                  <router-link to="/model-cards" class="btn btn-secondary workspace-link-action">
+                    {{ t('reviews.openModelCards') }}
+                  </router-link>
                 </div>
               </div>
-            </div>
-          </details>
-        </section>
 
-        <section v-if="learningMode === 'socratic'" class="card responses-section">
-          <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
-          <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
-          <div class="workspace-stage">
-            <div class="workspace-main-column">
+              <div class="workspace-summary-grid">
+                <article class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.currentStepTitle') }}</span>
+                  <strong>{{ workspaceFocusTitle }}</strong>
+                  <p>{{ workspaceFocusDescription }}</p>
+                </article>
+                <article class="workspace-summary-card" data-testid="workspace-path-summary">
+                  <span class="workspace-summary-label">{{ t('problemDetail.currentPath') }}</span>
+                  <strong>{{ workspacePathSummary }}</strong>
+                  <p v-if="learningPath?.branch_reason">{{ learningPath.branch_reason }}</p>
+                  <p v-else-if="learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined">
+                    {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
+                  </p>
+                  <p v-else>{{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}</p>
+                </article>
+                <article class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.turnResultTitle') }}</span>
+                  <strong>{{ workspaceTurnSummary }}</strong>
+                  <p>{{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}</p>
+                </article>
+                <article class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
+                  <strong>{{ workspaceNextAction }}</strong>
+                  <p>{{ learningMode === 'exploration' ? t('problemDetail.modeExplorationHint') : t('problemDetail.modeSocraticHint') }}</p>
+                </article>
+              </div>
+
+              <div class="workspace-mode-row">
+                <div class="workspace-mode-copy">
+                  <span class="workspace-summary-label">{{ t('problemDetail.currentMode') }}</span>
+                  <strong>{{ formatLearningMode(learningMode) }}</strong>
+                  <p class="section-subtitle">
+                    {{ learningMode === 'socratic' ? t('problemDetail.modeSocraticHint') : t('problemDetail.modeExplorationHint') }}
+                  </p>
+                </div>
+                <div class="workspace-mode-toggle">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    :class="{ active: learningMode === 'socratic' }"
+                    :disabled="switchingMode || submitting || askingQuestion"
+                    data-testid="mode-switch-socratic"
+                    @click="setLearningMode('socratic')"
+                  >
+                    {{ t('problemDetail.modeSocratic') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    :class="{ active: learningMode === 'exploration' }"
+                    :disabled="switchingMode || submitting || askingQuestion"
+                    data-testid="mode-switch-exploration"
+                    @click="setLearningMode('exploration')"
+                  >
+                    {{ t('problemDetail.modeExploration') }}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="card current-step-section">
+              <h2>{{ t('problemDetail.currentStepTitle') }}</h2>
+              <div v-if="totalSteps" class="progress-overview">
+                <span>{{ t('problemDetail.stepIndicator', { current: currentStepNumber, total: totalSteps }) }}</span>
+                <div class="progress-track">
+                  <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
+                </div>
+              </div>
+
+              <div v-if="learningPath" class="path-structure-panel" data-testid="current-learning-path">
+                <div class="path-structure-head">
+                  <span class="mode-badge">{{ t('problemDetail.currentPath') }}: {{ formatLearningPathKind(learningPath.kind) }}</span>
+                  <span class="candidate-status">{{ learningPath.title || t('problemDetail.unnamedPath') }}</span>
+                  <span
+                    v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
+                    class="candidate-source"
+                  >
+                    {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
+                  </span>
+                </div>
+                <p v-if="learningPath.branch_reason" class="section-subtitle">{{ learningPath.branch_reason }}</p>
+                <div v-if="allLearningPaths.length > 1" class="path-nav-list">
+                  <button
+                    v-for="path in allLearningPaths"
+                    :key="path.id"
+                    type="button"
+                    class="btn btn-secondary path-nav-button"
+                    :class="{ active: path.is_active }"
+                    :disabled="updatingPath"
+                    data-testid="learning-path-button"
+                    @click="activateLearningPathById(path.id)"
+                  >
+                    {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
+                  </button>
+                </div>
+                <button
+                  v-if="canReturnToParent"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="updatingPath"
+                  data-testid="return-to-parent-path"
+                  @click="returnToParentPath"
+                >
+                  {{ t('problemDetail.returnToParentPath') }}
+                </button>
+              </div>
+
+              <div v-if="currentStep" class="step-card">
+                <div class="step-number">{{ currentStepNumber }}</div>
+                <div class="step-content">
+                  <h3>{{ currentStep.concept }}</h3>
+                  <p>{{ currentStep.description }}</p>
+                  <ul v-if="currentStep.resources?.length" class="resources">
+                    <li v-for="resource in currentStep.resources" :key="resource">{{ resource }}</li>
+                  </ul>
+                </div>
+              </div>
+              <div v-else-if="isPathCompleted && totalSteps" class="completion-banner">
+                {{ t('problemDetail.completedAll') }}
+              </div>
+              <p v-else class="empty">{{ t('problemDetail.noLearningPath') }}</p>
+
+              <div v-if="totalSteps" class="path-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="updatingPath || completedSteps === 0"
+                  @click="updateCurrentStep(completedSteps - 1)"
+                >
+                  {{ t('problemDetail.previousStep') }}
+                </button>
+                <button
+                  v-if="!isPathCompleted"
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="updatingPath"
+                  data-testid="mark-step-done"
+                  @click="updateCurrentStep(completedSteps + 1)"
+                >
+                  {{ t('problemDetail.markStepDone') }}
+                </button>
+                <span v-else class="completed-badge">{{ t('problemDetail.completed') }}</span>
+              </div>
+
+              <details v-if="completedStepList.length" class="completed-panel">
+                <summary>{{ t('problemDetail.completedStepsTitle', { count: completedStepList.length }) }}</summary>
+                <div class="completed-list">
+                  <div v-for="(step, index) in completedStepList" :key="`${step.concept}-${index}`" class="completed-item">
+                    <span class="completed-index">{{ index + 1 }}</span>
+                    <div>
+                      <strong>{{ step.concept }}</strong>
+                      <p>{{ step.description }}</p>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </section>
+
+            <section v-if="learningMode === 'socratic'" class="card responses-section">
+              <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
+              <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
 
               <div v-if="socraticQuestion" class="socratic-question-panel" data-testid="socratic-question-panel">
                 <div class="question-head">
@@ -241,127 +289,11 @@
                 </div>
               </details>
               <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
-            </div>
-            <div class="workspace-side-column workspace-side-stack">
-              <ProblemTurnOutcomePanel
-                :learning-mode="learningMode"
-                :latest-response="latestResponse"
-                :latest-feedback="latestFeedback"
-                :latest-qa="latestQA"
-              />
-              <ProblemDerivedConceptsPanel
-                :candidates="conceptCandidates"
-                :loading="candidateLoading"
-                :current-turn-id="activeConceptTurnId"
-                :merge-targets="conceptMergeTargets"
-                :action-pending-id="candidateSubmittingId"
-                :handoff-pending-id="handoffSubmittingId"
-                :scheduled-model-card-ids="scheduledModelCardIds"
-                @accept="acceptCandidate"
-                @reject="rejectCandidate"
-                @postpone="postponeCandidate"
-                @merge="mergeCandidate"
-                @rollback="rollbackConcept"
-                @promote="promoteCandidateToModelCard"
-                @open-card="openModelCard"
-                @schedule-review="scheduleCandidateReview"
-              />
-              <ProblemWorkspaceNotesPanel
-                :notes="workspaceNotes"
-                :saving="noteSaving"
-                :current-turn-id="activeConceptTurnId"
-                @save="saveWorkspaceNote"
-                @delete="deleteWorkspaceNote"
-              />
-              <ProblemWorkspaceResourcesPanel
-                :resources="workspaceResources"
-                :saving="resourceSaving"
-                :interpreting-id="resourceInterpretingId"
-                :current-turn-id="activeConceptTurnId"
-                @save="saveWorkspaceResource"
-                @delete="deleteWorkspaceResource"
-                @interpret="interpretWorkspaceResource"
-              />
-            </div>
-          </div>
-        </section>
+            </section>
 
-        <section class="card concept-governance-section" data-testid="path-candidates-panel">
-          <h2>{{ t('problemDetail.pathCandidatesTitle') }}</h2>
-          <p class="section-subtitle">{{ t('problemDetail.pathCandidatesSubtitle') }}</p>
-
-          <div v-if="pathCandidateLoading" class="loading">{{ t('common.loading') }}</div>
-          <p v-else-if="!pathCandidates.length" class="empty">{{ t('problemDetail.noPathCandidates') }}</p>
-          <div v-else class="candidate-list">
-            <div
-              v-for="candidate in pathCandidates"
-              :key="candidate.id"
-              class="candidate-item"
-              :class="`candidate-${candidate.status}`"
-              data-testid="path-candidate-card"
-            >
-              <div class="candidate-head">
-                <strong>{{ candidate.title }}</strong>
-                <span class="candidate-status">{{ formatPathCandidateStatus(candidate.status) }}</span>
-                <span class="candidate-source">{{ formatLearningMode(candidate.learning_mode) }}</span>
-                <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
-              </div>
-              <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
-              <p class="mode-line">
-                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
-                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
-              </p>
-              <p v-if="candidate.selected_insertion" class="mode-line">
-                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
-                {{ formatInsertionBehavior(candidate.selected_insertion) }}
-              </p>
-              <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
-                <button
-                  type="button"
-                  class="btn btn-primary"
-                  :disabled="pathCandidateSubmittingId === candidate.id"
-                  data-testid="path-candidate-insert-main"
-                  @click="decidePathCandidate(candidate.id, 'insert_before_current_main')"
-                >
-                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="pathCandidateSubmittingId === candidate.id"
-                  data-testid="path-candidate-save-branch"
-                  @click="decidePathCandidate(candidate.id, 'save_as_side_branch')"
-                >
-                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="pathCandidateSubmittingId === candidate.id"
-                  data-testid="path-candidate-bookmark"
-                  @click="decidePathCandidate(candidate.id, 'bookmark_for_later')"
-                >
-                  {{ t('problemDetail.pathCandidateBookmark') }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="pathCandidateSubmittingId === candidate.id"
-                  data-testid="path-candidate-dismiss"
-                  @click="decidePathCandidate(candidate.id, 'dismiss')"
-                >
-                  {{ t('problemDetail.pathCandidateDismiss') }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section v-if="learningMode === 'exploration'" class="card qa-section">
-          <h2>{{ t('problemDetail.askTitle') }}</h2>
-          <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
-          <div class="workspace-stage">
-            <div class="workspace-main-column">
+            <section v-else class="card qa-section">
+              <h2>{{ t('problemDetail.askTitle') }}</h2>
+              <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
 
               <div class="ask-mode-toggle">
                 <button
@@ -423,50 +355,57 @@
                   </div>
                 </div>
               </details>
-            </div>
-            <div class="workspace-side-column workspace-side-stack">
-              <ProblemTurnOutcomePanel
-                :learning-mode="learningMode"
-                :latest-response="latestResponse"
-                :latest-feedback="latestFeedback"
-                :latest-qa="latestQA"
-              />
-              <ProblemDerivedConceptsPanel
-                :candidates="conceptCandidates"
-                :loading="candidateLoading"
-                :current-turn-id="activeConceptTurnId"
-                :merge-targets="conceptMergeTargets"
-                :action-pending-id="candidateSubmittingId"
-                :handoff-pending-id="handoffSubmittingId"
-                :scheduled-model-card-ids="scheduledModelCardIds"
-                @accept="acceptCandidate"
-                @reject="rejectCandidate"
-                @postpone="postponeCandidate"
-                @merge="mergeCandidate"
-                @rollback="rollbackConcept"
-                @promote="promoteCandidateToModelCard"
-                @open-card="openModelCard"
-                @schedule-review="scheduleCandidateReview"
-              />
-              <ProblemWorkspaceNotesPanel
-                :notes="workspaceNotes"
-                :saving="noteSaving"
-                :current-turn-id="activeConceptTurnId"
-                @save="saveWorkspaceNote"
-                @delete="deleteWorkspaceNote"
-              />
-              <ProblemWorkspaceResourcesPanel
-                :resources="workspaceResources"
-                :saving="resourceSaving"
-                :interpreting-id="resourceInterpretingId"
-                :current-turn-id="activeConceptTurnId"
-                @save="saveWorkspaceResource"
-                @delete="deleteWorkspaceResource"
-                @interpret="interpretWorkspaceResource"
-              />
-            </div>
+            </section>
           </div>
-        </section>
+
+          <aside class="workspace-side-column workspace-side-stack">
+            <ProblemTurnOutcomePanel
+              :learning-mode="learningMode"
+              :latest-response="latestResponse"
+              :latest-feedback="latestFeedback"
+              :latest-qa="latestQA"
+            />
+            <ProblemDerivedConceptsPanel
+              :candidates="conceptCandidates"
+              :loading="candidateLoading"
+              :current-turn-id="activeConceptTurnId"
+              :merge-targets="conceptMergeTargets"
+              :action-pending-id="candidateSubmittingId"
+              :handoff-pending-id="handoffSubmittingId"
+              :scheduled-model-card-ids="scheduledModelCardIds"
+              @accept="acceptCandidate"
+              @reject="rejectCandidate"
+              @postpone="postponeCandidate"
+              @merge="mergeCandidate"
+              @rollback="rollbackConcept"
+              @promote="promoteCandidateToModelCard"
+              @open-card="openModelCard"
+              @schedule-review="scheduleCandidateReview"
+            />
+            <ProblemDerivedPathsPanel
+              :candidates="pathCandidates"
+              :loading="pathCandidateLoading"
+              :submitting-id="pathCandidateSubmittingId"
+              @decide="handlePathCandidateDecision"
+            />
+            <ProblemWorkspaceNotesPanel
+              :notes="workspaceNotes"
+              :saving="noteSaving"
+              :current-turn-id="activeConceptTurnId"
+              @save="saveWorkspaceNote"
+              @delete="deleteWorkspaceNote"
+            />
+            <ProblemWorkspaceResourcesPanel
+              :resources="workspaceResources"
+              :saving="resourceSaving"
+              :interpreting-id="resourceInterpretingId"
+              :current-turn-id="activeConceptTurnId"
+              @save="saveWorkspaceResource"
+              @delete="deleteWorkspaceResource"
+              @interpret="interpretWorkspaceResource"
+            />
+          </aside>
+        </div>
       </div>
     </template>
   </div>
@@ -479,6 +418,7 @@ import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
 import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
+import ProblemDerivedPathsPanel from '@/components/problem-workspace/ProblemDerivedPathsPanel.vue'
 import ProblemWorkspaceNotesPanel from '@/components/problem-workspace/ProblemWorkspaceNotesPanel.vue'
 import ProblemWorkspaceResourcesPanel from '@/components/problem-workspace/ProblemWorkspaceResourcesPanel.vue'
 
@@ -546,6 +486,61 @@ const activeConceptTurnId = computed(() => {
   }
   return latestResponse.value?.turn_id || null
 })
+const latestPathArtifacts = computed(() => {
+  if (learningMode.value === 'exploration') {
+    return latestQA.value?.derived_path_candidates?.length
+      ? latestQA.value.derived_path_candidates
+      : (latestQA.value?.path_suggestions || [])
+  }
+  return latestResponse.value?.derived_path_candidates || []
+})
+const latestDerivedConceptCount = computed(() => {
+  if (learningMode.value === 'exploration') {
+    return (latestQA.value?.accepted_concepts?.length || 0) + (latestQA.value?.pending_concepts?.length || 0)
+  }
+  return (latestResponse.value?.accepted_concepts?.length || 0) + (latestResponse.value?.pending_concepts?.length || 0)
+})
+const workspaceFocusTitle = computed(() => {
+  if (currentStep.value?.concept) return currentStep.value.concept
+  if (isPathCompleted.value) return t('problemDetail.completed')
+  return problem.value?.title || t('problemDetail.title')
+})
+const workspaceFocusDescription = computed(() => {
+  if (currentStep.value?.description) return currentStep.value.description
+  if (isPathCompleted.value) return t('problemDetail.completedAll')
+  return t('problemDetail.noLearningPath')
+})
+const workspacePathSummary = computed(() => {
+  if (!learningPath.value) return t('problemDetail.noLearningPath')
+  const label = `${formatLearningPathKind(learningPath.value.kind)} · ${learningPath.value.title || t('problemDetail.unnamedPath')}`
+  if (!totalSteps.value) return label
+  return `${label} · ${t('problemDetail.stepIndicator', { current: currentStepNumber.value, total: totalSteps.value })}`
+})
+const workspaceTurnSummary = computed(() => {
+  if (!latestResponse.value && !latestQA.value) {
+    return t('problemDetail.workspaceTurnEmpty')
+  }
+  if (!latestDerivedConceptCount.value && !latestPathArtifacts.value.length && latestFeedback.value?.mastery_score !== undefined) {
+    return t('problemDetail.workspaceTurnMastery', { score: latestFeedback.value.mastery_score })
+  }
+  if (!latestDerivedConceptCount.value && !latestPathArtifacts.value.length) {
+    return t('problemDetail.workspaceTurnEmpty')
+  }
+  return t('problemDetail.workspaceTurnSummary', {
+    concepts: latestDerivedConceptCount.value,
+    paths: latestPathArtifacts.value.length,
+  })
+})
+const workspaceNextAction = computed(() => {
+  if (learningMode.value === 'exploration') {
+    return latestQA.value?.next_learning_actions?.[0]
+      || latestQA.value?.suggested_next_focus
+      || t('problemDetail.workspaceNextExplorationDefault')
+  }
+  return latestResponse.value?.follow_up?.question
+    || socraticQuestion.value?.question
+    || t('problemDetail.workspaceNextSocraticDefault')
+})
 const conceptMergeTargets = computed(() => {
   const values = [
     ...(problem.value?.associated_concepts || []),
@@ -595,25 +590,6 @@ const formatAnswerType = (answerType: string | undefined | null) => {
   if (answerType === 'prerequisite_explanation') return t('problemDetail.answerTypePrerequisiteExplanation')
   if (answerType === 'worked_example') return t('problemDetail.answerTypeWorkedExample')
   return t('problemDetail.answerTypeConceptExplanation')
-}
-
-const formatPathSuggestionType = (pathType: string | undefined | null) => {
-  if (pathType === 'prerequisite') return t('problemDetail.pathSuggestionPrerequisite')
-  if (pathType === 'comparison_path') return t('problemDetail.pathSuggestionComparisonPath')
-  return t('problemDetail.pathSuggestionBranchDeepDive')
-}
-
-const formatPathCandidateStatus = (status: string | undefined | null) => {
-  if (status === 'planned') return t('problemDetail.pathCandidateStatusPlanned')
-  if (status === 'bookmarked') return t('problemDetail.pathCandidateStatusBookmarked')
-  if (status === 'dismissed') return t('problemDetail.pathCandidateStatusDismissed')
-  return t('problemDetail.pathCandidateStatusPending')
-}
-
-const formatInsertionBehavior = (action: string | undefined | null) => {
-  if (action === 'insert_before_current_main') return t('problemDetail.insertionInsertBeforeCurrentMain')
-  if (action === 'save_as_side_branch') return t('problemDetail.insertionSaveAsSideBranch')
-  return t('problemDetail.insertionBookmarkForLater')
 }
 
 const normalizeExplorationTurn = (turn: any) => ({
@@ -1154,6 +1130,10 @@ const decidePathCandidate = async (candidateId: string, action: string) => {
   }
 }
 
+const handlePathCandidateDecision = ({ candidateId, action }: { candidateId: string; action: string }) => {
+  decidePathCandidate(candidateId, action)
+}
+
 const activateLearningPathById = async (pathId: string) => {
   if (updatingPath.value) return
 
@@ -1195,7 +1175,7 @@ onMounted(fetchProblem)
 
 <style scoped>
 .problem-detail {
-  max-width: 900px;
+  max-width: 1180px;
   margin: 0 auto;
 }
 
@@ -1241,7 +1221,7 @@ onMounted(fetchProblem)
 
 .problem-content {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .workspace-mode-toggle {
@@ -1251,6 +1231,11 @@ onMounted(fetchProblem)
 }
 
 .workspace-stage {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-main-stack {
   display: grid;
   gap: 1rem;
 }
@@ -1266,6 +1251,78 @@ onMounted(fetchProblem)
 .workspace-side-stack {
   display: grid;
   gap: 1rem;
+}
+
+.workspace-overview-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-overview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.workspace-overview-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.workspace-link-action {
+  text-decoration: none;
+}
+
+.workspace-eyebrow,
+.workspace-summary-label {
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-summary-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.workspace-summary-card {
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.workspace-summary-card strong {
+  line-height: 1.35;
+}
+
+.workspace-summary-card p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.workspace-mode-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.workspace-mode-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
 }
 
 .workspace-mode-toggle .btn.active {
@@ -1732,6 +1789,12 @@ onMounted(fetchProblem)
   .workspace-stage {
     grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
     align-items: start;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-mode-row {
+    display: grid;
   }
 }
 
