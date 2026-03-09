@@ -176,8 +176,10 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/revisit|reinforce/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Needs reinforcement|Reinforcement Target/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch|Branch path/i)
+    await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target|false negatives/i)
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Fragile|revisit the workspace/i)
     await expect(page.getByTestId('derived-concept-needs-reinforcement').first()).toContainText(/Needs reinforcement|Comparison branch/i)
+    await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
 
     await page.goto(`/model-cards/${firstSchedule.model_card_id}`)
     await expect(page.getByTestId('model-card-recall-status')).toContainText(/Fragile|rebuilding/i)
@@ -186,6 +188,8 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByRole('link', { name: 'Open Workspace' }).first().click()
     await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch/i)
+    await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/false negatives/i)
+    await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
 
     await page.goto('/reviews')
     await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)

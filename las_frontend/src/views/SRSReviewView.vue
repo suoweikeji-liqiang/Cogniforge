@@ -252,9 +252,16 @@ const buildWorkspaceRoute = (entry: any) => {
   const problemId = entry?.origin?.problem_id
   if (!problemId) return '/reviews'
   const resumePathId = entry?.reinforcement_target?.resume_path_id || entry?.origin?.source_path_id
+  const focusCandidateId = entry?.reinforcement_target?.concept_candidate_id || entry?.origin?.concept_candidate_id
+  const focusTurnId = entry?.reinforcement_target?.source_turn_id || entry?.origin?.source_turn_id
+  const query: Record<string, string> = {}
+  if (resumePathId) query.resume_path = String(resumePathId)
+  if (entry?.model_card_id) query.focus_model_card = String(entry.model_card_id)
+  if (focusCandidateId) query.focus_candidate = String(focusCandidateId)
+  if (focusTurnId) query.focus_turn = String(focusTurnId)
   return {
     path: `/problems/${problemId}`,
-    query: resumePathId ? { resume_path: resumePathId } : {},
+    query,
   }
 }
 
