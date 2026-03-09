@@ -150,6 +150,28 @@
                 </p>
               </article>
 
+              <article
+                v-if="reinforcementActionTemplate"
+                class="workspace-summary-card reinforcement-action-card"
+                data-testid="workspace-reinforcement-action"
+              >
+                <span class="workspace-summary-label">{{ t('problemDetail.reinforcementActionTitle') }}</span>
+                <strong>{{ reinforcementActionTemplate.title }}</strong>
+                <p>{{ reinforcementActionTemplate.description }}</p>
+                <div class="reinforcement-action-starter">
+                  <strong>{{ t('problemDetail.reinforcementStarterLabel') }}</strong>
+                  <p>{{ reinforcementActionTemplate.starter }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  data-testid="apply-reinforcement-action-template"
+                  @click="applyReinforcementActionTemplate"
+                >
+                  {{ t('problemDetail.useReinforcementStarter') }}
+                </button>
+              </article>
+
               <p
                 v-if="activeReinforcementTarget.source_turn_preview && activeReinforcementTarget.source_turn_preview !== reinforcementFocusTurnPreview"
                 class="reinforcement-preview"
@@ -773,6 +795,13 @@ const workspaceReviewDescription = computed(() => {
     date: formatDateTime(latest.next_review_at),
   })
 })
+type ReinforcementActionTemplate = {
+  key: string
+  preferredMode: 'socratic' | 'exploration'
+  title: string
+  description: string
+  starter: string
+}
 const focusedReinforcementCandidate = computed(() => {
   if (reinforcementFocusCandidateId.value) {
     const exactCandidate = conceptCandidates.value.find(
@@ -832,6 +861,81 @@ const reinforcementFocusTurnPreview = computed(() => {
   const answer = String(focusedReinforcementTurn.value.answer || '').trim()
   if (question && answer) return `${question.slice(0, 110)} -> ${answer.slice(0, 110)}`
   return question || answer
+})
+const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>(() => {
+  if (!activeReinforcementEntry.value || !activeReinforcementTarget.value) return null
+
+  const concept = reinforcementFocusTitle.value
+  const anchor = String(
+    activeReinforcementTarget.value?.resume_step_concept
+      || currentStep.value?.concept
+      || problem.value?.title
+      || concept
+  ).trim()
+  const answerType = String(focusedReinforcementTurn.value?.answer_type || '').trim()
+  const originMode = String(activeReinforcementEntry.value?.origin?.learning_mode || learningMode.value || 'socratic').trim()
+
+  if (answerType === 'comparison' || activeReinforcementTarget.value?.resume_path_kind === 'comparison') {
+    return {
+      key: 'compare',
+      preferredMode: 'socratic',
+      title: t('problemDetail.reinforcementTemplateCompareTitle'),
+      description: t('problemDetail.reinforcementTemplateCompareBody', { concept, anchor }),
+      starter: t('problemDetail.reinforcementTemplateCompareStarter', { concept, anchor }),
+    }
+  }
+  if (answerType === 'misconception_correction') {
+    return {
+      key: 'correct',
+      preferredMode: 'socratic',
+      title: t('problemDetail.reinforcementTemplateCorrectTitle'),
+      description: t('problemDetail.reinforcementTemplateCorrectBody', { concept, anchor }),
+      starter: t('problemDetail.reinforcementTemplateCorrectStarter', { concept, anchor }),
+    }
+  }
+  if (answerType === 'worked_example') {
+    return {
+      key: 'example',
+      preferredMode: 'socratic',
+      title: t('problemDetail.reinforcementTemplateExampleTitle'),
+      description: t('problemDetail.reinforcementTemplateExampleBody', { concept, anchor }),
+      starter: t('problemDetail.reinforcementTemplateExampleStarter', { concept, anchor }),
+    }
+  }
+  if (answerType === 'boundary_clarification') {
+    return {
+      key: 'boundary',
+      preferredMode: 'socratic',
+      title: t('problemDetail.reinforcementTemplateBoundaryTitle'),
+      description: t('problemDetail.reinforcementTemplateBoundaryBody', { concept, anchor }),
+      starter: t('problemDetail.reinforcementTemplateBoundaryStarter', { concept, anchor }),
+    }
+  }
+  if (answerType === 'prerequisite_explanation') {
+    return {
+      key: 'prerequisite',
+      preferredMode: 'socratic',
+      title: t('problemDetail.reinforcementTemplatePrerequisiteTitle'),
+      description: t('problemDetail.reinforcementTemplatePrerequisiteBody', { concept, anchor }),
+      starter: t('problemDetail.reinforcementTemplatePrerequisiteStarter', { concept, anchor }),
+    }
+  }
+  if (originMode === 'socratic') {
+    return {
+      key: 'probe',
+      preferredMode: 'socratic',
+      title: t('problemDetail.reinforcementTemplateProbeTitle'),
+      description: t('problemDetail.reinforcementTemplateProbeBody', { concept, anchor }),
+      starter: t('problemDetail.reinforcementTemplateProbeStarter', { concept, anchor }),
+    }
+  }
+  return {
+    key: 'restate',
+    preferredMode: 'socratic',
+    title: t('problemDetail.reinforcementTemplateRestateTitle'),
+    description: t('problemDetail.reinforcementTemplateRestateBody', { concept, anchor }),
+    starter: t('problemDetail.reinforcementTemplateRestateStarter', { concept, anchor }),
+  }
 })
 
 const formatConfidence = (value: number | string | undefined | null) => {
@@ -1492,6 +1596,39 @@ const handlePathCandidateDecision = ({ candidateId, action }: { candidateId: str
   decidePathCandidate(candidateId, action)
 }
 
+const scrollToWorkspaceInput = async (targetMode: 'socratic' | 'exploration') => {
+  await nextTick()
+  const selector = targetMode === 'exploration'
+    ? '[data-testid="exploration-question-input"]'
+    : '[data-testid="socratic-response-input"]'
+  const input = document.querySelector(selector) as HTMLTextAreaElement | null
+  if (!input) return
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  input.focus()
+}
+
+const applyReinforcementActionTemplate = async () => {
+  const template = reinforcementActionTemplate.value
+  if (!template) return
+
+  if (canSwitchToReinforcementPath.value) {
+    await activateLearningPathById(reinforcementTargetPathId.value)
+  }
+  if (template.preferredMode !== learningMode.value) {
+    await setLearningMode(template.preferredMode)
+  }
+
+  if (template.preferredMode === 'exploration') {
+    learningQuestion.value = template.starter
+    responseText.value = ''
+  } else {
+    responseText.value = template.starter
+    learningQuestion.value = ''
+  }
+
+  await scrollToWorkspaceInput(template.preferredMode)
+}
+
 const switchToReinforcementPath = async () => {
   if (!canSwitchToReinforcementPath.value) return
   await activateLearningPathById(reinforcementTargetPathId.value)
@@ -1759,6 +1896,24 @@ onMounted(async () => {
 .reinforcement-focus-card {
   margin-top: 0.85rem;
   border-color: rgba(248, 113, 113, 0.34);
+}
+
+.reinforcement-action-card {
+  margin-top: 0.85rem;
+  border-color: rgba(96, 165, 250, 0.26);
+}
+
+.reinforcement-action-starter {
+  margin-top: 0.35rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.reinforcement-action-starter p {
+  margin-top: 0.35rem;
+  white-space: pre-wrap;
 }
 
 .workspace-mode-copy {

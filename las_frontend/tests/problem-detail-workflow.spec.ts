@@ -177,6 +177,7 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Needs reinforcement|Reinforcement Target/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch|Branch path/i)
     await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target|false negatives/i)
+    await expect(page.getByTestId('workspace-reinforcement-action')).toContainText(/Do this first|Compare/i)
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Fragile|revisit the workspace/i)
     await expect(page.getByTestId('derived-concept-needs-reinforcement').first()).toContainText(/Needs reinforcement|Comparison branch/i)
     await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
@@ -190,6 +191,9 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch/i)
     await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/false negatives/i)
     await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
+    await expect(page.getByTestId('workspace-reinforcement-action')).toContainText(/Compare/i)
+    await page.getByTestId('apply-reinforcement-action-template').click()
+    await expect(page.getByTestId('socratic-response-input')).toHaveValue(/false negatives/i)
 
     await page.goto('/reviews')
     await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)
