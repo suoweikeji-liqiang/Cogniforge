@@ -158,6 +158,38 @@
                 <span class="workspace-summary-label">{{ t('problemDetail.reinforcementActionTitle') }}</span>
                 <strong>{{ reinforcementActionTemplate.title }}</strong>
                 <p>{{ reinforcementActionTemplate.description }}</p>
+                <div
+                  v-if="reinforcementActionTemplate.sourceCue"
+                  class="reinforcement-action-source"
+                  data-testid="reinforcement-starter-source-cue"
+                >
+                  <strong>{{ t('problemDetail.reinforcementStarterGroundingLabel') }}</strong>
+                  <p>{{ reinforcementActionTemplate.sourceCue }}</p>
+                </div>
+                <div
+                  v-if="reinforcementActionTemplate.sourceClue"
+                  class="reinforcement-action-source"
+                  data-testid="reinforcement-starter-source-clue"
+                >
+                  <strong>{{ t('problemDetail.reinforcementStarterClueLabel') }}</strong>
+                  <p>{{ reinforcementActionTemplate.sourceClue }}</p>
+                </div>
+                <div
+                  v-if="reinforcementActionTemplate.likelyConfusion"
+                  class="reinforcement-action-source reinforcement-action-warning"
+                  data-testid="reinforcement-likely-confusion"
+                >
+                  <strong>{{ t('problemDetail.reinforcementLikelyConfusionLabel') }}</strong>
+                  <p>{{ reinforcementActionTemplate.likelyConfusion }}</p>
+                </div>
+                <div
+                  v-if="reinforcementActionTemplate.evidenceCue"
+                  class="reinforcement-action-source"
+                  data-testid="reinforcement-starter-evidence"
+                >
+                  <strong>{{ t('problemDetail.reinforcementStarterEvidenceLabel') }}</strong>
+                  <p>{{ reinforcementActionTemplate.evidenceCue }}</p>
+                </div>
                 <div class="reinforcement-action-starter">
                   <strong>{{ t('problemDetail.reinforcementStarterLabel') }}</strong>
                   <p>{{ reinforcementActionTemplate.starter }}</p>
@@ -801,6 +833,222 @@ type ReinforcementActionTemplate = {
   title: string
   description: string
   starter: string
+  sourceCue?: string
+  sourceClue?: string
+  likelyConfusion?: string
+  evidenceCue?: string
+}
+type ReinforcementStarterContext = {
+  questionCue: string
+  answerCue: string
+  comparisonCue: string
+  primaryCue: string
+}
+type ReinforcementErrorHint = {
+  kind: 'comparison' | 'boundary' | 'misconception'
+  text: string
+}
+
+const normalizeInlineText = (value: unknown) => String(value ?? '').replace(/\s+/g, ' ').trim()
+
+const clipInlineText = (value: string, max = 96) => {
+  const normalized = normalizeInlineText(value)
+  if (normalized.length <= max) return normalized
+  return `${normalized.slice(0, Math.max(0, max - 1)).trimEnd()}…`
+}
+
+const stripTrailingPunctuation = (value: string) => normalizeInlineText(value).replace(/[.?!,:;]+$/g, '').trim()
+const stripQuestionLead = (value: string) => normalizeInlineText(value).replace(
+  /^(what is|what's|what are|how should i|how do i|how can i|why does|why do|why is|when should i|when does|can you explain|could you explain|explain|tell me about|is it true that|is|are)\s+/i,
+  '',
+)
+const isQuestionLike = (value: string) => /\?$/.test(normalizeInlineText(value))
+
+const uniqueContextConcepts = (values: unknown[], exclude: string[] = []) => {
+  const excluded = new Set(exclude.map((value) => normalizeInlineText(value).toLowerCase()).filter(Boolean))
+  const seen = new Set<string>()
+  return values
+    .map((value) => normalizeInlineText(value))
+    .filter((value) => {
+      const normalized = value.toLowerCase()
+      if (!value || excluded.has(normalized) || seen.has(normalized)) return false
+      seen.add(normalized)
+      return true
+    })
+}
+
+const extractQuestionCue = (question: string, answerType: string, contextConcepts: string[]) => {
+  const normalized = normalizeInlineText(question)
+  if (!normalized) return ''
+
+  if (answerType === 'comparison') {
+    const betweenMatch = normalized.match(/\bdifference between\s+(.+?)\s+and\s+(.+?)(?:[?.!,]|$)/i)
+    if (betweenMatch) {
+      return clipInlineText(`${stripTrailingPunctuation(betweenMatch[1])} vs ${stripTrailingPunctuation(betweenMatch[2])}`)
+    }
+    const compareMatch = normalized.match(/\bcompare\s+(.+?)(?:[?.!,]|$)/i)
+    if (compareMatch) {
+      return clipInlineText(stripTrailingPunctuation(compareMatch[1]))
+    }
+    const versusMatch = normalized.match(/\b(.+?)\s+(?:vs\.?|versus)\s+(.+?)(?:[?.!,]|$)/i)
+    if (versusMatch) {
+      return clipInlineText(`${stripTrailingPunctuation(versusMatch[1])} vs ${stripTrailingPunctuation(versusMatch[2])}`)
+    }
+    if (contextConcepts.length >= 2) {
+      return clipInlineText(`${contextConcepts[0]} vs ${contextConcepts[1]}`)
+    }
+  }
+
+  const stripped = stripQuestionLead(normalized)
+  return clipInlineText(stripTrailingPunctuation(stripped || normalized))
+}
+
+const extractAnswerCue = (answer: string) => {
+  const sentences = normalizeInlineText(answer)
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => clipInlineText(sentence, 120))
+    .filter(Boolean)
+  if (!sentences.length) return ''
+  const preferred = sentences.find((sentence) => /example|because|instead|raises|lowers|depends|tradeoff|boundary|fails|applies/i.test(sentence))
+  return preferred || sentences[0]
+}
+
+const isLowSignalAnswerCue = (value: string) => {
+  const normalized = normalizeInlineText(value).toLowerCase()
+  return !normalized || /start from the current step concept|define it briefly|test it with one concrete example/.test(normalized)
+}
+
+const extractSentenceWithPattern = (value: string, pattern: RegExp) => {
+  const sentence = normalizeInlineText(value)
+    .split(/(?<=[.!?])\s+/)
+    .find((item) => pattern.test(item))
+  return sentence ? clipInlineText(sentence, 120) : ''
+}
+
+const splitEvidenceChunks = (value: string) => {
+  const normalized = String(value || '').trim()
+  if (!normalized) return []
+
+  const chunks = normalized
+    .split(/\n+/)
+    .flatMap((line) => normalizeInlineText(line).split(/(?<=[.!?])\s+/))
+    .map((chunk) => clipInlineText(chunk, 140))
+    .filter(Boolean)
+
+  return uniqueContextConcepts(chunks)
+}
+
+const extractBoundaryCue = (question: string, answer: string) => {
+  const explicitQuestionCue = extractSentenceWithPattern(question, /\b(always|never|only|every|all|whenever|must|cannot|can't)\b/i)
+  if (explicitQuestionCue) return stripTrailingPunctuation(explicitQuestionCue)
+  const explicitAnswerCue = extractSentenceWithPattern(answer, /\b(always|never|only|every|all|whenever|must|cannot|can't|fails|breaks|edge case)\b/i)
+  if (explicitAnswerCue) return stripTrailingPunctuation(explicitAnswerCue)
+  return ''
+}
+
+const extractMisconceptionCue = (question: string, answer: string) => {
+  const normalizedQuestion = normalizeInlineText(question)
+  if (/\b(same as|equivalent to|means|just|only|always|never)\b/i.test(normalizedQuestion)) {
+    return clipInlineText(stripTrailingPunctuation(stripQuestionLead(normalizedQuestion)), 110)
+  }
+
+  const correctiveSentence = extractSentenceWithPattern(answer, /\bnot\b.+\bbut\b|\brather than\b|\binstead of\b/i)
+  if (correctiveSentence) return stripTrailingPunctuation(correctiveSentence)
+
+  return ''
+}
+
+const deriveReinforcementErrorHint = ({
+  answerType,
+  question,
+  answer,
+  questionCue,
+  comparisonCue,
+}: {
+  answerType: string
+  question: string
+  answer: string
+  questionCue: string
+  comparisonCue: string
+}): ReinforcementErrorHint | null => {
+  if (answerType === 'comparison' && /\b(compare|difference between|vs\.?|versus)\b/i.test(question)) {
+    const cue = comparisonCue || questionCue
+    if (!cue) return null
+    return {
+      kind: 'comparison',
+      text: t('problemDetail.reinforcementComparisonLikelyConfusion', { cue }),
+    }
+  }
+
+  if (answerType === 'boundary_clarification') {
+    const cue = extractBoundaryCue(question, answer)
+    if (!cue) return null
+    return {
+      kind: 'boundary',
+      text: t('problemDetail.reinforcementBoundaryLikelyConfusion', { cue }),
+    }
+  }
+
+  if (answerType === 'misconception_correction') {
+    const cue = extractMisconceptionCue(question, answer)
+    if (!cue) return null
+    return {
+      kind: 'misconception',
+      text: t('problemDetail.reinforcementMisconceptionLikelyConfusion', { cue }),
+    }
+  }
+
+  return null
+}
+
+const extractEvidenceCue = ({
+  evidenceSnippet,
+  concept,
+  sourceCue,
+  sourceClue,
+  likelyConfusion,
+  anchor,
+}: {
+  evidenceSnippet: string
+  concept: string
+  sourceCue: string
+  sourceClue: string
+  likelyConfusion: string
+  anchor: string
+}) => {
+  const conceptKey = normalizeInlineText(concept).toLowerCase()
+  const anchorKey = normalizeInlineText(anchor).toLowerCase()
+  const seen = new Set<string>()
+  const chunks = splitEvidenceChunks(evidenceSnippet).filter((chunk) => {
+    const normalized = normalizeInlineText(chunk)
+    const key = normalized.toLowerCase()
+    if (!normalized || seen.has(key)) return false
+    seen.add(key)
+    if (isLowSignalAnswerCue(normalized)) return false
+    if (key === normalizeInlineText(sourceCue).toLowerCase()) return false
+    if (key === normalizeInlineText(sourceClue).toLowerCase()) return false
+    if (key === normalizeInlineText(likelyConfusion).toLowerCase()) return false
+    if (key === conceptKey || key === anchorKey) return false
+    return true
+  })
+
+  if (!chunks.length) return ''
+
+  const statementChunks = chunks.filter((chunk) => !isQuestionLike(chunk))
+  const candidates = statementChunks.length ? statementChunks : chunks
+
+  const conceptSpecific = candidates.find((chunk) => conceptKey && chunk.toLowerCase().includes(conceptKey))
+  if (conceptSpecific) return conceptSpecific
+
+  const evidenceSpecific = candidates.find((chunk) => /because|raises|lowers|drop|drops|rise|rises|tradeoff|instead|rather than|not|but|applies|fails|edge case|example|predicted positives|actual positives|false positives|false negatives/i.test(chunk))
+  if (evidenceSpecific) return evidenceSpecific
+
+  return ''
+}
+
+const buildEvidenceAwareStarter = (starter: string, evidenceCue: string) => {
+  if (!evidenceCue) return starter
+  return `${t('problemDetail.reinforcementStarterEvidencePrefix', { evidence: evidenceCue })}\n${starter}`
 }
 const focusedReinforcementCandidate = computed(() => {
   if (reinforcementFocusCandidateId.value) {
@@ -862,6 +1110,72 @@ const reinforcementFocusTurnPreview = computed(() => {
   if (question && answer) return `${question.slice(0, 110)} -> ${answer.slice(0, 110)}`
   return question || answer
 })
+const reinforcementStarterContext = computed<ReinforcementStarterContext>(() => {
+  const concept = reinforcementFocusTitle.value
+  const sourceQuestion = normalizeInlineText(focusedReinforcementTurn.value?.question || '')
+  const sourceAnswer = normalizeInlineText(focusedReinforcementTurn.value?.answer || '')
+  const answerType = String(focusedReinforcementTurn.value?.answer_type || '').trim()
+  const contextConcepts = uniqueContextConcepts([
+    ...(focusedReinforcementTurn.value?.answered_concepts || []),
+    ...(focusedReinforcementTurn.value?.related_concepts || []),
+    focusedReinforcementTurn.value?.suggested_next_focus,
+    focusedReinforcementTurn.value?.step_concept,
+    activeReinforcementTarget.value?.resume_step_concept,
+    currentStep.value?.concept,
+    problem.value?.title,
+  ], [concept])
+  const questionCue = extractQuestionCue(sourceQuestion, answerType, contextConcepts)
+  const answerCue = extractAnswerCue(sourceAnswer)
+  const comparisonCue = answerType === 'comparison'
+    ? questionCue || clipInlineText(contextConcepts.slice(0, 2).join(' vs '))
+    : ''
+  const primaryCue = questionCue
+    || clipInlineText(reinforcementFocusTurnPreview.value, 110)
+    || answerCue
+    || clipInlineText(contextConcepts.join(', '), 90)
+
+  return {
+    questionCue,
+    answerCue,
+    comparisonCue,
+    primaryCue,
+  }
+})
+const reinforcementErrorHint = computed<ReinforcementErrorHint | null>(() => {
+  if (!focusedReinforcementTurn.value) return null
+  return deriveReinforcementErrorHint({
+    answerType: String(focusedReinforcementTurn.value.answer_type || '').trim(),
+    question: normalizeInlineText(focusedReinforcementTurn.value.question || ''),
+    answer: normalizeInlineText(focusedReinforcementTurn.value.answer || ''),
+    questionCue: reinforcementStarterContext.value.questionCue,
+    comparisonCue: reinforcementStarterContext.value.comparisonCue,
+  })
+})
+const reinforcementEvidenceCue = computed(() => {
+  const evidenceSnippet = String(
+    focusedReinforcementCandidate.value?.evidence_snippet
+      || activeReinforcementEntry.value?.origin?.evidence_snippet
+      || '',
+  ).trim()
+  if (!evidenceSnippet) return ''
+
+  const concept = reinforcementFocusTitle.value
+  const anchor = String(
+    activeReinforcementTarget.value?.resume_step_concept
+      || currentStep.value?.concept
+      || problem.value?.title
+      || concept
+  ).trim()
+
+  return extractEvidenceCue({
+    evidenceSnippet,
+    concept,
+    sourceCue: reinforcementStarterContext.value.primaryCue,
+    sourceClue: reinforcementStarterContext.value.answerCue,
+    likelyConfusion: reinforcementErrorHint.value?.text || '',
+    anchor,
+  })
+})
 const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>(() => {
   if (!activeReinforcementEntry.value || !activeReinforcementTarget.value) return null
 
@@ -874,14 +1188,32 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
   ).trim()
   const answerType = String(focusedReinforcementTurn.value?.answer_type || '').trim()
   const originMode = String(activeReinforcementEntry.value?.origin?.learning_mode || learningMode.value || 'socratic').trim()
+  const sourceCue = reinforcementStarterContext.value.primaryCue
+  const sourceClue = !isLowSignalAnswerCue(reinforcementStarterContext.value.answerCue)
+    && reinforcementStarterContext.value.answerCue
+    && reinforcementStarterContext.value.answerCue !== sourceCue
+      ? reinforcementStarterContext.value.answerCue
+      : ''
+  const likelyConfusion = reinforcementErrorHint.value?.text || ''
+  const evidenceCue = reinforcementEvidenceCue.value
+  const withEvidence = (starter: string) => buildEvidenceAwareStarter(starter, evidenceCue)
 
   if (answerType === 'comparison' || activeReinforcementTarget.value?.resume_path_kind === 'comparison') {
+    const comparisonCue = reinforcementStarterContext.value.comparisonCue || sourceCue
     return {
       key: 'compare',
       preferredMode: 'socratic',
       title: t('problemDetail.reinforcementTemplateCompareTitle'),
       description: t('problemDetail.reinforcementTemplateCompareBody', { concept, anchor }),
-      starter: t('problemDetail.reinforcementTemplateCompareStarter', { concept, anchor }),
+      starter: withEvidence(likelyConfusion
+        ? t('problemDetail.reinforcementTemplateCompareErrorStarter', { concept, error: likelyConfusion })
+        : comparisonCue
+        ? t('problemDetail.reinforcementTemplateCompareSourceStarter', { concept, cue: comparisonCue })
+        : t('problemDetail.reinforcementTemplateCompareStarter', { concept, anchor })),
+      sourceCue: comparisonCue || sourceCue,
+      sourceClue,
+      likelyConfusion,
+      evidenceCue,
     }
   }
   if (answerType === 'misconception_correction') {
@@ -890,7 +1222,15 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
       preferredMode: 'socratic',
       title: t('problemDetail.reinforcementTemplateCorrectTitle'),
       description: t('problemDetail.reinforcementTemplateCorrectBody', { concept, anchor }),
-      starter: t('problemDetail.reinforcementTemplateCorrectStarter', { concept, anchor }),
+      starter: withEvidence(likelyConfusion
+        ? t('problemDetail.reinforcementTemplateCorrectErrorStarter', { concept, error: likelyConfusion })
+        : sourceCue
+        ? t('problemDetail.reinforcementTemplateCorrectSourceStarter', { concept, cue: sourceCue })
+        : t('problemDetail.reinforcementTemplateCorrectStarter', { concept, anchor })),
+      sourceCue,
+      sourceClue,
+      likelyConfusion,
+      evidenceCue,
     }
   }
   if (answerType === 'worked_example') {
@@ -899,7 +1239,13 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
       preferredMode: 'socratic',
       title: t('problemDetail.reinforcementTemplateExampleTitle'),
       description: t('problemDetail.reinforcementTemplateExampleBody', { concept, anchor }),
-      starter: t('problemDetail.reinforcementTemplateExampleStarter', { concept, anchor }),
+      starter: withEvidence(sourceCue
+        ? t('problemDetail.reinforcementTemplateExampleSourceStarter', { concept, cue: sourceCue })
+        : t('problemDetail.reinforcementTemplateExampleStarter', { concept, anchor })),
+      sourceCue,
+      sourceClue,
+      likelyConfusion,
+      evidenceCue,
     }
   }
   if (answerType === 'boundary_clarification') {
@@ -908,7 +1254,15 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
       preferredMode: 'socratic',
       title: t('problemDetail.reinforcementTemplateBoundaryTitle'),
       description: t('problemDetail.reinforcementTemplateBoundaryBody', { concept, anchor }),
-      starter: t('problemDetail.reinforcementTemplateBoundaryStarter', { concept, anchor }),
+      starter: withEvidence(likelyConfusion
+        ? t('problemDetail.reinforcementTemplateBoundaryErrorStarter', { concept, error: likelyConfusion })
+        : sourceCue
+        ? t('problemDetail.reinforcementTemplateBoundarySourceStarter', { concept, cue: sourceCue })
+        : t('problemDetail.reinforcementTemplateBoundaryStarter', { concept, anchor })),
+      sourceCue,
+      sourceClue,
+      likelyConfusion,
+      evidenceCue,
     }
   }
   if (answerType === 'prerequisite_explanation') {
@@ -917,7 +1271,13 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
       preferredMode: 'socratic',
       title: t('problemDetail.reinforcementTemplatePrerequisiteTitle'),
       description: t('problemDetail.reinforcementTemplatePrerequisiteBody', { concept, anchor }),
-      starter: t('problemDetail.reinforcementTemplatePrerequisiteStarter', { concept, anchor }),
+      starter: withEvidence(sourceCue
+        ? t('problemDetail.reinforcementTemplatePrerequisiteSourceStarter', { concept, cue: sourceCue })
+        : t('problemDetail.reinforcementTemplatePrerequisiteStarter', { concept, anchor })),
+      sourceCue,
+      sourceClue,
+      likelyConfusion,
+      evidenceCue,
     }
   }
   if (originMode === 'socratic') {
@@ -926,7 +1286,13 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
       preferredMode: 'socratic',
       title: t('problemDetail.reinforcementTemplateProbeTitle'),
       description: t('problemDetail.reinforcementTemplateProbeBody', { concept, anchor }),
-      starter: t('problemDetail.reinforcementTemplateProbeStarter', { concept, anchor }),
+      starter: withEvidence(sourceCue
+        ? t('problemDetail.reinforcementTemplateProbeSourceStarter', { concept, cue: sourceCue })
+        : t('problemDetail.reinforcementTemplateProbeStarter', { concept, anchor })),
+      sourceCue,
+      sourceClue,
+      likelyConfusion,
+      evidenceCue,
     }
   }
   return {
@@ -934,7 +1300,13 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
     preferredMode: 'socratic',
     title: t('problemDetail.reinforcementTemplateRestateTitle'),
     description: t('problemDetail.reinforcementTemplateRestateBody', { concept, anchor }),
-    starter: t('problemDetail.reinforcementTemplateRestateStarter', { concept, anchor }),
+    starter: withEvidence(sourceCue
+      ? t('problemDetail.reinforcementTemplateRestateSourceStarter', { concept, cue: sourceCue })
+      : t('problemDetail.reinforcementTemplateRestateStarter', { concept, anchor })),
+    sourceCue,
+    sourceClue,
+    likelyConfusion,
+    evidenceCue,
   }
 })
 
@@ -1901,6 +2273,23 @@ onMounted(async () => {
 .reinforcement-action-card {
   margin-top: 0.85rem;
   border-color: rgba(96, 165, 250, 0.26);
+}
+
+.reinforcement-action-source {
+  margin-top: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  background: rgba(96, 165, 250, 0.05);
+}
+
+.reinforcement-action-source p {
+  margin-top: 0.3rem;
+}
+
+.reinforcement-action-warning {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(120, 24, 24, 0.14);
 }
 
 .reinforcement-action-starter {

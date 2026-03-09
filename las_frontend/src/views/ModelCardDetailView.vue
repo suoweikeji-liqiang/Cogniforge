@@ -47,7 +47,36 @@
             {{ t('modelCards.openReviewHub') }}
           </router-link>
         </div>
-        <div v-if="reviewSchedule" class="recall-status-card" data-testid="model-card-recall-status">
+        <div
+          v-if="reviewSchedule"
+          class="recall-status-card"
+          :class="evolutionState ? `recall-status-${evolutionState.tone}` : ''"
+          data-testid="model-card-recall-status"
+        >
+          <div v-if="evolutionState" class="evolution-state-card" data-testid="model-card-evolution-state">
+            <div class="evolution-state-head">
+              <span class="recall-eyebrow">{{ t('modelCards.evolutionStateTitle') }}</span>
+              <span class="evolution-state-pill" :class="`state-${evolutionState.tone}`">
+                {{ formatEvolutionStateLabel(evolutionState) }}
+              </span>
+            </div>
+            <p>{{ formatEvolutionStateSummary(evolutionState, reviewSchedule) }}</p>
+            <p v-if="evolutionState.reinforcementEventCount > 1" class="evolution-state-meta">
+              {{ t('modelCards.evolutionStateReinforcementCount', { count: evolutionState.reinforcementEventCount }) }}
+            </p>
+          </div>
+          <div v-if="revisionFocus" class="revision-focus-card" data-testid="model-card-revision-focus">
+            <div class="evolution-state-head">
+              <span class="recall-eyebrow">{{ t('modelCards.revisionFocusTitle') }}</span>
+              <span class="evolution-state-pill state-warning">
+                {{ formatRevisionFocusLabel(revisionFocus) }}
+              </span>
+            </div>
+            <p>{{ formatRevisionFocusSummary(revisionFocus, reviewSchedule) }}</p>
+            <p v-if="revisionFocus.cue" class="evolution-state-meta">
+              {{ t('modelCards.revisionFocusCue', { cue: revisionFocus.cue }) }}
+            </p>
+          </div>
           <div class="recall-status-head">
             <div>
               <span class="recall-eyebrow">{{ t('modelCards.recallStatusTitle') }}</span>
@@ -144,11 +173,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 import { useCogTestStore } from '@/stores/cogTest'
+import {
+  deriveModelCardEvolutionState,
+  deriveModelCardRevisionFocus,
+  type ModelCardEvolutionState,
+  type ModelCardRevisionFocus,
+} from '@/utils/modelCardEvolution'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -168,6 +203,12 @@ const loading = ref(true)
 const schedulingReview = ref(false)
 const isScheduled = ref(false)
 const reviewSchedule = ref<any | null>(null)
+const evolutionState = computed(() => deriveModelCardEvolutionState(reviewSchedule.value, evolutionLogs.value))
+const revisionFocus = computed(() => deriveModelCardRevisionFocus({
+  schedule: reviewSchedule.value,
+  evolutionState: evolutionState.value,
+  card: card.value,
+}))
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString()
 const formatDateTime = (d: string | undefined | null) => (d ? new Date(d).toLocaleString() : '-')
@@ -201,6 +242,73 @@ const formatRecallOutcome = (schedule: any) => {
     outcome: formatRecentOutcome(schedule?.recent_outcome),
     action: formatRecommendedAction(schedule?.recommended_action),
   })
+}
+
+const formatEvolutionStateLabel = (state: ModelCardEvolutionState | null) => {
+  if (!state) return ''
+  if (state.key === 'needs_revision') return t('modelCards.evolutionStateNeedsRevision')
+  if (state.key === 'rebuilding') return t('modelCards.evolutionStateRebuilding')
+  if (state.key === 'reinforced_recently') return t('modelCards.evolutionStateReinforcedRecently')
+  if (state.key === 'stable_base') return t('modelCards.evolutionStateStableBase')
+  if (state.key === 'repeated_confusion') return t('modelCards.evolutionStateRepeatedConfusion')
+  return t('modelCards.evolutionStateFirstRecallQueued')
+}
+
+const modelCardWorkspaceLabel = (schedule: any) => {
+  return schedule?.reinforcement_target?.problem_title
+    || schedule?.origin?.problem_title
+    || t('modelCards.linkedWorkspaceFallback')
+}
+
+const formatEvolutionStateSummary = (state: ModelCardEvolutionState | null, schedule: any) => {
+  if (!state) return ''
+  const workspace = modelCardWorkspaceLabel(schedule)
+  if (state.key === 'needs_revision') {
+    return t('modelCards.evolutionStateNeedsRevisionSummary', { workspace })
+  }
+  if (state.key === 'rebuilding') {
+    return t('modelCards.evolutionStateRebuildingSummary', { workspace })
+  }
+  if (state.key === 'reinforced_recently') {
+    return t('modelCards.evolutionStateReinforcedRecentlySummary')
+  }
+  if (state.key === 'stable_base') {
+    return t('modelCards.evolutionStateStableBaseSummary')
+  }
+  if (state.key === 'repeated_confusion') {
+    return t('modelCards.evolutionStateRepeatedConfusionSummary', {
+      count: state.reinforcementEventCount,
+      workspace,
+    })
+  }
+  return t('modelCards.evolutionStateFirstRecallQueuedSummary')
+}
+
+const formatRevisionFocusLabel = (focus: ModelCardRevisionFocus | null) => {
+  if (!focus) return ''
+  if (focus.key === 'revisit_comparison') return t('modelCards.revisionFocusRevisitComparison')
+  if (focus.key === 'clarify_boundary') return t('modelCards.revisionFocusClarifyBoundary')
+  if (focus.key === 'add_counter_example') return t('modelCards.revisionFocusAddCounterExample')
+  if (focus.key === 'revisit_example') return t('modelCards.revisionFocusRevisitExample')
+  return t('modelCards.revisionFocusReviseNotes')
+}
+
+const formatRevisionFocusSummary = (focus: ModelCardRevisionFocus | null, schedule: any) => {
+  if (!focus) return ''
+  const workspace = modelCardWorkspaceLabel(schedule)
+  if (focus.key === 'revisit_comparison') {
+    return t('modelCards.revisionFocusRevisitComparisonSummary', { workspace })
+  }
+  if (focus.key === 'clarify_boundary') {
+    return t('modelCards.revisionFocusClarifyBoundarySummary', { workspace })
+  }
+  if (focus.key === 'add_counter_example') {
+    return t('modelCards.revisionFocusAddCounterExampleSummary', { workspace })
+  }
+  if (focus.key === 'revisit_example') {
+    return t('modelCards.revisionFocusRevisitExampleSummary', { workspace })
+  }
+  return t('modelCards.revisionFocusReviseNotesSummary', { workspace })
 }
 
 const formatLearningPathKind = (kind: string | undefined | null) => {
@@ -371,6 +479,81 @@ onMounted(fetchCard)
   border-radius: 12px;
   border: 1px solid rgba(74, 222, 128, 0.24);
   background: rgba(74, 222, 128, 0.08);
+}
+
+.recall-status-danger {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(120, 24, 24, 0.14);
+}
+
+.recall-status-warning {
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(120, 53, 15, 0.14);
+}
+
+.recall-status-success {
+  border-color: rgba(74, 222, 128, 0.24);
+  background: rgba(20, 83, 45, 0.16);
+}
+
+.evolution-state-card {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.95rem;
+  padding-bottom: 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.revision-focus-card {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.95rem;
+  padding-bottom: 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.evolution-state-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.evolution-state-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+
+.evolution-state-pill.state-neutral {
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #bfdbfe;
+}
+
+.evolution-state-pill.state-danger {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+}
+
+.evolution-state-pill.state-warning {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+}
+
+.evolution-state-pill.state-success {
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #86efac;
+}
+
+.evolution-state-meta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
 }
 
 .recall-status-head {
