@@ -950,6 +950,7 @@ async def _register_problem_concept_candidates(
     problem: Problem,
     learning_mode: str,
     source_turn_id: Optional[str],
+    source_path_id: Optional[str],
     inferred_concepts: List[str],
     source: str,
     anchor_concept: str,
@@ -969,13 +970,18 @@ async def _register_problem_concept_candidates(
     existing_keys = {model_os_service.normalize_concept_key(item) for item in existing_concepts}
 
     existing_candidate_rows = await db.execute(
-        select(ProblemConceptCandidate.normalized_text).where(
+        select(ProblemConceptCandidate.normalized_text, ProblemTurn.path_id)
+        .outerjoin(ProblemTurn, ProblemTurn.id == ProblemConceptCandidate.source_turn_id)
+        .where(
             ProblemConceptCandidate.problem_id == str(problem.id),
             ProblemConceptCandidate.user_id == user_id,
-            ProblemConceptCandidate.status.in_(["pending", "accepted"]),
+            ProblemConceptCandidate.status.in_(["pending", "accepted", "merged"]),
         )
     )
-    existing_candidate_keys = {str(row[0] or "") for row in existing_candidate_rows.all()}
+    existing_candidate_contexts = {
+        (str(row[0] or ""), str(row[1]) if row[1] else None)
+        for row in existing_candidate_rows.all()
+    }
 
     accepted_concepts: List[str] = []
     pending_concepts: List[str] = []
@@ -995,7 +1001,30 @@ async def _register_problem_concept_candidates(
         normalized = model_os_service.normalize_concept_key(concept)
         if not normalized:
             continue
-        if normalized in existing_keys or normalized in existing_candidate_keys:
+        has_same_path_candidate = False
+        if source_path_id:
+            has_same_path_candidate = (normalized, source_path_id) in existing_candidate_contexts
+        else:
+            has_same_path_candidate = any(
+                candidate_key == normalized
+                for candidate_key, _candidate_path_id in existing_candidate_contexts
+            )
+
+        # Preserve one candidate artifact per path context so weak recall can route
+        # back into the branch where the concept was actually explored.
+        allow_path_context_duplicate = bool(
+            source_path_id
+            and not has_same_path_candidate
+            and (
+                normalized in existing_keys
+                or any(candidate_key == normalized for candidate_key, _candidate_path_id in existing_candidate_contexts)
+            )
+        )
+
+        if has_same_path_candidate or (
+            not allow_path_context_duplicate
+            and (normalized in existing_keys or any(candidate_key == normalized for candidate_key, _candidate_path_id in existing_candidate_contexts))
+        ):
             continue
 
         confidence = _estimate_concept_confidence(
@@ -1019,7 +1048,7 @@ async def _register_problem_concept_candidates(
                 evidence_snippet=evidence_snippet[:500] or None,
             )
         )
-        existing_candidate_keys.add(normalized)
+        existing_candidate_contexts.add((normalized, source_path_id or None))
 
         if status == "accepted":
             accepted_concepts.append(concept)
@@ -1833,6 +1862,7 @@ async def create_response(
     db_turn = ProblemTurn(
         user_id=str(current_user.id),
         problem_id=str(problem_id),
+        path_id=str(learning_path.id) if learning_path else None,
         learning_mode=learning_mode,
         step_index=current_step_index,
         user_text=response_data.user_response,
@@ -1849,6 +1879,7 @@ async def create_response(
         problem=problem,
         learning_mode=learning_mode,
         source_turn_id=str(db_turn.id),
+        source_path_id=str(learning_path.id) if learning_path else None,
         inferred_concepts=inferred_concepts + [step_concept],
         source="response",
         anchor_concept=step_concept,
@@ -3153,6 +3184,7 @@ Learner question: {payload.question}
     db_turn = ProblemTurn(
         user_id=str(current_user.id),
         problem_id=str(problem.id),
+        path_id=str(learning_path.id) if learning_path else None,
         learning_mode=learning_mode,
         step_index=step_index,
         user_text=payload.question,
@@ -3169,6 +3201,7 @@ Learner question: {payload.question}
         problem=problem,
         learning_mode=learning_mode,
         source_turn_id=str(db_turn.id),
+        source_path_id=str(learning_path.id) if learning_path else None,
         inferred_concepts=ask_concepts + [step_concept],
         source="ask",
         anchor_concept=step_concept,

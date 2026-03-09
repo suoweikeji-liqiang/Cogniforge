@@ -56,7 +56,7 @@
             </div>
             <router-link
               v-if="reviewSchedule.origin?.problem_id"
-              :to="`/problems/${reviewSchedule.origin.problem_id}`"
+              :to="buildWorkspaceRoute(reviewSchedule)"
               class="btn btn-secondary review-hub-link"
             >
               {{ t('reviews.openWorkspace') }}
@@ -66,6 +66,18 @@
             <span>{{ t('modelCards.lastRecallAt') }}: {{ formatDateTime(reviewSchedule.last_reviewed_at) }}</span>
             <span>{{ t('modelCards.nextRecallAt') }}: {{ formatDateTime(reviewSchedule.next_review_at) }}</span>
             <span>{{ t('modelCards.recallNextAction') }}: {{ formatRecommendedAction(reviewSchedule.recommended_action) }}</span>
+          </div>
+          <div
+            v-if="reviewSchedule.needs_reinforcement"
+            class="reinforcement-status"
+            data-testid="model-card-reinforcement-target"
+          >
+            <span class="recall-eyebrow">{{ t('modelCards.needsReinforcementBadge') }}</span>
+            <strong>{{ formatReinforcementResume(reviewSchedule) }}</strong>
+            <p>{{ formatRecommendedAction(reviewSchedule.recommended_action) }}</p>
+            <p v-if="reviewSchedule.reinforcement_target?.source_turn_preview" class="reinforcement-copy">
+              {{ reviewSchedule.reinforcement_target.source_turn_preview }}
+            </p>
           </div>
         </div>
         <div class="cog-test-action">
@@ -189,6 +201,63 @@ const formatRecallOutcome = (schedule: any) => {
     outcome: formatRecentOutcome(schedule?.recent_outcome),
     action: formatRecommendedAction(schedule?.recommended_action),
   })
+}
+
+const formatLearningPathKind = (kind: string | undefined | null) => {
+  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
+  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
+  if (kind === 'branch') return t('problemDetail.pathKindBranch')
+  return t('problemDetail.pathKindMain')
+}
+
+const formatReinforcementResume = (schedule: any) => {
+  const target = schedule?.reinforcement_target
+  const pathLabel = formatReinforcementPath(target)
+  const rawStepIndex = Number(target?.resume_step_index)
+  const hasStepIndex = Number.isFinite(rawStepIndex)
+  const stepNumber = hasStepIndex ? rawStepIndex + 1 : null
+  const stepConcept = String(target?.resume_step_concept || '').trim()
+
+  if (stepNumber !== null && stepConcept) {
+    const stepLabel = t('modelCards.reinforcementResumeStepConcept', {
+      step: stepNumber,
+      concept: stepConcept,
+    })
+    const workspaceLabel = target?.problem_title ? `${target.problem_title} · ${stepLabel}` : stepLabel
+    return pathLabel ? `${pathLabel} · ${workspaceLabel}` : workspaceLabel
+  }
+  if (target?.problem_title && stepConcept) {
+    const conceptLabel = t('modelCards.reinforcementResumeWorkspaceConcept', {
+      workspace: target.problem_title,
+      concept: stepConcept,
+    })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  if (stepConcept) {
+    const conceptLabel = t('modelCards.reinforcementResumeConcept', { concept: stepConcept })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  return pathLabel || t('modelCards.reinforcementResumeCurrentCard')
+}
+
+const formatReinforcementPath = (target: any) => {
+  const title = String(target?.resume_path_title || '').trim()
+  const kind = String(target?.resume_path_kind || '').trim()
+  const kindLabel = kind ? formatLearningPathKind(kind) : ''
+  if (kindLabel && title) return `${kindLabel} · ${title}`
+  if (title) return title
+  if (kindLabel) return kindLabel
+  return ''
+}
+
+const buildWorkspaceRoute = (entry: any) => {
+  const problemId = entry?.origin?.problem_id
+  if (!problemId) return '/reviews'
+  const resumePathId = entry?.reinforcement_target?.resume_path_id || entry?.origin?.source_path_id
+  return {
+    path: `/problems/${problemId}`,
+    query: resumePathId ? { resume_path: resumePathId } : {},
+  }
 }
 
 const fetchCard = async () => {
@@ -321,6 +390,19 @@ onMounted(fetchCard)
   margin-top: 0.85rem;
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+
+.reinforcement-status {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(248, 113, 113, 0.22);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.reinforcement-copy {
+  color: var(--text-muted);
+  white-space: pre-wrap;
 }
 
 .evolution-section { margin-top: 2rem; }

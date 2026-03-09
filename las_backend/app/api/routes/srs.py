@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.models.entities.user import ModelCard, ProblemConceptCandidate, ReviewSchedule, User
+from app.models.entities.user import ModelCard, ProblemConceptCandidate, ProblemTurn, ReviewSchedule, User
 from app.api.routes.auth import get_current_user
+from app.services.model_os_service import model_os_service
 from app.services.srs_service import srs_service
 
 router = APIRouter(prefix="/srs", tags=["Spaced Repetition"])
@@ -30,8 +31,41 @@ def _build_turn_preview(candidate: ProblemConceptCandidate) -> Optional[str]:
     return None
 
 
+def _extract_turn_step_concept(candidate: ProblemConceptCandidate) -> Optional[str]:
+    turn = getattr(candidate, "source_turn", None)
+    if turn is None:
+        return None
+
+    metadata = getattr(turn, "mode_metadata", None) or {}
+    step_concept = str(metadata.get("step_concept") or "").strip()
+    if step_concept:
+        return step_concept
+
+    problem = getattr(candidate, "problem", None)
+    fallback = str(getattr(problem, "title", "") or "").strip()
+    return fallback or None
+
+
+def _serialize_turn_path(candidate: ProblemConceptCandidate) -> dict:
+    turn = getattr(candidate, "source_turn", None)
+    path = getattr(turn, "learning_path", None) if turn is not None else None
+    if path is None:
+        return {
+            "source_path_id": None,
+            "source_path_kind": None,
+            "source_path_title": None,
+        }
+
+    return {
+        "source_path_id": str(path.id),
+        "source_path_kind": str(path.kind or "main"),
+        "source_path_title": path.title,
+    }
+
+
 def _serialize_review_origin(candidate: ProblemConceptCandidate) -> dict:
     problem = getattr(candidate, "problem", None)
+    path_context = _serialize_turn_path(candidate)
     return {
         "source_type": "problem_concept_candidate",
         "problem_id": candidate.problem_id,
@@ -39,6 +73,9 @@ def _serialize_review_origin(candidate: ProblemConceptCandidate) -> dict:
         "learning_mode": candidate.learning_mode,
         "source_turn_id": candidate.source_turn_id,
         "source_turn_preview": _build_turn_preview(candidate),
+        "source_step_index": getattr(getattr(candidate, "source_turn", None), "step_index", None),
+        "source_step_concept": _extract_turn_step_concept(candidate),
+        **path_context,
         "concept_candidate_id": candidate.id,
         "concept_text": candidate.concept_text,
         "candidate_status": candidate.status,
@@ -83,6 +120,75 @@ def _derive_recall_feedback(schedule: ReviewSchedule) -> dict:
     }
 
 
+def _build_reinforcement_target(
+    *,
+    schedule: ReviewSchedule,
+    card: ModelCard | None,
+    origin: dict | None,
+) -> Optional[dict]:
+    recall_feedback = _derive_recall_feedback(schedule)
+    if recall_feedback["recall_state"] not in {"fragile", "rebuilding"}:
+        return None
+
+    concept_text = None
+    if origin:
+        concept_text = origin.get("concept_text")
+    if not concept_text and card:
+        concept_text = card.title
+
+    return {
+        "status": "needs_reinforcement",
+        "priority": "high" if recall_feedback["recall_state"] == "fragile" else "medium",
+        "recall_state": recall_feedback["recall_state"],
+        "recommended_action": recall_feedback["recommended_action"],
+        "problem_id": origin.get("problem_id") if origin else None,
+        "problem_title": origin.get("problem_title") if origin else None,
+        "concept_text": concept_text,
+        "concept_candidate_id": origin.get("concept_candidate_id") if origin else None,
+        "source_turn_id": origin.get("source_turn_id") if origin else None,
+        "source_turn_preview": origin.get("source_turn_preview") if origin else None,
+        "resume_step_index": origin.get("source_step_index") if origin else None,
+        "resume_step_concept": origin.get("source_step_concept") if origin else None,
+        "resume_path_id": origin.get("source_path_id") if origin else None,
+        "resume_path_kind": origin.get("source_path_kind") if origin else None,
+        "resume_path_title": origin.get("source_path_title") if origin else None,
+    }
+
+
+async def _log_reinforcement_evolution(
+    *,
+    db: AsyncSession,
+    card: ModelCard | None,
+    current_user: User,
+    reinforcement_target: dict | None,
+) -> None:
+    if not card or not reinforcement_target:
+        return
+
+    concept_label = reinforcement_target.get("concept_text") or card.title
+    workspace_label = reinforcement_target.get("problem_title")
+    step_concept = reinforcement_target.get("resume_step_concept")
+    path_title = reinforcement_target.get("resume_path_title")
+    reason_parts = [f"Weak recall signaled reinforcement for '{concept_label}'."]
+    if workspace_label:
+        reason_parts.append(f"Return to workspace '{workspace_label}'.")
+    if path_title:
+        reason_parts.append(f"Resume in path '{path_title}'.")
+    if step_concept:
+        reason_parts.append(f"Resume near '{step_concept}'.")
+    reason_parts.append("Use the learning workspace to rebuild the concept before pushing further.")
+    reason = " ".join(reason_parts)
+
+    await model_os_service.log_evolution(
+        db=db,
+        model_id=str(card.id),
+        user_id=str(current_user.id),
+        action="recall_reinforcement",
+        reason=reason,
+        snapshot=model_os_service.build_model_snapshot(card),
+    )
+
+
 async def _load_cards(db: AsyncSession, model_card_ids: list[str]) -> dict[str, ModelCard]:
     if not model_card_ids:
         return {}
@@ -109,7 +215,7 @@ async def _load_review_origins(
         select(ProblemConceptCandidate)
         .options(
             selectinload(ProblemConceptCandidate.problem),
-            selectinload(ProblemConceptCandidate.source_turn),
+            selectinload(ProblemConceptCandidate.source_turn).selectinload(ProblemTurn.learning_path),
         )
         .where(
             ProblemConceptCandidate.user_id == user_id,
@@ -131,6 +237,11 @@ async def _load_review_origins(
 
 def _serialize_schedule(schedule: ReviewSchedule, card: ModelCard | None, origin: dict | None) -> dict:
     recall_feedback = _derive_recall_feedback(schedule)
+    reinforcement_target = _build_reinforcement_target(
+        schedule=schedule,
+        card=card,
+        origin=origin,
+    )
     return {
         "schedule_id": schedule.id,
         "model_card_id": schedule.model_card_id,
@@ -144,6 +255,8 @@ def _serialize_schedule(schedule: ReviewSchedule, card: ModelCard | None, origin
         "next_review_at": schedule.next_review_at.isoformat(),
         "last_reviewed_at": schedule.last_reviewed_at.isoformat() if schedule.last_reviewed_at else None,
         "origin": origin,
+        "needs_reinforcement": reinforcement_target is not None,
+        "reinforcement_target": reinforcement_target,
         **recall_feedback,
     }
 
@@ -213,7 +326,26 @@ async def submit_review(
     schedule = srs_service.process_review(schedule, quality)
     await db.commit()
     await db.refresh(schedule)
+    card = await db.get(ModelCard, schedule.model_card_id)
+    origins = await _load_review_origins(
+        db,
+        user_id=str(current_user.id),
+        model_card_ids=[str(schedule.model_card_id)],
+    )
+    origin = origins.get(str(schedule.model_card_id))
     recall_feedback = _derive_recall_feedback(schedule)
+    reinforcement_target = _build_reinforcement_target(
+        schedule=schedule,
+        card=card,
+        origin=origin,
+    )
+    if reinforcement_target is not None:
+        await _log_reinforcement_evolution(
+            db=db,
+            card=card,
+            current_user=current_user,
+            reinforcement_target=reinforcement_target,
+        )
     return {
         "schedule_id": schedule.id,
         "quality": quality,
@@ -221,6 +353,9 @@ async def submit_review(
         "interval_days": schedule.interval_days,
         "ease_factor": schedule.ease_factor,
         "repetitions": schedule.repetitions,
+        "origin": origin,
+        "needs_reinforcement": reinforcement_target is not None,
+        "reinforcement_target": reinforcement_target,
         **recall_feedback,
     }
 

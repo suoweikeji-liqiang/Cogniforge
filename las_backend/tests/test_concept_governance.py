@@ -10,6 +10,8 @@ from sqlalchemy import select
 
 from app.models.entities.user import (
     ConceptAlias,
+    EvolutionLog,
+    LearningPath,
     ModelCard,
     Problem,
     ProblemConceptCandidate,
@@ -129,12 +131,33 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
     db_session.add(problem)
     await db_session.flush()
 
+    branch_path = LearningPath(
+        problem_id=str(problem.id),
+        title="Threshold comparison branch",
+        kind="branch",
+        path_data=[
+            {
+                "step": 1,
+                "concept": "precision threshold",
+                "description": "Compare how the threshold changes precision and recall.",
+                "resources": [],
+            }
+        ],
+        current_step=0,
+        is_active=True,
+    )
+    db_session.add(branch_path)
+    await db_session.flush()
+
     turn = ProblemTurn(
         user_id=str(test_user.id),
         problem_id=str(problem.id),
+        path_id=str(branch_path.id),
         learning_mode="socratic",
+        step_index=1,
         user_text="I am still calibrating the threshold tradeoff.",
         assistant_text="Tighten your explanation of precision versus recall.",
+        mode_metadata={"step_concept": "precision threshold"},
     )
     db_session.add(turn)
     await db_session.flush()
@@ -199,9 +222,49 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
     assert schedules[0]["origin"]["problem_title"] == "Test Problem"
     assert schedules[0]["origin"]["concept_text"] == "precision threshold"
     assert schedules[0]["origin"]["source_turn_id"] == str(turn.id)
+    assert schedules[0]["origin"]["source_step_index"] == 1
+    assert schedules[0]["origin"]["source_step_concept"] == "precision threshold"
+    assert schedules[0]["origin"]["source_path_id"] == str(branch_path.id)
+    assert schedules[0]["origin"]["source_path_kind"] == "branch"
+    assert schedules[0]["origin"]["source_path_title"] == "Threshold comparison branch"
     assert "calibrating the threshold tradeoff" in schedules[0]["origin"]["source_turn_preview"]
     assert schedules[0]["recall_state"] == "scheduled"
     assert schedules[0]["recommended_action"] == "complete_first_recall"
+    assert schedules[0]["needs_reinforcement"] is False
+    assert schedules[0]["reinforcement_target"] is None
+
+    from datetime import datetime, timedelta
+
+    review_schedule.next_review_at = datetime.utcnow() - timedelta(minutes=5)
+    await db_session.commit()
+
+    review_response = await client.post(
+        f"/api/srs/review/{review_schedule.id}",
+        params={"quality": 0},
+        headers=auth_headers,
+    )
+    assert review_response.status_code == 200
+    review_data = review_response.json()
+    assert review_data["recall_state"] == "fragile"
+    assert review_data["recommended_action"] == "revisit_workspace"
+    assert review_data["needs_reinforcement"] is True
+    assert review_data["reinforcement_target"]["problem_id"] == str(problem.id)
+    assert review_data["reinforcement_target"]["concept_text"] == "precision threshold"
+    assert review_data["reinforcement_target"]["resume_step_index"] == 1
+    assert review_data["reinforcement_target"]["resume_step_concept"] == "precision threshold"
+    assert review_data["reinforcement_target"]["resume_path_id"] == str(branch_path.id)
+    assert review_data["reinforcement_target"]["resume_path_kind"] == "branch"
+    assert review_data["reinforcement_target"]["resume_path_title"] == "Threshold comparison branch"
+
+    evolution_result = await db_session.execute(
+        select(EvolutionLog).where(
+            EvolutionLog.model_id == promote_data["model_card"]["id"],
+            EvolutionLog.action_taken == "recall_reinforcement",
+        )
+    )
+    reinforcement_log = evolution_result.scalar_one_or_none()
+    assert reinforcement_log is not None
+    assert "precision threshold" in (reinforcement_log.reason_for_change or "")
 
 
 @pytest.mark.asyncio

@@ -101,6 +101,73 @@
               </div>
             </section>
 
+            <section
+              v-if="activeReinforcementTarget && activeReinforcementEntry"
+              class="card reinforcement-target-card"
+              data-testid="workspace-reinforcement-target"
+            >
+              <div class="reinforcement-head">
+                <div>
+                  <p class="workspace-eyebrow">{{ t('problemDetail.reinforcementTargetTitle') }}</p>
+                  <h2>{{ activeReinforcementTarget.concept_text || t('problemDetail.derivedConceptsTitle') }}</h2>
+                  <p class="section-subtitle">{{ formatReinforcementSummary(activeReinforcementEntry) }}</p>
+                </div>
+                <span class="reinforcement-priority" :class="`priority-${activeReinforcementTarget.priority || 'medium'}`">
+                  {{ t('problemDetail.needsReinforcementBadge') }}
+                </span>
+              </div>
+
+              <div class="reinforcement-grid">
+                <article class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.reinforcementWorkspaceLabel') }}</span>
+                  <strong>{{ activeReinforcementTarget.problem_title || problem.title }}</strong>
+                  <p>{{ formatLearningMode(activeReinforcementEntry.origin?.learning_mode || learningMode) }}</p>
+                </article>
+                <article v-if="hasReinforcementPath(activeReinforcementTarget)" class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.reinforcementPathLabel') }}</span>
+                  <strong>{{ formatReinforcementPath(activeReinforcementTarget) }}</strong>
+                  <p>{{ t('problemDetail.reinforcementPathHint') }}</p>
+                </article>
+                <article class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.reinforcementResumeLabel') }}</span>
+                  <strong>{{ formatReinforcementResume(activeReinforcementTarget) }}</strong>
+                  <p>{{ t('problemDetail.reinforcementResumeHint') }}</p>
+                </article>
+                <article class="workspace-summary-card">
+                  <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
+                  <strong>{{ formatRecommendedAction(activeReinforcementEntry.recommended_action) }}</strong>
+                  <p>{{ t('problemDetail.reinforcementActionHint') }}</p>
+                </article>
+              </div>
+
+              <p v-if="activeReinforcementTarget.source_turn_preview" class="reinforcement-preview">
+                <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                {{ activeReinforcementTarget.source_turn_preview }}
+              </p>
+
+              <div class="reinforcement-actions">
+                <button
+                  v-if="canSwitchToReinforcementPath"
+                  type="button"
+                  class="btn btn-primary"
+                  data-testid="switch-to-reinforcement-path"
+                  @click="switchToReinforcementPath"
+                >
+                  {{ t('problemDetail.switchToReinforcementPath') }}
+                </button>
+                <router-link
+                  v-if="activeReinforcementEntry.model_card_id"
+                  :to="`/model-cards/${activeReinforcementEntry.model_card_id}`"
+                  class="btn btn-secondary"
+                >
+                  {{ t('problemDetail.openModelCard') }}
+                </router-link>
+                <router-link to="/reviews" class="btn btn-secondary">
+                  {{ t('modelCards.openReviewHub') }}
+                </router-link>
+              </div>
+            </section>
+
             <section class="card current-step-section">
               <h2>{{ t('problemDetail.currentStepTitle') }}</h2>
               <div v-if="totalSteps" class="progress-overview">
@@ -591,6 +658,29 @@ const currentTurnReviewEntries = computed(() => {
     (schedule: any) => String(schedule.origin?.source_turn_id || '') === String(activeConceptTurnId.value)
   )
 })
+const reinforcementReviewEntries = computed(() => {
+  return [...problemReviewEntries.value]
+    .filter((schedule: any) => Boolean(schedule.needs_reinforcement))
+    .sort((left: any, right: any) => {
+      const leftDate = String(left.last_reviewed_at || left.next_review_at || '')
+      const rightDate = String(right.last_reviewed_at || right.next_review_at || '')
+      return rightDate.localeCompare(leftDate)
+    })
+})
+const activeReinforcementEntry = computed(() => {
+  return currentTurnReviewEntries.value.find((schedule: any) => Boolean(schedule.needs_reinforcement))
+    || reinforcementReviewEntries.value[0]
+    || null
+})
+const activeReinforcementTarget = computed(() => activeReinforcementEntry.value?.reinforcement_target || null)
+const reinforcementTargetPathId = computed(() => String(activeReinforcementTarget.value?.resume_path_id || ''))
+const canSwitchToReinforcementPath = computed(() => {
+  return Boolean(
+    reinforcementTargetPathId.value
+      && String(learningPath.value?.id || '') !== reinforcementTargetPathId.value
+      && allLearningPaths.value.some((path: any) => String(path.id) === reinforcementTargetPathId.value)
+  )
+})
 const latestProblemReviewEntry = computed(() => problemReviewEntries.value[0] || null)
 const latestReviewedProblemEntry = computed(() => {
   return [...problemReviewEntries.value]
@@ -676,6 +766,51 @@ const formatRecommendedAction = (action: string | undefined | null) => {
   if (action === 'keep_spacing') return t('problemDetail.reviewActionKeepSpacing')
   if (action === 'extend_or_compare') return t('problemDetail.reviewActionExtendOrCompare')
   return t('problemDetail.reviewActionCompleteFirstRecall')
+}
+
+const formatReinforcementResume = (target: any) => {
+  const rawStepIndex = Number(target?.resume_step_index)
+  const hasStepIndex = Number.isFinite(rawStepIndex)
+  const stepNumber = hasStepIndex ? rawStepIndex + 1 : null
+  const stepConcept = String(target?.resume_step_concept || '').trim()
+
+  if (stepNumber !== null && stepConcept) {
+    return t('problemDetail.reinforcementResumeStepConcept', {
+      step: stepNumber,
+      concept: stepConcept,
+    })
+  }
+  if (stepNumber !== null) {
+    return t('problemDetail.reinforcementResumeStepOnly', { step: stepNumber })
+  }
+  if (stepConcept) {
+    return t('problemDetail.reinforcementResumeConcept', { concept: stepConcept })
+  }
+  return t('problemDetail.reinforcementResumeCurrentWorkspace')
+}
+
+const hasReinforcementPath = (target: any) => {
+  return Boolean(target?.resume_path_id || target?.resume_path_kind || target?.resume_path_title)
+}
+
+const formatReinforcementPath = (target: any) => {
+  const title = String(target?.resume_path_title || '').trim()
+  const kind = String(target?.resume_path_kind || '').trim()
+  const kindLabel = kind ? formatLearningPathKind(kind) : ''
+  if (kindLabel && title) return `${kindLabel} · ${title}`
+  if (title) return title
+  if (kindLabel) return kindLabel
+  return t('problemDetail.reinforcementResumeCurrentWorkspace')
+}
+
+const formatReinforcementSummary = (entry: any) => {
+  const target = entry?.reinforcement_target || {}
+  const conceptLabel = target.concept_text || entry?.origin?.concept_text || entry?.title || t('problemDetail.derivedConceptsTitle')
+  return t('problemDetail.reinforcementSummary', {
+    concept: conceptLabel,
+    state: formatRecallState(entry?.recall_state),
+    action: formatRecommendedAction(entry?.recommended_action),
+  })
 }
 
 const formatLearningMode = (mode: string | undefined | null) => {
@@ -1248,6 +1383,11 @@ const handlePathCandidateDecision = ({ candidateId, action }: { candidateId: str
   decidePathCandidate(candidateId, action)
 }
 
+const switchToReinforcementPath = async () => {
+  if (!canSwitchToReinforcementPath.value) return
+  await activateLearningPathById(reinforcementTargetPathId.value)
+}
+
 const activateLearningPathById = async (pathId: string) => {
   if (updatingPath.value) return
 
@@ -1264,6 +1404,14 @@ const activateLearningPathById = async (pathId: string) => {
   } finally {
     updatingPath.value = false
   }
+}
+
+const applyResumePathFromQuery = async () => {
+  const resumePathId = String(route.query.resume_path || '')
+  if (!resumePathId) return
+  if (String(learningPath.value?.id || '') === resumePathId) return
+  if (!allLearningPaths.value.some((path: any) => String(path.id) === resumePathId)) return
+  await activateLearningPathById(resumePathId)
 }
 
 const returnToParentPath = async () => {
@@ -1284,7 +1432,10 @@ const returnToParentPath = async () => {
   }
 }
 
-onMounted(fetchProblem)
+onMounted(async () => {
+  await fetchProblem()
+  await applyResumePathFromQuery()
+})
 </script>
 
 <style scoped>
@@ -1431,6 +1582,57 @@ onMounted(fetchProblem)
   flex-wrap: wrap;
   padding-top: 0.9rem;
   border-top: 1px solid var(--border);
+}
+
+.reinforcement-target-card {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(120, 24, 24, 0.16);
+}
+
+.reinforcement-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.reinforcement-priority {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.16);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.reinforcement-priority.priority-medium {
+  border-color: rgba(250, 204, 21, 0.28);
+  color: #fde68a;
+  background: rgba(250, 204, 21, 0.12);
+}
+
+.reinforcement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.reinforcement-preview {
+  margin-top: 0.85rem;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.reinforcement-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
 }
 
 .workspace-mode-copy {

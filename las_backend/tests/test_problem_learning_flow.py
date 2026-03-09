@@ -727,6 +727,140 @@ async def test_save_as_branch_creates_navigable_learning_path_and_return_flow(cl
 
 
 @pytest.mark.asyncio
+async def test_branch_repeated_concept_keeps_branch_specific_candidate_for_reinforcement(
+    client, db_session, monkeypatch
+):
+    from app.models.entities.user import ProblemConceptCandidate, ProblemTurn
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Branch reinforcement precision")
+
+    async def fake_answer(*args, **kwargs):
+        return "Decision threshold changes the balance between precision and recall."
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Decision threshold",
+            "False negatives",
+            "Precision-recall tradeoff",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    first_ask = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What is the difference between decision threshold and precision-recall tradeoff?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert first_ask.status_code == 200
+    first_body = first_ask.json()
+    branch_candidate = first_body["derived_path_candidates"][0]
+
+    decide_response = await client.post(
+        f"/api/problems/{problem['id']}/path-candidates/{branch_candidate['id']}/decide",
+        json={"action": "save_as_side_branch"},
+        headers=headers,
+    )
+    assert decide_response.status_code == 200
+    active_path_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert active_path_response.status_code == 200
+    branch_path = active_path_response.json()
+    assert branch_path["id"]
+
+    second_ask = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "How should I compare precision and recall when the threshold moves?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert second_ask.status_code == 200
+    second_body = second_ask.json()
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/concept-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    threshold_candidates = [
+        item for item in candidates_response.json()
+        if item["concept_text"] == "Decision threshold"
+    ]
+    assert len(threshold_candidates) >= 2
+
+    latest_branch_candidate = next(
+        item for item in threshold_candidates if item["source_turn_id"] == second_body["turn_id"]
+    )
+    first_main_candidate = next(
+        item for item in threshold_candidates if item["source_turn_id"] == first_body["turn_id"]
+    )
+    assert latest_branch_candidate["source_turn_id"] != first_main_candidate["source_turn_id"]
+
+    turn_rows = await db_session.execute(
+        select(ProblemTurn).where(
+            ProblemTurn.id.in_([first_body["turn_id"], second_body["turn_id"]])
+        )
+    )
+    turns_by_id = {str(turn.id): turn for turn in turn_rows.scalars().all()}
+    assert turns_by_id[first_body["turn_id"]].path_id != turns_by_id[second_body["turn_id"]].path_id
+    assert turns_by_id[second_body["turn_id"]].path_id == branch_path["id"]
+
+    accept_response = await client.post(
+        f"/api/problems/{problem['id']}/concept-candidates/{latest_branch_candidate['id']}/accept",
+        headers=headers,
+    )
+    assert accept_response.status_code == 200
+
+    schedule_response = await client.post(
+        f"/api/problems/{problem['id']}/concept-candidates/{latest_branch_candidate['id']}/schedule-review",
+        headers=headers,
+    )
+    assert schedule_response.status_code == 200
+    model_card_id = schedule_response.json()["model_card"]["id"]
+
+    schedules_response = await client.get("/api/srs/schedules", headers=headers)
+    assert schedules_response.status_code == 200
+    schedule = next(
+        item for item in schedules_response.json()
+        if item["model_card_id"] == model_card_id
+    )
+    assert schedule["origin"]["source_turn_id"] == second_body["turn_id"]
+    assert schedule["origin"]["source_path_id"] == branch_path["id"]
+
+    review_response = await client.post(
+        f"/api/srs/review/{schedule['schedule_id']}?quality=0",
+        headers=headers,
+    )
+    assert review_response.status_code == 200
+    review_body = review_response.json()
+    assert review_body["reinforcement_target"]["resume_path_id"] == branch_path["id"]
+
+    refreshed_candidates = await db_session.execute(
+        select(ProblemConceptCandidate).where(
+            ProblemConceptCandidate.id.in_([
+                latest_branch_candidate["id"],
+                first_main_candidate["id"],
+            ])
+        )
+    )
+    stored_candidates = {str(candidate.id): candidate for candidate in refreshed_candidates.scalars().all()}
+    assert stored_candidates[latest_branch_candidate["id"]].linked_model_card_id is not None
+    assert stored_candidates[first_main_candidate["id"]].source_turn_id != stored_candidates[latest_branch_candidate["id"]].source_turn_id
+
+
+@pytest.mark.asyncio
 async def test_insert_before_current_main_updates_main_path(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 

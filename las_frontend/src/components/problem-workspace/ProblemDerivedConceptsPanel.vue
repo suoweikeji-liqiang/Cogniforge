@@ -17,7 +17,13 @@
             v-for="candidate in group.items"
             :key="candidate.id"
             class="candidate-item"
-            :class="[`candidate-${candidate.status}`, { 'candidate-current': isCurrentTurnCandidate(candidate) }]"
+            :class="[
+              `candidate-${candidate.status}`,
+              {
+                'candidate-current': isCurrentTurnCandidate(candidate),
+                'candidate-needs-reinforcement': needsReinforcement(candidate),
+              },
+            ]"
             data-testid="derived-concept-card"
           >
             <div class="candidate-head">
@@ -127,6 +133,17 @@
                 <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
                 {{ formatRecallConsequence(candidate) }}
               </p>
+              <div
+                v-if="needsReinforcement(candidate)"
+                class="candidate-reinforcement-panel"
+                data-testid="derived-concept-needs-reinforcement"
+              >
+                <span class="handoff-badge handoff-badge-alert">{{ t('problemDetail.needsReinforcementBadge') }}</span>
+                <p class="candidate-meta candidate-review-meta">
+                  <strong>{{ t('problemDetail.reinforcementResumeLabel') }}:</strong>
+                  {{ formatReinforcementResume(candidate) }}
+                </p>
+              </div>
               <div class="candidate-actions">
                 <button
                   v-if="!isLinkedToModelCard(candidate)"
@@ -296,6 +313,8 @@ const getReviewSchedule = (candidate: any) => {
   return props.scheduledReviewsByModelCardId?.[String(candidate.linked_model_card_id)] || null
 }
 
+const needsReinforcement = (candidate: any) => Boolean(getReviewSchedule(candidate)?.needs_reinforcement)
+
 const formatReviewSchedule = (candidate: any) => {
   const schedule = getReviewSchedule(candidate)
   if (!schedule) return t('problemDetail.reviewScheduled')
@@ -331,6 +350,49 @@ const formatRecallConsequence = (candidate: any) => {
     state: formatRecallState(schedule.recall_state),
     action: formatRecommendedAction(schedule.recommended_action),
   })
+}
+
+const formatReinforcementResume = (candidate: any) => {
+  const target = getReviewSchedule(candidate)?.reinforcement_target
+  const pathLabel = formatReinforcementPath(target)
+  const rawStepIndex = Number(target?.resume_step_index)
+  const hasStepIndex = Number.isFinite(rawStepIndex)
+  const stepNumber = hasStepIndex ? rawStepIndex + 1 : null
+  const stepConcept = String(target?.resume_step_concept || '').trim()
+
+  if (stepNumber !== null && stepConcept) {
+    const stepLabel = t('problemDetail.reinforcementResumeStepConcept', {
+      step: stepNumber,
+      concept: stepConcept,
+    })
+    return pathLabel ? `${pathLabel} · ${stepLabel}` : stepLabel
+  }
+  if (stepNumber !== null) {
+    const stepLabel = t('problemDetail.reinforcementResumeStepOnly', { step: stepNumber })
+    return pathLabel ? `${pathLabel} · ${stepLabel}` : stepLabel
+  }
+  if (stepConcept) {
+    const conceptLabel = t('problemDetail.reinforcementResumeConcept', { concept: stepConcept })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  return pathLabel || t('problemDetail.reinforcementResumeCurrentWorkspace')
+}
+
+const formatReinforcementPath = (target: any) => {
+  const title = String(target?.resume_path_title || '').trim()
+  const kind = String(target?.resume_path_kind || '').trim()
+  const kindLabel = kind ? formatLearningPathKind(kind) : ''
+  if (kindLabel && title) return `${kindLabel} · ${title}`
+  if (title) return title
+  if (kindLabel) return kindLabel
+  return ''
+}
+
+const formatLearningPathKind = (kind: string | undefined | null) => {
+  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
+  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
+  if (kind === 'branch') return t('problemDetail.pathKindBranch')
+  return t('problemDetail.pathKindMain')
 }
 
 const emitMerge = (candidateId: string) => {
@@ -449,6 +511,18 @@ const emitMerge = (candidateId: string) => {
   font-weight: 600;
 }
 
+.handoff-badge-alert {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fecaca;
+}
+
+.candidate-reinforcement-panel {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
 .candidate-pending,
 .candidate-postponed {
   border-color: rgba(250, 204, 21, 0.35);
@@ -457,6 +531,11 @@ const emitMerge = (candidateId: string) => {
 .candidate-accepted,
 .candidate-merged {
   border-color: rgba(34, 197, 94, 0.35);
+}
+
+.candidate-needs-reinforcement {
+  border-color: rgba(248, 113, 113, 0.36);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.14);
 }
 
 .candidate-rejected,

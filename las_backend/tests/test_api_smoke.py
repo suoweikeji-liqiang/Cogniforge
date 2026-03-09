@@ -380,6 +380,8 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     assert schedules[0]["recall_state"] == "scheduled"
     assert schedules[0]["recent_outcome"] == "pending"
     assert schedules[0]["recommended_action"] == "complete_first_recall"
+    assert schedules[0]["needs_reinforcement"] is False
+    assert schedules[0]["reinforcement_target"] is None
 
     from datetime import datetime, timedelta
 
@@ -413,6 +415,9 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     assert reviewed["recall_state"] == "rebuilding"
     assert reviewed["recent_outcome"] == "held_with_effort"
     assert reviewed["recommended_action"] == "reinforce_soon"
+    assert reviewed["needs_reinforcement"] is True
+    assert reviewed["reinforcement_target"]["status"] == "needs_reinforcement"
+    assert reviewed["reinforcement_target"]["concept_text"] == "Retrieval Practice"
 
 
 @pytest.mark.asyncio
