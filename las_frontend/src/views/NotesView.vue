@@ -1,7 +1,13 @@
 <template>
   <div class="notes">
     <div class="header">
-      <h1>{{ t('notes.title') }}</h1>
+      <div>
+        <h1>{{ t('notes.title') }}</h1>
+        <p class="subtitle">{{ t('notes.archiveSubtitle') }}</p>
+      </div>
+      <router-link to="/problems" class="btn-primary notes-link">
+        {{ t('notes.captureInProblem') }}
+      </router-link>
     </div>
 
     <!-- Input Area -->
@@ -26,6 +32,7 @@
       <div v-for="note in notes" :key="note.id" class="note-card card">
         <div class="note-meta">
           <span class="source-badge">{{ note.source }}</span>
+          <span class="context-badge">{{ note.problem_id ? t('notes.problemNote') : t('notes.generalNote') }}</span>
           <span class="note-date">{{ new Date(note.created_at).toLocaleString() }}</span>
           <button @click="remove(note.id)" class="btn-delete">{{ t('common.delete') }}</button>
         </div>
@@ -114,7 +121,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.header { margin-bottom: 1.5rem; }
+.header { margin-bottom: 1.5rem; display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.subtitle { color: var(--text-muted); margin-top: 0.35rem; max-width: 56ch; }
+.notes-link { text-decoration: none; display: inline-flex; align-items: center; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
 .note-input { margin-bottom: 1.5rem; }
 .input { background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; color: var(--text); width: 100%; box-sizing: border-box; resize: vertical; }
@@ -130,6 +139,7 @@ onUnmounted(() => {
 .note-card { }
 .note-meta { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
 .source-badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 4px; background: var(--border); color: var(--text-muted); }
+.context-badge { font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 999px; background: rgba(96, 165, 250, 0.12); color: #bfdbfe; }
 .note-date { font-size: 0.8rem; color: var(--text-muted); }
 .btn-delete { margin-left: auto; font-size: 0.75rem; color: #ef4444; background: none; border: none; cursor: pointer; }
 .note-content { color: var(--text); line-height: 1.6; white-space: pre-wrap; }

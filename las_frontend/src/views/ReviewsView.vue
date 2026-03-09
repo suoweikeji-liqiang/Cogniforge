@@ -1,39 +1,132 @@
 <template>
-  <div class="reviews-page">
-    <div class="page-header">
-      <h1>{{ t('reviews.title') }}</h1>
-      <div class="header-actions">
+  <div class="reviews-page" data-testid="review-lifecycle-page">
+    <section class="hero-shell">
+      <div class="hero-copy">
+        <p class="hero-kicker">{{ t('reviews.focusTitle') }}</p>
+        <h1>{{ t('reviews.title') }}</h1>
+        <p class="hero-subtitle">{{ t('reviews.subtitle') }}</p>
+      </div>
+
+      <router-link
+        :to="focusCard.to"
+        class="focus-card"
+        :class="focusCard.tone"
+        data-testid="reviews-focus-card"
+      >
+        <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
+        <h2>{{ focusCard.title }}</h2>
+        <p>{{ focusCard.description }}</p>
+        <span class="focus-cta">{{ focusCard.cta }}</span>
+      </router-link>
+
+      <div class="metric-grid">
+        <div class="metric-card">
+          <span>{{ t('reviews.queueCount') }}</span>
+          <strong>{{ dueReviewCount }}</strong>
+        </div>
+        <div class="metric-card">
+          <span>{{ t('reviews.scheduledCount') }}</span>
+          <strong>{{ scheduledCount }}</strong>
+        </div>
+        <div class="metric-card">
+          <span>{{ t('reviews.savedCount') }}</span>
+          <strong>{{ savedReviewCount }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="reviews-grid">
+      <section class="card-panel" data-testid="review-queue-panel">
+        <p class="section-meta">{{ t('reviews.queueMeta') }}</p>
+        <h2>{{ t('reviews.queueTitle') }}</h2>
+        <div v-if="dueCards.length" class="queue-list">
+          <router-link
+            v-for="card in dueCards.slice(0, 4)"
+            :key="card.schedule_id"
+            to="/srs-review"
+            class="queue-item"
+          >
+            <div>
+              <strong>{{ card.title }}</strong>
+              <p>{{ card.next_review_at ? formatDateTime(card.next_review_at) : t('reviews.reviewQueueHint') }}</p>
+            </div>
+            <span class="review-badge">{{ t('reviews.startSrs') }}</span>
+          </router-link>
+        </div>
+        <div v-else class="empty-block">
+          <p class="empty">{{ t('reviews.noDueReviews') }}</p>
+          <router-link to="/model-cards" class="inline-link">
+            {{ t('reviews.openModelCards') }}
+          </router-link>
+        </div>
+      </section>
+
+      <section class="card-panel" data-testid="review-model-cards-panel">
+        <p class="section-meta">{{ t('reviews.lifecycleMeta') }}</p>
+        <h2>{{ t('reviews.lifecycleTitle') }}</h2>
+        <div v-if="recentModelCards.length" class="card-list">
+          <router-link
+            v-for="card in recentModelCards"
+            :key="card.id"
+            :to="`/model-cards/${card.id}`"
+            class="card-item"
+          >
+            <div>
+              <strong>{{ card.title }}</strong>
+              <p>{{ card.user_notes || t('reviews.modelLifecycleHint') }}</p>
+            </div>
+            <span class="status" :class="{ scheduled: isCardScheduled(card.id) }">
+              {{ isCardScheduled(card.id) ? t('modelCards.scheduled') : t('reviews.needsReviewPlan') }}
+            </span>
+          </router-link>
+        </div>
+        <div v-else class="empty-block">
+          <p class="empty">{{ t('modelCards.createFirst') }}</p>
+          <router-link to="/model-cards" class="inline-link">
+            {{ t('reviews.openModelCards') }}
+          </router-link>
+        </div>
+      </section>
+    </section>
+
+    <section class="card-panel" data-testid="review-archive-panel">
+      <div class="section-heading">
+        <div>
+          <p class="section-meta">{{ t('reviews.archiveMeta') }}</p>
+          <h2>{{ t('reviews.archiveTitle') }}</h2>
+        </div>
         <button class="btn btn-secondary" @click="showCreateModal = true">
           {{ t('reviews.newReview') }}
         </button>
       </div>
-    </div>
-    
-    <div v-if="reviews.length" class="reviews-list">
-      <div v-for="review in reviews" :key="review.id" class="review-card card">
-        <div class="review-header">
-          <h3>{{ review.review_type }}</h3>
-          <span class="period">{{ review.period }}</span>
-        </div>
-        <div class="review-content">
-          <p v-if="review.content?.summary"><strong>{{ t('reviews.content') }}:</strong> {{ review.content.summary }}</p>
-          <p v-if="review.content?.insights"><strong>{{ t('reviews.insights') }}:</strong> {{ review.content.insights }}</p>
-          <p v-if="review.content?.next_steps"><strong>{{ t('reviews.nextSteps') }}:</strong> {{ review.content.next_steps }}</p>
-          <p v-if="review.content?.misconceptions?.length"><strong>{{ t('reviews.misconceptions') }}:</strong> {{ review.content.misconceptions.join(' / ') }}</p>
-        </div>
-        <div class="review-actions-row">
-          <button class="btn btn-secondary" @click="exportReview(review)">
-            {{ t('common.download') }}
-          </button>
-        </div>
-        <div class="review-date">
-          {{ new Date(review.created_at).toLocaleDateString() }}
+
+      <div v-if="reviews.length" class="review-archive">
+        <div v-for="review in reviews" :key="review.id" class="review-card">
+          <div class="review-header">
+            <div>
+              <h3>{{ review.review_type }}</h3>
+              <p class="review-date">{{ formatDate(review.created_at) }}</p>
+            </div>
+            <span class="period">{{ review.period }}</span>
+          </div>
+          <div class="review-content">
+            <p v-if="review.content?.summary"><strong>{{ t('reviews.content') }}:</strong> {{ review.content.summary }}</p>
+            <p v-if="review.content?.insights"><strong>{{ t('reviews.insights') }}:</strong> {{ review.content.insights }}</p>
+            <p v-if="review.content?.next_steps"><strong>{{ t('reviews.nextSteps') }}:</strong> {{ review.content.next_steps }}</p>
+            <p v-if="review.content?.misconceptions?.length">
+              <strong>{{ t('reviews.misconceptions') }}:</strong> {{ review.content.misconceptions.join(' / ') }}
+            </p>
+          </div>
+          <div class="review-actions-row">
+            <button class="btn btn-secondary" @click="exportReview(review)">
+              {{ t('common.download') }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-    
-    <p v-else class="empty">{{ t('reviews.noReviews') }}</p>
-    
+      <p v-else class="empty">{{ t('reviews.noReviews') }}</p>
+    </section>
+
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
         <h2>{{ t('reviews.newReview') }}</h2>
@@ -90,13 +183,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import api from '@/api'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+
+import api from '@/api'
 
 const { t } = useI18n()
 
 const reviews = ref<any[]>([])
+const dueCards = ref<any[]>([])
+const schedules = ref<any[]>([])
+const modelCards = ref<any[]>([])
 const showCreateModal = ref(false)
 const creating = ref(false)
 const generating = ref(false)
@@ -111,19 +208,83 @@ const newReview = ref({
   misconceptions: '',
 })
 
-const fetchReviews = async () => {
+const recentModelCards = computed(() => modelCards.value.slice(0, 4))
+const dueReviewCount = computed(() => dueCards.value.length)
+const scheduledCount = computed(() => schedules.value.length)
+const savedReviewCount = computed(() => reviews.value.length)
+const scheduledCardIds = computed(() => new Set(schedules.value.map((schedule: any) => schedule.model_card_id)))
+
+const focusCard = computed(() => {
+  if (dueCards.value.length > 0) {
+    return {
+      eyebrow: t('reviews.focusTitle'),
+      title: t('reviews.focusReady', { count: dueCards.value.length }),
+      description: t('reviews.reviewQueueHint'),
+      cta: t('reviews.startSrs'),
+      to: '/srs-review',
+      tone: 'tone-alert',
+    }
+  }
+
+  if (recentModelCards.value.length > 0) {
+    return {
+      eyebrow: t('reviews.focusTitle'),
+      title: t('reviews.focusModelCards'),
+      description: recentModelCards.value[0].title,
+      cta: t('reviews.openModelCards'),
+      to: `/model-cards/${recentModelCards.value[0].id}`,
+      tone: 'tone-primary',
+    }
+  }
+
+  return {
+    eyebrow: t('reviews.focusTitle'),
+    title: t('reviews.focusEmpty'),
+    description: t('reviews.subtitle'),
+    cta: t('reviews.openModelCards'),
+    to: '/model-cards',
+    tone: 'tone-primary',
+  }
+})
+
+const formatDate = (dateValue: string) => new Date(dateValue).toLocaleDateString()
+const formatDateTime = (dateValue: string) => new Date(dateValue).toLocaleString()
+
+const isCardScheduled = (cardId: string) => scheduledCardIds.value.has(cardId)
+
+const fetchReviewLifecycle = async () => {
   try {
-    const response = await api.get('/reviews/')
-    reviews.value = response.data
-  } catch (e) {
-    console.error('Failed to fetch reviews:', e)
+    const [reviewsRes, dueRes, schedulesRes, modelCardsRes] = await Promise.all([
+      api.get('/reviews/'),
+      api.get('/srs/due').catch(() => ({ data: [] })),
+      api.get('/srs/schedules').catch(() => ({ data: [] })),
+      api.get('/model-cards/').catch(() => ({ data: [] })),
+    ])
+
+    reviews.value = reviewsRes.data || []
+    dueCards.value = dueRes.data || []
+    schedules.value = schedulesRes.data || []
+    modelCards.value = modelCardsRes.data || []
+  } catch (fetchError) {
+    console.error('Failed to fetch review lifecycle data:', fetchError)
+  }
+}
+
+const resetForm = () => {
+  newReview.value = {
+    review_type: 'daily',
+    period: '',
+    summary: '',
+    insights: '',
+    next_steps: '',
+    misconceptions: '',
   }
 }
 
 const createReview = async () => {
   error.value = ''
   creating.value = true
-  
+
   try {
     await api.post('/reviews/', {
       review_type: newReview.value.review_type,
@@ -137,19 +298,12 @@ const createReview = async () => {
           : [],
       },
     })
-    
+
     showCreateModal.value = false
-    newReview.value = {
-      review_type: 'daily',
-      period: '',
-      summary: '',
-      insights: '',
-      next_steps: '',
-      misconceptions: '',
-    }
-    await fetchReviews()
-  } catch (e: any) {
-    error.value = e.response?.data?.detail || 'Failed to create review'
+    resetForm()
+    await fetchReviewLifecycle()
+  } catch (createError: any) {
+    error.value = createError.response?.data?.detail || 'Failed to create review'
   } finally {
     creating.value = false
   }
@@ -160,18 +314,16 @@ const exportReview = async (review: any) => {
     const response = await api.get(`/reviews/${review.id}/export`, {
       responseType: 'blob',
     })
-    const url = URL.createObjectURL(
-      new Blob([response.data], { type: 'text/markdown' })
-    )
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${review.review_type}-review-${review.period.replace(/\s+/g, '-')}.md`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    const url = URL.createObjectURL(new Blob([response.data], { type: 'text/markdown' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${review.review_type}-review-${review.period.replace(/\s+/g, '-')}.md`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
     URL.revokeObjectURL(url)
-  } catch (e) {
-    console.error('Failed to export review:', e)
+  } catch (exportError) {
+    console.error('Failed to export review:', exportError)
   }
 }
 
@@ -189,61 +341,210 @@ const generateReview = async () => {
     newReview.value.insights = content.insights || ''
     newReview.value.next_steps = content.next_steps || ''
     newReview.value.misconceptions = (content.misconceptions || []).join('\n')
-  } catch (e: any) {
-    error.value = e.response?.data?.detail || 'Failed to generate review'
+  } catch (generateError: any) {
+    error.value = generateError.response?.data?.detail || 'Failed to generate review'
   } finally {
     generating.value = false
   }
 }
 
 onMounted(() => {
-  fetchReviews()
+  fetchReviewLifecycle()
 })
 </script>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
+.reviews-page {
+  display: grid;
+  gap: 1.5rem;
 }
 
-.header-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.reviews-list {
-  display: flex;
-  flex-direction: column;
+.hero-shell {
+  display: grid;
   gap: 1rem;
 }
 
+.hero-copy h1 {
+  font-size: clamp(2rem, 3vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.hero-kicker,
+.section-meta {
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hero-subtitle {
+  max-width: 58ch;
+  margin-top: 0.65rem;
+  color: var(--text-muted);
+}
+
+.focus-card,
+.card-panel,
+.metric-card,
 .review-card {
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(18, 18, 34, 0.96);
+}
+
+.focus-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  color: var(--text);
+  text-decoration: none;
+  background: linear-gradient(180deg, rgba(26, 26, 46, 0.94), rgba(15, 15, 35, 0.98));
+}
+
+.focus-eyebrow,
+.review-badge,
+.status,
+.period {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+}
+
+.focus-eyebrow {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.focus-cta {
+  color: #bbf7d0;
+  font-weight: 700;
+}
+
+.tone-alert {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.tone-primary {
+  border-color: rgba(74, 222, 128, 0.25);
+}
+
+.metric-grid,
+.reviews-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-card {
+  padding: 1rem 1.1rem;
+}
+
+.metric-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.8rem;
+}
+
+.reviews-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card-panel {
+  padding: 1.4rem;
+}
+
+.card-panel h2 {
+  margin-top: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.section-heading {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.queue-list,
+.card-list,
+.review-archive {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.queue-item,
+.card-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.95rem;
+  border-radius: 12px;
+  background: var(--bg-dark);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.queue-item p,
+.card-item p,
+.review-content p,
+.empty {
+  color: var(--text-muted);
+}
+
+.review-badge {
+  background: rgba(74, 222, 128, 0.14);
+  color: #bbf7d0;
+}
+
+.status {
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+}
+
+.status.scheduled {
+  background: rgba(74, 222, 128, 0.14);
+  color: #bbf7d0;
+}
+
+.period {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.review-card {
+  padding: 1rem;
 }
 
 .review-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
 }
 
 .review-header h3 {
   text-transform: capitalize;
 }
 
-.period {
-  font-size: 0.875rem;
+.review-date {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
-}
-
-.review-content p {
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
 }
 
 .review-content strong {
@@ -254,46 +555,69 @@ onMounted(() => {
   margin-top: 1rem;
 }
 
-.review-date {
-  margin-top: 1rem;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-align: right;
+.empty-block {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.inline-link {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(10, 10, 18, 0.7);
   display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 100;
+  justify-content: center;
+  padding: 1rem;
 }
 
 .modal {
+  width: min(640px, 100%);
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 2rem;
-  width: 100%;
-  max-width: 500px;
+  border-radius: 18px;
+  padding: 1.5rem;
 }
 
-.modal h2 {
-  margin-bottom: 1.5rem;
+.form-group {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
 }
 
 .modal-actions {
   display: flex;
-  gap: 1rem;
   justify-content: flex-end;
-  margin-top: 1.5rem;
+  gap: 0.75rem;
 }
 
-.empty {
-  text-align: center;
-  padding: 3rem;
-  color: var(--text-muted);
+.error {
+  margin-bottom: 1rem;
+  color: #fca5a5;
+}
+
+@media (max-width: 900px) {
+  .metric-grid,
+  .reviews-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading,
+  .review-header,
+  .queue-item,
+  .card-item {
+    display: grid;
+  }
 }
 </style>

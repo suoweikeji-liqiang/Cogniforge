@@ -216,6 +216,7 @@ class ProblemConceptCandidate(Base):
     confidence = Column(Float, nullable=False, default=0.0)
     status = Column(String(20), nullable=False, default="pending", index=True)
     merged_into_concept = Column(String(120), nullable=True)
+    linked_model_card_id = Column(String(36), ForeignKey("model_cards.id"), nullable=True, index=True)
     evidence_snippet = Column(Text, nullable=True)
     reviewer_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -225,6 +226,7 @@ class ProblemConceptCandidate(Base):
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     problem = relationship("Problem", back_populates="concept_candidates")
     source_turn = relationship("ProblemTurn")
+    linked_model_card = relationship("ModelCard")
 
 
 class ProblemPathCandidate(Base):
@@ -416,6 +418,8 @@ class ResourceLink(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=True, index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
     url = Column(Text, nullable=False)
     title = Column(String(500))
     link_type = Column(String(20), default="webpage")  # webpage, video
@@ -426,6 +430,8 @@ class ResourceLink(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", backref="resource_links")
+    problem = relationship("Problem")
+    source_turn = relationship("ProblemTurn")
 
 
 class QuickNote(Base):
@@ -433,12 +439,16 @@ class QuickNote(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    problem_id = Column(String(36), ForeignKey("problems.id"), nullable=True, index=True)
+    source_turn_id = Column(String(36), ForeignKey("problem_turns.id"), nullable=True, index=True)
     content = Column(Text, nullable=False)
     source = Column(String(20), default="text")  # text, voice
     tags = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", backref="quick_notes")
+    problem = relationship("Problem")
+    source_turn = relationship("ProblemTurn")
 
 
 class PasswordResetToken(Base):

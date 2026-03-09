@@ -1,8 +1,16 @@
 <template>
   <div class="resources">
     <div class="header">
-      <h1>{{ t('resources.title') }}</h1>
-      <button @click="showAdd = true" class="btn-primary">{{ t('common.add') }}</button>
+      <div>
+        <h1>{{ t('resources.title') }}</h1>
+        <p class="subtitle">{{ t('resources.archiveSubtitle') }}</p>
+      </div>
+      <div class="header-actions">
+        <router-link to="/problems" class="btn-primary resources-link">
+          {{ t('resources.captureInProblem') }}
+        </router-link>
+        <button @click="showAdd = true" class="btn-primary">{{ t('common.add') }}</button>
+      </div>
     </div>
 
     <input
@@ -38,6 +46,7 @@
       <div v-for="r in filtered" :key="r.id" class="resource-card card">
         <div class="resource-header">
           <span class="type-badge" :class="r.link_type">{{ r.link_type }}</span>
+          <span class="context-badge">{{ r.problem_id ? t('resources.problemResource') : t('resources.generalResource') }}</span>
           <select :value="r.status" @change="updateStatus(r, ($event.target as HTMLSelectElement).value)" class="status-select">
             <option value="unread">{{ t('resources.unread') }}</option>
             <option value="reading">{{ t('resources.reading') }}</option>
@@ -131,7 +140,10 @@ watch(searchQuery, () => {
 </script>
 
 <style scoped>
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
+.header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.resources-link { text-decoration: none; display: inline-flex; align-items: center; }
+.subtitle { color: var(--text-muted); margin-top: 0.35rem; max-width: 56ch; }
 .search-input { margin-bottom: 1rem; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
 .add-form { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
@@ -145,6 +157,7 @@ watch(searchQuery, () => {
 .resource-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .type-badge { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; background: var(--primary); color: var(--bg-dark); }
 .type-badge.video { background: #f97316; }
+.context-badge { font-size: 0.72rem; padding: 0.16rem 0.5rem; border-radius: 999px; background: rgba(96, 165, 250, 0.12); color: #bfdbfe; }
 .status-select { background: var(--bg-dark); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 0.25rem; }
 .resource-card h3 { margin-bottom: 0.5rem; }
 .resource-card a { color: var(--primary); text-decoration: none; }

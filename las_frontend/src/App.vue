@@ -22,32 +22,44 @@
         </div>
       </div>
 
-      <div class="nav-row nav-row-primary">
+      <div class="nav-row nav-row-primary" data-testid="primary-nav">
         <router-link
           v-for="item in primaryNavItems"
           :key="item.to"
           :to="item.to"
           class="nav-pill"
           :class="{ active: isRouteActive(item.to) }"
+          :data-testid="`primary-nav-item-${item.key}`"
         >
           {{ t(item.label) }}
         </router-link>
 
-        <button class="nav-toggle" @click="secondaryExpanded = !secondaryExpanded">
+        <button class="nav-toggle" data-testid="secondary-nav-toggle" @click="secondaryExpanded = !secondaryExpanded">
           {{ secondaryExpanded ? t('nav.less') : t('nav.more') }}
         </button>
       </div>
 
-      <div v-if="secondaryExpanded" class="nav-row nav-row-secondary">
-        <router-link
-          v-for="item in secondaryNavItems"
-          :key="item.to"
-          :to="item.to"
-          class="nav-secondary-link"
-          :class="{ active: isRouteActive(item.to) }"
+      <div v-if="secondaryExpanded" class="nav-row nav-row-secondary" data-testid="secondary-nav">
+        <div
+          v-for="section in secondaryNavSections"
+          :key="section.key"
+          class="secondary-group"
+          :data-testid="`secondary-nav-section-${section.key}`"
         >
-          {{ t(item.label) }}
-        </router-link>
+          <span class="secondary-group-label">{{ t(section.label) }}</span>
+          <div class="secondary-group-links">
+            <router-link
+              v-for="item in section.items"
+              :key="item.to"
+              :to="item.to"
+              class="nav-secondary-link"
+              :class="{ active: isRouteActive(item.to) }"
+              :data-testid="`secondary-nav-item-${item.key}`"
+            >
+              {{ t(item.label) }}
+            </router-link>
+          </div>
+        </div>
       </div>
     </nav>
 
@@ -71,30 +83,50 @@ const route = useRoute()
 const secondaryExpanded = ref(false)
 
 const primaryNavItems = [
-  { to: '/dashboard', label: 'nav.dashboard' },
-  { to: '/problems', label: 'nav.problems' },
-  { to: '/model-cards', label: 'nav.modelCards' },
-  { to: '/srs-review', label: 'nav.srsReview' },
-  { to: '/reviews', label: 'nav.reviews' },
+  { key: 'home', to: '/dashboard', label: 'nav.home' },
+  { key: 'problems', to: '/problems', label: 'nav.problems' },
+  { key: 'model-cards', to: '/model-cards', label: 'nav.modelCards' },
+  { key: 'review', to: '/reviews', label: 'nav.reviews' },
 ]
 
-const secondaryNavItems = computed(() => {
-  const items = [
-    { to: '/practice', label: 'nav.practice' },
-    { to: '/chat', label: 'nav.chat' },
-    { to: '/challenges', label: 'nav.challenges' },
-    { to: '/resources', label: 'nav.resources' },
-    { to: '/notes', label: 'nav.notes' },
-    { to: '/knowledge-graph', label: 'nav.graph' },
-    { to: '/cog-test', label: 'nav.cogTest' },
+const secondaryNavSections = computed(() => {
+  const sections = [
+    {
+      key: 'tools',
+      label: 'nav.tools',
+      items: [
+        { key: 'srs-review', to: '/srs-review', label: 'nav.srsReview' },
+        { key: 'practice', to: '/practice', label: 'nav.practice' },
+        { key: 'chat', to: '/chat', label: 'nav.chat' },
+        { key: 'resources', to: '/resources', label: 'nav.resources' },
+        { key: 'notes', to: '/notes', label: 'nav.notes' },
+      ],
+    },
+    {
+      key: 'experiments',
+      label: 'nav.experiments',
+      items: [
+        { key: 'graph', to: '/knowledge-graph', label: 'nav.graph' },
+        { key: 'challenges', to: '/challenges', label: 'nav.challenges' },
+        { key: 'cog-test', to: '/cog-test', label: 'nav.cogTest' },
+      ],
+    },
   ]
 
   if (authStore.user?.role === 'admin') {
-    items.push({ to: '/admin', label: 'nav.admin' })
+    sections.push({
+      key: 'admin',
+      label: 'nav.admin',
+      items: [{ key: 'admin', to: '/admin', label: 'nav.admin' }],
+    })
   }
 
-  return items
+  return sections
 })
+
+const secondaryNavItems = computed(() =>
+  secondaryNavSections.value.flatMap((section) => section.items)
+)
 
 const isRouteActive = (path: string) =>
   route.path === path || route.path.startsWith(`${path}/`)
@@ -230,6 +262,8 @@ const logout = async () => {
 }
 
 .nav-row-secondary {
+  display: grid;
+  gap: 0.85rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   border-bottom: 1px solid rgba(74, 222, 128, 0.12);
   border-radius: 0 0 20px 20px;
@@ -268,6 +302,25 @@ const logout = async () => {
 .nav-secondary-link.active {
   color: var(--primary);
   background: rgba(74, 222, 128, 0.08);
+}
+
+.secondary-group {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.secondary-group-label {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.secondary-group-links {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .nav-toggle {

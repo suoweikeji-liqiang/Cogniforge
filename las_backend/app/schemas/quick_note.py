@@ -8,6 +8,8 @@ class QuickNoteCreate(BaseModel):
     content: str
     source: str = "text"
     tags: List[str] = Field(default_factory=list)
+    problem_id: Optional[UUID] = None
+    source_turn_id: Optional[UUID] = None
 
 
 class QuickNoteResponse(BaseModel):
@@ -15,6 +17,8 @@ class QuickNoteResponse(BaseModel):
 
     id: UUID
     user_id: UUID
+    problem_id: Optional[UUID] = None
+    source_turn_id: Optional[UUID] = None
     content: str
     source: str
     tags: List[str]

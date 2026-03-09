@@ -1,5 +1,15 @@
 <template>
   <div class="knowledge-graph">
+    <SecondarySurfaceBanner
+      test-id="graph-secondary-banner"
+      :eyebrow="t('graph.secondaryTitle')"
+      :title="t('graph.secondaryHeading')"
+      :message="t('graph.secondaryMessage')"
+      :primary-label="t('graph.openModelCards')"
+      primary-to="/model-cards"
+      :secondary-label="t('nav.problems')"
+      secondary-to="/problems"
+    />
     <h1>{{ t('graph.title') }}</h1>
 
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
@@ -38,6 +48,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()

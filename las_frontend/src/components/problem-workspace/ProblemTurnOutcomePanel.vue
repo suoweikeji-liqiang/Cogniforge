@@ -50,6 +50,12 @@
             </div>
           </div>
         </div>
+        <div v-if="socraticActionHints.length" class="artifact-block">
+          <strong>{{ t('problemDetail.nextActionTitle') }}</strong>
+          <ul class="artifact-actions">
+            <li v-for="(hint, index) in socraticActionHints" :key="`socratic-hint-${index}`">{{ hint }}</li>
+          </ul>
+        </div>
       </div>
       <p v-else class="empty">{{ t('problemDetail.noTurnResultSocratic') }}</p>
     </template>
@@ -101,6 +107,12 @@
         <p v-if="latestQa.pending_concepts?.length" class="pending-line">
           <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ latestQa.pending_concepts.join(' / ') }}
         </p>
+        <div v-if="explorationActionHints.length" class="artifact-block">
+          <strong>{{ t('problemDetail.nextActionTitle') }}</strong>
+          <ul class="artifact-actions">
+            <li v-for="(hint, index) in explorationActionHints" :key="`exploration-hint-${index}`">{{ hint }}</li>
+          </ul>
+        </div>
       </div>
       <p v-else class="empty">{{ t('problemDetail.noTurnResultExploration') }}</p>
     </template>
@@ -152,6 +164,36 @@ const displayPathSuggestions = computed(() => {
     return props.latestQa.derived_path_candidates
   }
   return props.latestQa?.path_suggestions || []
+})
+
+const buildActionHints = (acceptedConcepts: any[], pendingConcepts: any[], pathSuggestions: any[]) => {
+  const hints = []
+  if (acceptedConcepts?.length) {
+    hints.push(t('problemDetail.handoffHintPromoteConcepts'))
+  }
+  if (pendingConcepts?.length) {
+    hints.push(t('problemDetail.handoffHintReviewPendingConcepts'))
+  }
+  if (pathSuggestions?.length) {
+    hints.push(t('problemDetail.handoffHintReviewPathSuggestions'))
+  }
+  return hints
+}
+
+const socraticActionHints = computed(() => {
+  return buildActionHints(
+    props.latestResponse?.accepted_concepts || [],
+    props.latestResponse?.pending_concepts || [],
+    props.latestResponse?.derived_path_candidates || [],
+  )
+})
+
+const explorationActionHints = computed(() => {
+  return buildActionHints(
+    props.latestQa?.accepted_concepts || [],
+    props.latestQa?.pending_concepts || [],
+    displayPathSuggestions.value,
+  )
 })
 </script>
 

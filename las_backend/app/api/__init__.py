@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routes import auth, problems, model_cards, conversations, practice
+from app.api.routes import auth, conversations, model_cards, practice, problems, reviews
 from app.api.routes.admin_users import router as admin_users_router
 from app.api.routes.admin_llm import router as admin_llm_router
 from app.api.routes.admin_email import router as admin_email_router
@@ -20,7 +20,7 @@ api_router.include_router(problems.router)
 api_router.include_router(model_cards.router)
 api_router.include_router(conversations.router)
 api_router.include_router(practice.router)
-api_router.include_router(practice.router_reviews)
+api_router.include_router(reviews.router)
 api_router.include_router(srs_router)
 api_router.include_router(statistics_router)
 api_router.include_router(retrieval_router)

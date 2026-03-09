@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, desc
+from sqlalchemy import select, text, desc, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import List, Optional
@@ -26,6 +26,8 @@ from app.models.entities.user import (
     ConceptAlias,
     ConceptEvidence,
     ConceptRelation,
+    ModelCard,
+    ReviewSchedule,
 )
 from app.schemas.problem import (
     ProblemCreate,
@@ -45,6 +47,7 @@ from app.schemas.problem import (
     ProblemTurnResponse,
     ProblemConceptCandidateResponse,
     ProblemConceptCandidateActionResponse,
+    ProblemConceptCandidateHandoffResponse,
     ProblemConceptCandidateMergeRequest,
     ProblemPathCandidateResponse,
     ProblemPathCandidateDecisionRequest,
@@ -54,6 +57,7 @@ from app.schemas.problem import (
 )
 from app.api.routes.auth import get_current_user
 from app.services.model_os_service import model_os_service
+from app.services.srs_service import srs_service
 
 router = APIRouter(prefix="/problems", tags=["Problems"])
 settings = get_settings()
@@ -1097,6 +1101,7 @@ def _serialize_problem_concept_candidate(candidate: ProblemConceptCandidate) -> 
         "confidence": round(float(candidate.confidence or 0.0), 4),
         "status": _normalize_concept_candidate_status(candidate.status),
         "merged_into_concept": candidate.merged_into_concept,
+        "linked_model_card_id": candidate.linked_model_card_id,
         "evidence_snippet": candidate.evidence_snippet,
         "source_turn_preview": _build_turn_preview(turn),
         "source_turn_created_at": turn.created_at.isoformat() if turn and turn.created_at else None,
@@ -1125,6 +1130,122 @@ def _serialize_problem_path_candidate(candidate: ProblemPathCandidate) -> dict:
         "evidence_snippet": candidate.evidence_snippet,
         "reviewed_at": candidate.reviewed_at.isoformat() if candidate.reviewed_at else None,
         "created_at": candidate.created_at.isoformat() if candidate.created_at else None,
+    }
+
+
+def _candidate_model_card_title(candidate: ProblemConceptCandidate) -> str:
+    return str(candidate.merged_into_concept or candidate.concept_text or "").strip()
+
+
+def _candidate_model_card_notes(problem: Problem, candidate: ProblemConceptCandidate) -> str:
+    title = _candidate_model_card_title(candidate)
+    source_turn_preview = _build_turn_preview(getattr(candidate, "source_turn", None))
+    lines = [
+        f"Promoted from problem: {problem.title}",
+        f"Source learning mode: {_normalize_learning_mode(candidate.learning_mode, 'socratic')}",
+    ]
+    if source_turn_preview:
+        lines.append(f"Source turn: {source_turn_preview}")
+    if candidate.evidence_snippet:
+        lines.append(f"Evidence: {candidate.evidence_snippet}")
+    lines.append(f"Promoted concept: {title}")
+    return "\n".join(lines)
+
+
+async def _load_candidate_review_schedule(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    model_card_id: str,
+) -> Optional[ReviewSchedule]:
+    schedule_result = await db.execute(
+        select(ReviewSchedule).where(
+            ReviewSchedule.user_id == user_id,
+            ReviewSchedule.model_card_id == model_card_id,
+        )
+    )
+    return schedule_result.scalar_one_or_none()
+
+
+async def _ensure_model_card_for_candidate(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    problem: Problem,
+    candidate: ProblemConceptCandidate,
+) -> tuple[ModelCard, bool]:
+    if candidate.linked_model_card_id:
+        linked_card = await db.get(ModelCard, candidate.linked_model_card_id)
+        if linked_card and linked_card.user_id == user_id:
+            return linked_card, False
+
+    target_title = _candidate_model_card_title(candidate)
+    if not target_title:
+        raise HTTPException(status_code=400, detail="Candidate cannot be promoted without a concept title")
+
+    existing_result = await db.execute(
+        select(ModelCard).where(
+            ModelCard.user_id == user_id,
+            func.lower(ModelCard.title) == target_title.casefold(),
+        )
+    )
+    existing_card = existing_result.scalar_one_or_none()
+    if existing_card:
+        candidate.linked_model_card_id = str(existing_card.id)
+        await db.flush()
+        return existing_card, False
+
+    notes = _candidate_model_card_notes(problem, candidate)
+    examples = model_os_service.normalize_concepts(
+        [candidate.concept_text, problem.title, *(problem.associated_concepts or [])],
+        limit=3,
+    )
+    model_card = ModelCard(
+        user_id=user_id,
+        title=target_title,
+        user_notes=notes,
+        examples=examples,
+        counter_examples=[],
+        concept_maps=None,
+        embedding=model_os_service.generate_card_embedding(
+            title=target_title,
+            user_notes=notes,
+            examples=examples,
+            counter_examples=[],
+        ),
+    )
+    db.add(model_card)
+    await db.flush()
+
+    await model_os_service.log_evolution(
+        db=db,
+        model_id=str(model_card.id),
+        user_id=user_id,
+        action="create",
+        reason="Promoted from derived concept candidate",
+        snapshot=model_os_service.build_model_snapshot(model_card),
+    )
+
+    candidate.linked_model_card_id = str(model_card.id)
+    await db.flush()
+    return model_card, True
+
+
+def _serialize_problem_concept_candidate_handoff(
+    *,
+    candidate: ProblemConceptCandidate,
+    model_card: ModelCard,
+    created_model_card: bool,
+    review_schedule: Optional[ReviewSchedule],
+    trace_id: str,
+) -> dict:
+    return {
+        "candidate": _serialize_problem_concept_candidate(candidate),
+        "model_card": model_card,
+        "created_model_card": created_model_card,
+        "review_scheduled": review_schedule is not None,
+        "next_review_at": review_schedule.next_review_at.isoformat() if review_schedule else None,
+        "trace_id": trace_id,
     }
 
 
@@ -2604,6 +2725,157 @@ async def postpone_problem_concept_candidate(
         "accepted_concepts": [],
         "trace_id": trace_id,
     }
+
+
+@router.post(
+    "/{problem_id}/concept-candidates/{candidate_id}/promote",
+    response_model=ProblemConceptCandidateHandoffResponse,
+)
+async def promote_problem_concept_candidate_to_model_card(
+    problem_id: UUID,
+    candidate_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    trace_id = str(uuid.uuid4())
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    candidate_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(
+            ProblemConceptCandidate.id == str(candidate_id),
+            ProblemConceptCandidate.problem_id == str(problem_id),
+            ProblemConceptCandidate.user_id == str(current_user.id),
+        )
+    )
+    candidate = candidate_result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Concept candidate not found")
+    if candidate.status not in {"accepted", "merged"}:
+        raise HTTPException(status_code=400, detail="Only accepted or merged concepts can be promoted")
+
+    model_card, created_model_card = await _ensure_model_card_for_candidate(
+        db=db,
+        user_id=str(current_user.id),
+        problem=problem,
+        candidate=candidate,
+    )
+    review_schedule = await _load_candidate_review_schedule(
+        db=db,
+        user_id=str(current_user.id),
+        model_card_id=str(model_card.id),
+    )
+
+    await _log_learning_event(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        event_type="concept_candidate_promoted_to_model_card",
+        learning_mode=candidate.learning_mode,
+        trace_id=trace_id,
+        payload={
+            "candidate_id": str(candidate.id),
+            "concept_text": candidate.concept_text,
+            "model_card_id": str(model_card.id),
+            "created_model_card": created_model_card,
+        },
+    )
+
+    await db.commit()
+    return _serialize_problem_concept_candidate_handoff(
+        candidate=candidate,
+        model_card=model_card,
+        created_model_card=created_model_card,
+        review_schedule=review_schedule,
+        trace_id=trace_id,
+    )
+
+
+@router.post(
+    "/{problem_id}/concept-candidates/{candidate_id}/schedule-review",
+    response_model=ProblemConceptCandidateHandoffResponse,
+)
+async def schedule_problem_concept_candidate_review(
+    problem_id: UUID,
+    candidate_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    trace_id = str(uuid.uuid4())
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    candidate_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .options(selectinload(ProblemConceptCandidate.source_turn))
+        .where(
+            ProblemConceptCandidate.id == str(candidate_id),
+            ProblemConceptCandidate.problem_id == str(problem_id),
+            ProblemConceptCandidate.user_id == str(current_user.id),
+        )
+    )
+    candidate = candidate_result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Concept candidate not found")
+    if candidate.status not in {"accepted", "merged"}:
+        raise HTTPException(status_code=400, detail="Only accepted or merged concepts can enter review")
+
+    model_card, created_model_card = await _ensure_model_card_for_candidate(
+        db=db,
+        user_id=str(current_user.id),
+        problem=problem,
+        candidate=candidate,
+    )
+    review_schedule = await _load_candidate_review_schedule(
+        db=db,
+        user_id=str(current_user.id),
+        model_card_id=str(model_card.id),
+    )
+    if review_schedule is None:
+        review_schedule = srs_service.schedule_card(str(model_card.id), str(current_user.id))
+        db.add(review_schedule)
+        await db.flush()
+
+    await _log_learning_event(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        event_type="concept_candidate_review_scheduled",
+        learning_mode=candidate.learning_mode,
+        trace_id=trace_id,
+        payload={
+            "candidate_id": str(candidate.id),
+            "concept_text": candidate.concept_text,
+            "model_card_id": str(model_card.id),
+            "created_model_card": created_model_card,
+            "schedule_id": str(review_schedule.id),
+        },
+    )
+
+    await db.commit()
+    return _serialize_problem_concept_candidate_handoff(
+        candidate=candidate,
+        model_card=model_card,
+        created_model_card=created_model_card,
+        review_schedule=review_schedule,
+        trace_id=trace_id,
+    )
 
 
 @router.post("/{problem_id}/concepts/rollback", response_model=ProblemConceptRollbackResponse)

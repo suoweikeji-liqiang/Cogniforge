@@ -255,11 +255,32 @@
                 :current-turn-id="activeConceptTurnId"
                 :merge-targets="conceptMergeTargets"
                 :action-pending-id="candidateSubmittingId"
+                :handoff-pending-id="handoffSubmittingId"
+                :scheduled-model-card-ids="scheduledModelCardIds"
                 @accept="acceptCandidate"
                 @reject="rejectCandidate"
                 @postpone="postponeCandidate"
                 @merge="mergeCandidate"
                 @rollback="rollbackConcept"
+                @promote="promoteCandidateToModelCard"
+                @open-card="openModelCard"
+                @schedule-review="scheduleCandidateReview"
+              />
+              <ProblemWorkspaceNotesPanel
+                :notes="workspaceNotes"
+                :saving="noteSaving"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceNote"
+                @delete="deleteWorkspaceNote"
+              />
+              <ProblemWorkspaceResourcesPanel
+                :resources="workspaceResources"
+                :saving="resourceSaving"
+                :interpreting-id="resourceInterpretingId"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceResource"
+                @delete="deleteWorkspaceResource"
+                @interpret="interpretWorkspaceResource"
               />
             </div>
           </div>
@@ -416,11 +437,32 @@
                 :current-turn-id="activeConceptTurnId"
                 :merge-targets="conceptMergeTargets"
                 :action-pending-id="candidateSubmittingId"
+                :handoff-pending-id="handoffSubmittingId"
+                :scheduled-model-card-ids="scheduledModelCardIds"
                 @accept="acceptCandidate"
                 @reject="rejectCandidate"
                 @postpone="postponeCandidate"
                 @merge="mergeCandidate"
                 @rollback="rollbackConcept"
+                @promote="promoteCandidateToModelCard"
+                @open-card="openModelCard"
+                @schedule-review="scheduleCandidateReview"
+              />
+              <ProblemWorkspaceNotesPanel
+                :notes="workspaceNotes"
+                :saving="noteSaving"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceNote"
+                @delete="deleteWorkspaceNote"
+              />
+              <ProblemWorkspaceResourcesPanel
+                :resources="workspaceResources"
+                :saving="resourceSaving"
+                :interpreting-id="resourceInterpretingId"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceResource"
+                @delete="deleteWorkspaceResource"
+                @interpret="interpretWorkspaceResource"
               />
             </div>
           </div>
@@ -432,14 +474,17 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
 import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
+import ProblemWorkspaceNotesPanel from '@/components/problem-workspace/ProblemWorkspaceNotesPanel.vue'
+import ProblemWorkspaceResourcesPanel from '@/components/problem-workspace/ProblemWorkspaceResourcesPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 const problem = ref<any>(null)
 const learningPath = ref<any>(null)
@@ -465,8 +510,15 @@ const conceptCandidates = ref<any[]>([])
 const pathCandidates = ref<any[]>([])
 const candidateLoading = ref(false)
 const candidateSubmittingId = ref<string | null>(null)
+const handoffSubmittingId = ref<string | null>(null)
 const pathCandidateLoading = ref(false)
 const pathCandidateSubmittingId = ref<string | null>(null)
+const scheduledModelCardIds = ref<string[]>([])
+const workspaceNotes = ref<any[]>([])
+const noteSaving = ref(false)
+const workspaceResources = ref<any[]>([])
+const resourceSaving = ref(false)
+const resourceInterpretingId = ref<string | null>(null)
 const latestQA = computed(() => qaHistory.value[0] || null)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
@@ -639,6 +691,44 @@ const fetchPathCandidates = async () => {
   }
 }
 
+const fetchReviewSchedules = async () => {
+  try {
+    const response = await api.get('/srs/schedules')
+    scheduledModelCardIds.value = (response.data || []).map((schedule: any) => String(schedule.model_card_id))
+  } catch (e) {
+    console.error('Failed to fetch review schedules:', e)
+    scheduledModelCardIds.value = []
+  }
+}
+
+const fetchWorkspaceNotes = async () => {
+  try {
+    const response = await api.get('/notes/', {
+      params: {
+        problem_id: route.params.id,
+      },
+    })
+    workspaceNotes.value = response.data || []
+  } catch (e) {
+    console.error('Failed to fetch workspace notes:', e)
+    workspaceNotes.value = []
+  }
+}
+
+const fetchWorkspaceResources = async () => {
+  try {
+    const response = await api.get('/resources/', {
+      params: {
+        problem_id: route.params.id,
+      },
+    })
+    workspaceResources.value = response.data || []
+  } catch (e) {
+    console.error('Failed to fetch workspace resources:', e)
+    workspaceResources.value = []
+  }
+}
+
 const fetchLearningPath = async () => {
   const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
   learningPath.value = pathRes.data
@@ -651,7 +741,7 @@ const fetchLearningPaths = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes] = await Promise.all([
+    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes, schedulesRes, notesRes, resourcesRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
@@ -662,6 +752,13 @@ const fetchProblem = async () => {
         params: { learning_mode: 'exploration' },
       }).catch(() => ({ data: [] })),
       api.get(`/problems/${route.params.id}/socratic-question`).catch(() => ({ data: null })),
+      api.get('/srs/schedules').catch(() => ({ data: [] })),
+      api.get('/notes/', {
+        params: { problem_id: route.params.id },
+      }).catch(() => ({ data: [] })),
+      api.get('/resources/', {
+        params: { problem_id: route.params.id },
+      }).catch(() => ({ data: [] })),
     ])
 
     problem.value = problemRes.data
@@ -673,6 +770,9 @@ const fetchProblem = async () => {
     pathCandidates.value = pathCandidatesRes.data || []
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
     socraticQuestion.value = socraticRes.data || null
+    scheduledModelCardIds.value = (schedulesRes.data || []).map((schedule: any) => String(schedule.model_card_id))
+    workspaceNotes.value = notesRes.data || []
+    workspaceResources.value = resourcesRes.data || []
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -932,6 +1032,109 @@ const rollbackConcept = async ({ candidateId, conceptText }: { candidateId: stri
     console.error('Failed to rollback concept:', e)
   } finally {
     candidateSubmittingId.value = null
+  }
+}
+
+const promoteCandidateToModelCard = async (candidateId: string) => {
+  handoffSubmittingId.value = candidateId
+  try {
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/promote`)
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to promote concept candidate to model card:', e)
+  } finally {
+    handoffSubmittingId.value = null
+  }
+}
+
+const openModelCard = (modelCardId: string) => {
+  if (!modelCardId) return
+  router.push(`/model-cards/${modelCardId}`)
+}
+
+const scheduleCandidateReview = async (candidateId: string) => {
+  handoffSubmittingId.value = candidateId
+  try {
+    const response = await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/schedule-review`)
+    const modelCardId = String(response.data?.model_card?.id || '')
+    if (modelCardId && !scheduledModelCardIds.value.includes(modelCardId)) {
+      scheduledModelCardIds.value = [...scheduledModelCardIds.value, modelCardId]
+    } else if (!modelCardId) {
+      await fetchReviewSchedules()
+    }
+    await fetchConceptCandidates()
+  } catch (e) {
+    console.error('Failed to schedule concept candidate review:', e)
+  } finally {
+    handoffSubmittingId.value = null
+  }
+}
+
+const saveWorkspaceNote = async ({ content, tags }: { content: string; tags: string[] }) => {
+  noteSaving.value = true
+  try {
+    await api.post('/notes/', {
+      content,
+      source: 'text',
+      tags,
+      problem_id: route.params.id,
+      source_turn_id: activeConceptTurnId.value || undefined,
+    })
+    await fetchWorkspaceNotes()
+  } catch (e) {
+    console.error('Failed to save workspace note:', e)
+  } finally {
+    noteSaving.value = false
+  }
+}
+
+const deleteWorkspaceNote = async (noteId: string) => {
+  try {
+    await api.delete(`/notes/${noteId}`)
+    workspaceNotes.value = workspaceNotes.value.filter((note) => note.id !== noteId)
+  } catch (e) {
+    console.error('Failed to delete workspace note:', e)
+  }
+}
+
+const saveWorkspaceResource = async ({ url, title, linkType }: { url: string; title: string; linkType: string }) => {
+  resourceSaving.value = true
+  try {
+    await api.post('/resources/', {
+      url,
+      title: title || null,
+      link_type: linkType,
+      problem_id: route.params.id,
+      source_turn_id: activeConceptTurnId.value || undefined,
+    })
+    await fetchWorkspaceResources()
+  } catch (e) {
+    console.error('Failed to save workspace resource:', e)
+  } finally {
+    resourceSaving.value = false
+  }
+}
+
+const deleteWorkspaceResource = async (resourceId: string) => {
+  try {
+    await api.delete(`/resources/${resourceId}`)
+    workspaceResources.value = workspaceResources.value.filter((resource) => resource.id !== resourceId)
+  } catch (e) {
+    console.error('Failed to delete workspace resource:', e)
+  }
+}
+
+const interpretWorkspaceResource = async (resourceId: string) => {
+  resourceInterpretingId.value = resourceId
+  try {
+    const response = await api.post(`/resources/${resourceId}/interpret`)
+    workspaceResources.value = workspaceResources.value.map((resource) =>
+      resource.id === resourceId ? response.data : resource
+    )
+  } catch (e) {
+    console.error('Failed to interpret workspace resource:', e)
+  } finally {
+    resourceInterpretingId.value = null
   }
 }
 

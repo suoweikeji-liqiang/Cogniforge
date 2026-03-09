@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.entities.user import (
     CognitiveChallenge,
     EvolutionLog,
+    ModelCard,
     PracticeSubmission,
     Problem,
     ReviewSchedule,
@@ -40,6 +41,20 @@ class ReviewService:
                 Problem.status == "completed",
             )
         ) or 0
+        model_cards_total = await db.scalar(
+            select(func.count(ModelCard.id)).where(ModelCard.user_id == user_id)
+        ) or 0
+        scheduled_reviews = await db.scalar(
+            select(func.count(ReviewSchedule.id)).where(
+                ReviewSchedule.user_id == user_id
+            )
+        ) or 0
+        due_reviews = await db.scalar(
+            select(func.count(ReviewSchedule.id)).where(
+                ReviewSchedule.user_id == user_id,
+                ReviewSchedule.next_review_at <= datetime.utcnow(),
+            )
+        ) or 0
         submissions_total = await db.scalar(
             select(func.count(PracticeSubmission.id)).where(
                 PracticeSubmission.user_id == user_id
@@ -49,12 +64,6 @@ class ReviewService:
             select(func.count(CognitiveChallenge.id)).where(
                 CognitiveChallenge.user_id == user_id,
                 CognitiveChallenge.status == "answered",
-            )
-        ) or 0
-        due_reviews = await db.scalar(
-            select(func.count(ReviewSchedule.id)).where(
-                ReviewSchedule.user_id == user_id,
-                ReviewSchedule.next_review_at <= datetime.utcnow(),
             )
         ) or 0
 
@@ -80,16 +89,19 @@ Period: {period}
 User activity summary:
 - Total problems: {problems_total}
 - Completed problems: {problems_completed}
-- Practice submissions: {submissions_total}
-- Answered cognitive challenges: {challenges_answered}
+- Model cards: {model_cards_total}
+- Scheduled review cards: {scheduled_reviews}
 - Due spaced-repetition reviews: {due_reviews}
 - Recent evolution actions: {json.dumps(recent_evolution, ensure_ascii=False)}
+- Supporting activity:
+  - Practice submissions: {submissions_total}
+  - Answered cognitive challenges: {challenges_answered}
 
 Return ONLY valid JSON in this exact format:
 {{
   "summary": "2-3 sentence summary",
-  "insights": "key insight about progress and understanding",
-  "next_steps": "concrete next actions",
+  "insights": "key insight about model-card quality, review rhythm, and learning progress",
+  "next_steps": "concrete next actions tied to review, model-card refinement, or the next problem step",
   "misconceptions": ["misconception 1", "misconception 2"]
 }}
 """
@@ -111,13 +123,13 @@ Return ONLY valid JSON in this exact format:
         fallback_summary = (
             f"{review_type.capitalize()} review for {period}: "
             f"{problems_completed}/{problems_total} problems completed, "
-            f"{submissions_total} practice submissions, "
-            f"{challenges_answered} answered challenges."
+            f"{model_cards_total} model cards, "
+            f"{due_reviews} due reviews."
         )
         return {
             "summary": fallback_summary,
-            "insights": "Learning activity is being recorded, but the review output was generated using fallback logic.",
-            "next_steps": "Complete pending review cards, continue problem progression, and convert recent insights into model card updates.",
+            "insights": "Learning activity is being recorded, but the review output was generated using fallback logic centered on model cards and review cadence.",
+            "next_steps": "Complete pending review cards, refine the model cards that changed recently, and continue the next concrete problem step.",
             "misconceptions": [],
         }
 

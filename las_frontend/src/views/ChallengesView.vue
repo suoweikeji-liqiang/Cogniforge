@@ -1,5 +1,15 @@
 <template>
   <div class="challenges-page">
+    <SecondarySurfaceBanner
+      test-id="challenges-secondary-banner"
+      :eyebrow="t('challenges.secondaryTitle')"
+      :title="t('challenges.secondaryHeading')"
+      :message="t('challenges.secondaryMessage')"
+      :primary-label="t('challenges.openReviewHub')"
+      primary-to="/reviews"
+      :secondary-label="t('nav.problems')"
+      secondary-to="/problems"
+    />
     <div class="page-header">
       <h1>{{ t('challenges.title') }}</h1>
       <button class="btn btn-primary" @click="generateChallenge" :disabled="generating">
@@ -55,6 +65,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 

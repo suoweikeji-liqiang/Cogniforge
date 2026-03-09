@@ -19,6 +19,24 @@
     </div>
     
     <div class="chat-main">
+      <div class="legacy-banner" data-testid="legacy-chat-banner">
+        <div>
+          <strong>{{ t('chat.legacyTitle') }}</strong>
+          <p>{{ t('chat.legacyMessage') }}</p>
+        </div>
+        <div class="legacy-actions">
+          <router-link class="btn btn-secondary" to="/problems">
+            {{ t('chat.goToProblems') }}
+          </router-link>
+          <router-link
+            v-if="linkedProblemRoute"
+            class="btn btn-secondary"
+            :to="linkedProblemRoute"
+          >
+            {{ t('chat.openLinkedProblem') }}
+          </router-link>
+        </div>
+      </div>
       <div class="chat-messages" ref="messagesContainer">
         <div 
           v-for="(msg, index) in messages" 
@@ -62,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { computed, ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
@@ -81,6 +99,15 @@ const messagesContainer = ref<HTMLElement>()
 const options = ref({
   generateContradiction: false,
   suggestMigration: false,
+})
+
+const currentConversation = computed(() =>
+  conversations.value.find((conv) => conv.id === currentConversationId.value) || null
+)
+
+const linkedProblemRoute = computed(() => {
+  const problemId = currentConversation.value?.problem_id
+  return problemId ? `/problems/${problemId}` : ''
 })
 
 const fetchConversations = async () => {
@@ -104,6 +131,13 @@ const loadConversation = async (id: string) => {
   currentConversationId.value = id
   try {
     const response = await api.get(`/conversations/${id}`)
+    const updatedConversation = response.data
+    const targetIndex = conversations.value.findIndex((conv) => conv.id === id)
+    if (targetIndex >= 0) {
+      conversations.value.splice(targetIndex, 1, updatedConversation)
+    } else {
+      conversations.value.unshift(updatedConversation)
+    }
     messages.value = response.data.messages || []
     scrollToBottom()
   } catch (e) {
@@ -237,6 +271,30 @@ onMounted(() => {
   flex-direction: column;
 }
 
+.legacy-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1rem 0;
+}
+
+.legacy-banner strong {
+  color: #fcd34d;
+}
+
+.legacy-banner p {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  max-width: 56ch;
+}
+
+.legacy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
 .chat-messages {
   flex-grow: 1;
   padding: 1rem;
@@ -303,5 +361,16 @@ onMounted(() => {
 
 .chat-input input {
   flex-grow: 1;
+}
+
+@media (max-width: 768px) {
+  .chat-page {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .legacy-banner {
+    flex-direction: column;
+  }
 }
 </style>

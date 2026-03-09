@@ -113,6 +113,52 @@
                 {{ t('problemDetail.rollbackConcept') }}
               </button>
             </div>
+
+            <div v-if="['accepted', 'merged'].includes(candidate.status)" class="candidate-handoff">
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+              </p>
+              <div class="candidate-actions">
+                <button
+                  v-if="!isLinkedToModelCard(candidate)"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="handoffPendingId === candidate.id"
+                  data-testid="promote-derived-concept"
+                  @click="emit('promote', candidate.id)"
+                >
+                  {{ t('problemDetail.promoteConceptToModelCard') }}
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="handoffPendingId === candidate.id"
+                  data-testid="open-derived-concept-model-card"
+                  @click="emit('openCard', candidate.linked_model_card_id)"
+                >
+                  {{ t('problemDetail.openModelCard') }}
+                </button>
+                <button
+                  v-if="isLinkedToModelCard(candidate) && !isReviewScheduled(candidate)"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="handoffPendingId === candidate.id"
+                  data-testid="schedule-derived-concept-review"
+                  @click="emit('scheduleReview', candidate.id)"
+                >
+                  {{ t('problemDetail.addConceptToReview') }}
+                </button>
+                <span
+                  v-if="isReviewScheduled(candidate)"
+                  class="handoff-badge"
+                  data-testid="derived-concept-review-scheduled"
+                >
+                  {{ t('problemDetail.reviewScheduled') }}
+                </span>
+              </div>
+            </div>
           </article>
         </div>
       </section>
@@ -130,6 +176,8 @@ const props = defineProps<{
   currentTurnId?: string | null
   mergeTargets?: string[]
   actionPendingId?: string | null
+  handoffPendingId?: string | null
+  scheduledModelCardIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -138,6 +186,9 @@ const emit = defineEmits<{
   postpone: [candidateId: string]
   merge: [payload: { candidateId: string; targetConcept: string }]
   rollback: [payload: { candidateId: string; conceptText: string }]
+  promote: [candidateId: string]
+  openCard: [modelCardId: string]
+  scheduleReview: [candidateId: string]
 }>()
 
 const { t } = useI18n()
@@ -221,6 +272,15 @@ const mergeTargetsFor = (candidate: any) => {
 const canModerate = (candidate: any) => ['pending', 'postponed'].includes(candidate.status)
 
 const canMerge = (candidate: any) => canModerate(candidate) && mergeTargetsFor(candidate).length > 0
+
+const isLinkedToModelCard = (candidate: any) => Boolean(candidate.linked_model_card_id)
+
+const isReviewScheduled = (candidate: any) => {
+  return Boolean(
+    candidate.linked_model_card_id
+      && (props.scheduledModelCardIds || []).includes(String(candidate.linked_model_card_id))
+  )
+}
 
 const emitMerge = (candidateId: string) => {
   const targetConcept = selectedMergeTargets.value[candidateId]
@@ -311,9 +371,27 @@ const emitMerge = (candidateId: string) => {
   margin-top: 0.65rem;
 }
 
+.candidate-handoff {
+  margin-top: 0.75rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .merge-select {
   min-width: 0;
   flex: 1 1 180px;
+}
+
+.handoff-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.14);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  color: #86efac;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .candidate-pending,

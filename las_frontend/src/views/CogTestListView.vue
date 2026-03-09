@@ -1,5 +1,15 @@
 <template>
   <div class="cog-test-list">
+    <SecondarySurfaceBanner
+      test-id="cog-test-secondary-banner"
+      :eyebrow="t('cogTest.secondaryTitle')"
+      :title="t('cogTest.secondaryHeading')"
+      :message="t('cogTest.secondaryMessage')"
+      :primary-label="t('cogTest.openReviewHub')"
+      primary-to="/reviews"
+      :secondary-label="t('graph.openModelCards')"
+      secondary-to="/model-cards"
+    />
     <div class="header-actions">
       <h1>{{ t('cogTest.history') }}</h1>
       <router-link to="/cog-test/session" class="btn btn-primary">
@@ -39,6 +49,7 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCogTestStore } from '@/stores/cogTest'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 const store = useCogTestStore()
