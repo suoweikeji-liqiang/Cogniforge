@@ -264,6 +264,7 @@ class ProblemTurnResponse(BaseModel):
 
     id: UUID
     problem_id: UUID
+    path_id: Optional[UUID] = None
     learning_mode: LearningMode
     step_index: Optional[int] = None
     user_text: Optional[str] = None

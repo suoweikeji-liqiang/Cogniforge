@@ -90,6 +90,7 @@ class ProblemTurn(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     problem_id = Column(String(36), ForeignKey("problems.id"), nullable=False, index=True)
+    path_id = Column(String(36), ForeignKey("learning_paths.id"), nullable=True, index=True)
     learning_mode = Column(String(20), nullable=False, default="socratic", index=True)
     step_index = Column(Integer, nullable=True)
     user_text = Column(Text, nullable=True)
@@ -99,6 +100,7 @@ class ProblemTurn(Base):
 
     user = relationship("User", back_populates="problem_turns")
     problem = relationship("Problem", back_populates="turns")
+    learning_path = relationship("LearningPath", foreign_keys=[path_id])
 
 
 class LearningPath(Base):

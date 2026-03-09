@@ -59,7 +59,7 @@
               <router-link to="/srs-review" class="btn btn-secondary">{{ t('reviews.startSrs') }}</router-link>
               <router-link
                 v-if="card.origin?.problem_id"
-                :to="`/problems/${card.origin.problem_id}`"
+                :to="buildWorkspaceRoute(card)"
                 class="btn btn-secondary"
               >
                 {{ t('reviews.openWorkspace') }}
@@ -290,6 +290,16 @@ const formatReviewReason = (entry: any) => {
   if (origin?.learning_mode === 'exploration') return t('reviews.originModeExploration')
   if (origin?.learning_mode === 'socratic') return t('reviews.originModeSocratic')
   return t('reviews.originModeUnknown')
+}
+
+const buildWorkspaceRoute = (entry: any) => {
+  const problemId = entry?.origin?.problem_id
+  if (!problemId) return '/reviews'
+  const resumePathId = entry?.reinforcement_target?.resume_path_id || entry?.origin?.source_path_id
+  return {
+    path: `/problems/${problemId}`,
+    query: resumePathId ? { resume_path: resumePathId } : {},
+  }
 }
 
 const formatModelCardSupportText = (card: any) => {

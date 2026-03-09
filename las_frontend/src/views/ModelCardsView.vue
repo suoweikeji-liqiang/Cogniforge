@@ -42,6 +42,10 @@
         <p v-if="card.isScheduled" class="recall-next-action">
           {{ formatRecommendedAction(card.reviewSchedule?.recommended_action) }}
         </p>
+        <p v-if="card.reviewSchedule?.needs_reinforcement" class="recall-reinforcement">
+          <strong>{{ t('modelCards.needsReinforcementBadge') }}:</strong>
+          {{ formatReinforcementResume(card.reviewSchedule) }}
+        </p>
         
         <div class="card-actions">
           <button @click="viewCard(card)" class="btn btn-secondary">{{ t('modelCards.viewCard') }}</button>
@@ -276,6 +280,53 @@ const formatRecommendedAction = (action: string | undefined | null) => {
   return t('modelCards.recallActionCompleteFirstRecall')
 }
 
+const formatLearningPathKind = (kind: string | undefined | null) => {
+  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
+  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
+  if (kind === 'branch') return t('problemDetail.pathKindBranch')
+  return t('problemDetail.pathKindMain')
+}
+
+const formatReinforcementResume = (schedule: any) => {
+  const target = schedule?.reinforcement_target
+  const pathLabel = formatReinforcementPath(target)
+  const rawStepIndex = Number(target?.resume_step_index)
+  const hasStepIndex = Number.isFinite(rawStepIndex)
+  const stepNumber = hasStepIndex ? rawStepIndex + 1 : null
+  const stepConcept = String(target?.resume_step_concept || '').trim()
+
+  if (stepNumber !== null && stepConcept) {
+    const stepLabel = t('modelCards.reinforcementResumeStepConcept', {
+      step: stepNumber,
+      concept: stepConcept,
+    })
+    const workspaceLabel = target?.problem_title ? `${target.problem_title} · ${stepLabel}` : stepLabel
+    return pathLabel ? `${pathLabel} · ${workspaceLabel}` : workspaceLabel
+  }
+  if (target?.problem_title && stepConcept) {
+    const conceptLabel = t('modelCards.reinforcementResumeWorkspaceConcept', {
+      workspace: target.problem_title,
+      concept: stepConcept,
+    })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  if (stepConcept) {
+    const conceptLabel = t('modelCards.reinforcementResumeConcept', { concept: stepConcept })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  return pathLabel || t('modelCards.reinforcementResumeCurrentCard')
+}
+
+const formatReinforcementPath = (target: any) => {
+  const title = String(target?.resume_path_title || '').trim()
+  const kind = String(target?.resume_path_kind || '').trim()
+  const kindLabel = kind ? formatLearningPathKind(kind) : ''
+  if (kindLabel && title) return `${kindLabel} · ${title}`
+  if (title) return title
+  if (kindLabel) return kindLabel
+  return ''
+}
+
 onMounted(() => {
   fetchCards()
 })
@@ -393,6 +444,12 @@ watch([searchQuery, filterMode], () => {
 }
 
 .recall-next-action {
+  margin-bottom: 0.9rem;
+}
+
+.recall-reinforcement {
+  color: #fecaca;
+  font-size: 0.84rem;
   margin-bottom: 0.9rem;
 }
 

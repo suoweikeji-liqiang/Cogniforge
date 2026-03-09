@@ -136,6 +136,15 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('workspace-resources-panel')).toContainText(/Current turn/i)
     await expect(page.getByTestId('workspace-resources-panel')).toContainText(/precision-recall/i)
 
+    await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
+    await expect(page.getByTestId('path-candidate-card').first()).toBeVisible()
+    await page.getByTestId('path-candidate-save-branch').first().click()
+    await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
+
+    await page.getByTestId('exploration-question-input').fill('How should I compare precision and recall when the threshold moves?')
+    await page.getByTestId('submit-exploration-question').click()
+    await expect(latestTurnOutcome(page)).toContainText(/Comparison|Concept explanation/i)
+
     await page.getByTestId('accept-derived-concept').first().click()
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
     await page.getByTestId('promote-derived-concept').first().click()
@@ -165,17 +174,18 @@ test.describe('ProblemDetail main workflow', () => {
     await page.goto(`/problems/${session.problemId}`)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/fragile|reinforcement/i)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/revisit|reinforce/i)
+    await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Needs reinforcement|Reinforcement Target/i)
+    await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch|Branch path/i)
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Fragile|revisit the workspace/i)
-
-    await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
-    await expect(page.getByTestId('path-candidate-card').first()).toBeVisible()
-    await page.getByTestId('path-candidate-save-branch').first().click()
-
-    await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
+    await expect(page.getByTestId('derived-concept-needs-reinforcement').first()).toContainText(/Needs reinforcement|Comparison branch/i)
 
     await page.goto(`/model-cards/${firstSchedule.model_card_id}`)
     await expect(page.getByTestId('model-card-recall-status')).toContainText(/Fragile|rebuilding/i)
     await expect(page.getByTestId('model-card-recall-status')).toContainText(/revisit|reinforce/i)
+    await expect(page.getByTestId('model-card-reinforcement-target')).toContainText(/Needs reinforcement|Comparison branch/i)
+    await page.getByRole('link', { name: 'Open Workspace' }).first().click()
+    await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
+    await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch/i)
 
     await page.goto('/reviews')
     await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)

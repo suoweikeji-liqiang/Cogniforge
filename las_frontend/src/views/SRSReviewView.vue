@@ -31,10 +31,19 @@
         <span>{{ t('srs.recallStateLabel') }}: {{ formatRecallState(lastReviewOutcome.recall_state) }}</span>
         <span>{{ t('srs.nextActionLabel') }}: {{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</span>
       </div>
+      <div
+        v-if="lastReviewOutcome.needs_reinforcement"
+        class="reinforcement-outcome"
+        data-testid="srs-reinforcement-target"
+      >
+        <span class="outcome-eyebrow">{{ t('srs.needsReinforcementBadge') }}</span>
+        <strong>{{ formatReinforcementResume(lastReviewOutcome) }}</strong>
+        <p>{{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</p>
+      </div>
       <div class="origin-links">
         <router-link
           v-if="lastReviewOutcome.origin?.problem_id"
-          :to="`/problems/${lastReviewOutcome.origin.problem_id}`"
+          :to="buildWorkspaceRoute(lastReviewOutcome)"
           class="btn btn-secondary"
         >
           {{ t('srs.openWorkspace') }}
@@ -57,7 +66,7 @@
           <div class="origin-links">
             <router-link
               v-if="currentCard.origin?.problem_id"
-              :to="`/problems/${currentCard.origin.problem_id}`"
+              :to="buildWorkspaceRoute(currentCard)"
               class="btn btn-secondary"
             >
               {{ t('srs.openWorkspace') }}
@@ -177,6 +186,13 @@ const formatRecommendedAction = (action: string | undefined | null) => {
   return t('srs.recallActionCompleteFirstRecall')
 }
 
+const formatLearningPathKind = (kind: string | undefined | null) => {
+  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
+  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
+  if (kind === 'branch') return t('problemDetail.pathKindBranch')
+  return t('problemDetail.pathKindMain')
+}
+
 const formatQualityLabel = (quality: number) => {
   if (quality === 0) return `0 - ${t('srs.forgot')}`
   if (quality === 3) return `3 - ${t('srs.ok')}`
@@ -190,6 +206,56 @@ const formatReviewOutcome = (outcome: any) => {
     outcome: formatRecentOutcome(outcome.recent_outcome),
     date: formatDateTime(outcome.next_review_at),
   })
+}
+
+const formatReinforcementResume = (outcome: any) => {
+  const target = outcome?.reinforcement_target
+  const pathLabel = formatReinforcementPath(target)
+  const rawStepIndex = Number(target?.resume_step_index)
+  const hasStepIndex = Number.isFinite(rawStepIndex)
+  const stepNumber = hasStepIndex ? rawStepIndex + 1 : null
+  const stepConcept = String(target?.resume_step_concept || '').trim()
+
+  if (stepNumber !== null && stepConcept) {
+    const stepLabel = t('srs.reinforcementResumeStepConcept', {
+      step: stepNumber,
+      concept: stepConcept,
+    })
+    const workspaceLabel = target?.problem_title ? `${target.problem_title} · ${stepLabel}` : stepLabel
+    return pathLabel ? `${pathLabel} · ${workspaceLabel}` : workspaceLabel
+  }
+  if (target?.problem_title && stepConcept) {
+    const conceptLabel = t('srs.reinforcementResumeWorkspaceConcept', {
+      workspace: target.problem_title,
+      concept: stepConcept,
+    })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  if (stepConcept) {
+    const conceptLabel = t('srs.reinforcementResumeConcept', { concept: stepConcept })
+    return pathLabel ? `${pathLabel} · ${conceptLabel}` : conceptLabel
+  }
+  return pathLabel || t('srs.reinforcementResumeCurrentWorkspace')
+}
+
+const formatReinforcementPath = (target: any) => {
+  const title = String(target?.resume_path_title || '').trim()
+  const kind = String(target?.resume_path_kind || '').trim()
+  const kindLabel = kind ? formatLearningPathKind(kind) : ''
+  if (kindLabel && title) return `${kindLabel} · ${title}`
+  if (title) return title
+  if (kindLabel) return kindLabel
+  return ''
+}
+
+const buildWorkspaceRoute = (entry: any) => {
+  const problemId = entry?.origin?.problem_id
+  if (!problemId) return '/reviews'
+  const resumePathId = entry?.reinforcement_target?.resume_path_id || entry?.origin?.source_path_id
+  return {
+    path: `/problems/${problemId}`,
+    query: resumePathId ? { resume_path: resumePathId } : {},
+  }
 }
 
 const fetchData = async () => {
@@ -219,7 +285,9 @@ const submitReview = async (quality: number) => {
       recall_state: response.data?.recall_state,
       recent_outcome: response.data?.recent_outcome,
       recommended_action: response.data?.recommended_action,
-      origin: card.origin || null,
+      needs_reinforcement: response.data?.needs_reinforcement,
+      reinforcement_target: response.data?.reinforcement_target,
+      origin: response.data?.origin || card.origin || null,
       model_card_id: card.model_card_id,
     }
     allSchedules.value = allSchedules.value.map((schedule: any) =>
@@ -318,6 +386,17 @@ onMounted(fetchData)
   margin: 0.75rem 0 0.85rem;
   color: var(--text-muted);
   font-size: 0.88rem;
+}
+
+.reinforcement-outcome {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  background: rgba(127, 29, 29, 0.22);
+  text-align: left;
 }
 
 .review-card h2 { margin-bottom: 1rem; }
