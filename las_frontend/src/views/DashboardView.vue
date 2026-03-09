@@ -58,14 +58,14 @@
           <router-link
             v-for="card in dueCards.slice(0, 4)"
             :key="card.schedule_id"
-            to="/srs-review"
+            to="/reviews"
             class="review-item"
           >
             <div>
               <strong>{{ card.title }}</strong>
               <p>{{ card.user_notes || t('dashboard.reviewQueueDescription') }}</p>
             </div>
-            <span class="review-badge">{{ t('dashboard.startReview') }}</span>
+            <span class="review-badge">{{ t('dashboard.openReviewHub') }}</span>
           </router-link>
         </div>
         <div v-else class="empty-block">
@@ -114,7 +114,7 @@
           <h3>{{ t('dashboard.modelLibrary') }}</h3>
           <p>{{ t('dashboard.browseModels') }}</p>
         </router-link>
-        <router-link to="/srs-review" class="action-card">
+        <router-link to="/reviews" class="action-card" data-testid="dashboard-review-action">
           <h3>{{ t('dashboard.reviewQueueTitle') }}</h3>
           <p>{{ t('dashboard.reviewQueueDescription') }}</p>
         </router-link>
@@ -149,8 +149,8 @@ const focusCard = computed(() => {
       eyebrow: t('dashboard.priorityNow'),
       title: t('dashboard.reviewQueueReady', { count: dueCards.value.length }),
       description: t('dashboard.reviewQueueDescription'),
-      cta: t('dashboard.startReview'),
-      to: '/srs-review',
+      cta: t('dashboard.openReviewHub'),
+      to: '/reviews',
       tone: 'tone-alert',
     }
   }

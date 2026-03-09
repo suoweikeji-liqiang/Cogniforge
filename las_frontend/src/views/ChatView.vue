@@ -2,7 +2,7 @@
   <div class="chat-page">
     <div class="chat-sidebar">
       <h3>{{ t('chat.conversations') }}</h3>
-      <button class="btn btn-primary new-chat" @click="newChat">
+      <button class="btn btn-secondary new-chat" @click="newChat">
         {{ t('chat.newConversation') }}
       </button>
       <div class="conversations-list">
@@ -60,7 +60,7 @@
           </label>
           <label>
             <input type="checkbox" v-model="options.suggestMigration" />
-            {{ t('chat.newConversation') }}
+            {{ t('modelCards.suggestTransfer') }}
           </label>
         </div>
         <form @submit.prevent="sendMessage">
@@ -70,7 +70,7 @@
             :placeholder="t('chat.typeMessage')"
             :disabled="loading"
           />
-          <button type="submit" class="btn btn-primary" :disabled="loading || !userInput.trim()">
+          <button type="submit" class="btn btn-secondary" :disabled="loading || !userInput.trim()">
             {{ t('chat.send') }}
           </button>
         </form>
@@ -148,7 +148,7 @@ const loadConversation = async (id: string) => {
 const newChat = async () => {
   try {
     const response = await api.post('/conversations/', {
-      title: 'New Chat',
+      title: t('chat.newConversation'),
     })
     conversations.value.unshift(response.data)
     currentConversationId.value = response.data.id

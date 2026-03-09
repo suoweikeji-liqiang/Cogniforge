@@ -1,17 +1,32 @@
 <template>
   <div class="notes">
+    <SecondarySurfaceBanner
+      test-id="notes-secondary-banner"
+      :eyebrow="t('notes.secondaryTitle')"
+      :title="t('notes.secondaryHeading')"
+      :message="t('notes.secondaryMessage')"
+      :primary-label="t('notes.captureInProblem')"
+      primary-to="/problems"
+      :secondary-label="t('nav.reviews')"
+      secondary-to="/reviews"
+    />
     <div class="header">
       <div>
         <h1>{{ t('notes.title') }}</h1>
         <p class="subtitle">{{ t('notes.archiveSubtitle') }}</p>
       </div>
-      <router-link to="/problems" class="btn-primary notes-link">
-        {{ t('notes.captureInProblem') }}
-      </router-link>
+      <div class="header-actions">
+        <router-link to="/problems" class="btn-secondary notes-link">
+          {{ t('notes.captureInProblem') }}
+        </router-link>
+        <button @click="showAdd = !showAdd" class="btn-secondary" data-testid="notes-toggle-add">
+          {{ showAdd ? t('common.close') : t('notes.addAnnotation') }}
+        </button>
+      </div>
     </div>
 
     <!-- Input Area -->
-    <div class="note-input card">
+    <div v-if="showAdd" class="note-input card" data-testid="notes-add-form">
       <textarea v-model="newContent" :placeholder="t('notes.placeholder')" class="input" rows="3"></textarea>
       <div class="input-footer">
         <div class="tags-input">
@@ -22,7 +37,7 @@
           <button @click="toggleVoice" :class="['btn-voice', { recording }]">
             {{ recording ? t('notes.stopRecording') : t('notes.startRecording') }}
           </button>
-          <button @click="saveNote" class="btn-primary" :disabled="!newContent.trim()">{{ t('common.save') }}</button>
+          <button @click="saveNote" class="btn-secondary" :disabled="!newContent.trim()">{{ t('common.save') }}</button>
         </div>
       </div>
     </div>
@@ -50,10 +65,12 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 
 const notes = ref<any[]>([])
+const showAdd = ref(false)
 const newContent = ref('')
 const tags = ref<string[]>([])
 const tagInput = ref('')
@@ -80,6 +97,7 @@ const saveNote = async () => {
   })
   newContent.value = ''
   tags.value = []
+  showAdd.value = false
   await fetchNotes()
 }
 
@@ -122,6 +140,7 @@ onUnmounted(() => {
 
 <style scoped>
 .header { margin-bottom: 1.5rem; display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 .subtitle { color: var(--text-muted); margin-top: 0.35rem; max-width: 56ch; }
 .notes-link { text-decoration: none; display: inline-flex; align-items: center; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }

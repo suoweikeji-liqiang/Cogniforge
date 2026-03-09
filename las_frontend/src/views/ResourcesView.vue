@@ -1,15 +1,27 @@
 <template>
   <div class="resources">
+    <SecondarySurfaceBanner
+      test-id="resources-secondary-banner"
+      :eyebrow="t('resources.secondaryTitle')"
+      :title="t('resources.secondaryHeading')"
+      :message="t('resources.secondaryMessage')"
+      :primary-label="t('resources.captureInProblem')"
+      primary-to="/problems"
+      :secondary-label="t('nav.reviews')"
+      secondary-to="/reviews"
+    />
     <div class="header">
       <div>
         <h1>{{ t('resources.title') }}</h1>
         <p class="subtitle">{{ t('resources.archiveSubtitle') }}</p>
       </div>
       <div class="header-actions">
-        <router-link to="/problems" class="btn-primary resources-link">
+        <router-link to="/problems" class="btn-secondary resources-link">
           {{ t('resources.captureInProblem') }}
         </router-link>
-        <button @click="showAdd = true" class="btn-primary">{{ t('common.add') }}</button>
+        <button @click="showAdd = true" class="btn-secondary" data-testid="resources-toggle-add">
+          {{ t('resources.addReference') }}
+        </button>
       </div>
     </div>
 
@@ -20,7 +32,7 @@
     />
 
     <!-- Add Form -->
-    <div v-if="showAdd" class="add-form card">
+    <div v-if="showAdd" class="add-form card" data-testid="resources-add-form">
       <input v-model="newUrl" type="url" :placeholder="t('resources.urlPlaceholder')" class="input" />
       <input v-model="newTitle" :placeholder="t('resources.titlePlaceholder')" class="input" />
       <select v-model="newType" class="input">
@@ -28,7 +40,7 @@
         <option value="video">{{ t('resources.video') }}</option>
       </select>
       <div class="form-actions">
-        <button @click="addResource" class="btn-primary" :disabled="!newUrl">{{ t('common.save') }}</button>
+        <button @click="addResource" class="btn-secondary" :disabled="!newUrl">{{ t('common.save') }}</button>
         <button @click="showAdd = false" class="btn-secondary">{{ t('common.cancel') }}</button>
       </div>
     </div>
@@ -74,6 +86,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 

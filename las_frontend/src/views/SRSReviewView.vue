@@ -1,5 +1,15 @@
 <template>
   <div class="srs-review">
+    <SecondarySurfaceBanner
+      test-id="srs-secondary-banner"
+      :eyebrow="t('srs.secondaryTitle')"
+      :title="t('srs.secondaryHeading')"
+      :message="t('srs.secondaryMessage')"
+      :primary-label="t('nav.reviews')"
+      primary-to="/reviews"
+      :secondary-label="t('graph.openModelCards')"
+      secondary-to="/model-cards"
+    />
     <h1>{{ t('srs.title') }}</h1>
 
     <div class="srs-stats">
@@ -66,6 +76,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
+import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
 
 const { t } = useI18n()
 

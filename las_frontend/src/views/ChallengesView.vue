@@ -12,7 +12,7 @@
     />
     <div class="page-header">
       <h1>{{ t('challenges.title') }}</h1>
-      <button class="btn btn-primary" @click="generateChallenge" :disabled="generating">
+      <button class="btn btn-secondary" @click="generateChallenge" :disabled="generating">
         {{ generating ? t('common.loading') : t('challenges.generate') }}
       </button>
     </div>
@@ -41,7 +41,7 @@
             rows="3"
           ></textarea>
           <button
-            class="btn btn-primary"
+            class="btn btn-secondary"
             @click="submitAnswer(c)"
             :disabled="!c._answer"
           >{{ t('common.submit') }}</button>
