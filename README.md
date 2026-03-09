@@ -15,11 +15,15 @@ This repository is not currently centered on generic chat, note-taking, or PKM-s
 
 ## Current Major Milestone
 
-### v1.1 Problem-Centered Learning Loop Core
+### v1.2 Learning Asset Evolution
 
 This is the current major milestone for the repository.
 
-It means the codebase now supports an end-to-end core learning loop with these properties:
+It means the codebase now supports a stronger end-to-end learning loop where recall and reinforcement shape durable knowledge assets, not just review queues.
+
+The milestone is functionally complete enough to close out. It does not mean every adaptive or editing workflow is finished, but it does mean the main Milestone 2 chain is present in the repository.
+
+The current codebase now has all of the following:
 
 1. `ProblemDetail` is the main place for active learning.
 2. Learning modes are explicit first-class concepts:
@@ -33,7 +37,10 @@ It means the codebase now supports an end-to-end core learning loop with these p
 4. Main path and branch path relationships are navigable and traceable.
 5. Accepted concepts can be promoted into model cards and scheduled into recall.
 6. Review items are traceable back to their problem and turn origins.
-7. Recall outcomes now feed back into workspace and model-card state as visible stability and next-action signals.
+7. Weak recall now produces durable reinforcement targets that point back to the right problem, path, and focus target.
+8. `ProblemDetail` can resume the learner into the right branch context and suggest a concrete first reinforcement action.
+9. Reinforcement starters are grounded by source-turn context, likely confusion, and focused candidate evidence when the signal is reliable.
+10. Model cards now reflect recall and reinforcement as explicit knowledge-asset state and lightweight revision-focus hints.
 
 In practical terms, the current repo already contains:
 
@@ -43,29 +50,34 @@ In practical terms, the current repo already contains:
 - branch/return learning-path support
 - model-card handoff and review scheduling from problem outcomes
 - recall origin and recall consequence display in workspace and model-card surfaces
+- path-precise reinforcement resume targeting
+- target-precise reinforcement focus and starter guidance inside `ProblemDetail`
+- explicit model-card evolution state and revision focus hints
 
 What this milestone does not mean:
 
 - the app is a generic AI chat product
 - the app is a note manager or file manager
 - recall automatically rewrites model-card content
+- the system contains a broad adaptive tutoring engine
 - the review system is fully mature or deeply adaptive
 
 ## Next Milestone
 
-### v1.2 Learning Asset Evolution
+### v1.3 Guided Knowledge Revision
 
-The next milestone should focus on tightening how learning and recall update durable knowledge assets.
+The next milestone should focus on turning the current guidance and state signals into lightweight, traceable revision workflows for durable knowledge assets.
 
 In scope for that milestone:
 
-1. make weak recall route learners back to the right problem/path context more precisely
-2. use learning and recall evidence to drive model-card evolution more deliberately
-3. improve how review priority and follow-up actions are derived from recent outcomes
+1. make revision focus hints lead to small, explicit model-card revision actions
+2. keep revision changes traceable to learning, recall, and reinforcement evidence
+3. tighten the connection between revision outcomes and subsequent review / reinforcement behavior
 
 Out of scope for that milestone:
 
 - broad new product surfaces
+- automatic model-card rewriting
 - generic analytics expansion
 - unrelated admin or tooling work
 
