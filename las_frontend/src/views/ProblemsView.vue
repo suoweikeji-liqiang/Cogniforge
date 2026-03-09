@@ -29,10 +29,14 @@
         <p>{{ problem.description || t('problems.noProblems') }}</p>
         <div class="problem-meta">
           <span class="status" :class="problem.status">{{ problem.status }}</span>
+          <span v-if="problem.learning_mode" class="mode-badge">
+            {{ problem.learning_mode === 'exploration' ? t('problemDetail.modeExploration') : t('problemDetail.modeSocratic') }}
+          </span>
           <span class="concepts" v-if="problem.associated_concepts?.length">
             {{ problem.associated_concepts.length }} {{ t('problems.concepts') }}
           </span>
         </div>
+        <div class="problem-cta">{{ t('problems.openWorkspace') }} →</div>
       </router-link>
     </div>
     
@@ -200,6 +204,8 @@ watch(searchQuery, () => {
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
 }
 
 .status {
@@ -227,6 +233,21 @@ watch(searchQuery, () => {
 .concepts {
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.mode-badge {
+  font-size: 0.72rem;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.1);
+  color: #bfdbfe;
+}
+
+.problem-cta {
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .modal-overlay {

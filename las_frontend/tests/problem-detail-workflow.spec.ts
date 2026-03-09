@@ -70,6 +70,8 @@ async function prepareAuthenticatedProblem(page: Page, request: APIRequestContex
 async function openWorkspace(page: Page, problemId: string) {
   await page.goto(`/problems/${problemId}`)
   await expect(page.getByTestId('problem-detail-workspace')).toBeVisible()
+  await expect(page.getByTestId('workspace-overview')).toBeVisible()
+  await expect(page.getByTestId('workspace-path-summary')).toBeVisible()
   await expect(page.getByTestId('current-learning-path')).toContainText(/Main path/i)
 }
 
