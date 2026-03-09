@@ -129,6 +129,16 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
     db_session.add(problem)
     await db_session.flush()
 
+    turn = ProblemTurn(
+        user_id=str(test_user.id),
+        problem_id=str(problem.id),
+        learning_mode="socratic",
+        user_text="I am still calibrating the threshold tradeoff.",
+        assistant_text="Tighten your explanation of precision versus recall.",
+    )
+    db_session.add(turn)
+    await db_session.flush()
+
     candidate = ProblemConceptCandidate(
         user_id=str(test_user.id),
         problem_id=str(problem.id),
@@ -136,6 +146,7 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
         normalized_text="precision threshold",
         source="response",
         learning_mode="socratic",
+        source_turn_id=str(turn.id),
         confidence=0.81,
         status="accepted",
         evidence_snippet="Precision changes with the decision threshold.",
@@ -179,6 +190,16 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
     )
     review_schedule = schedule_result.scalar_one_or_none()
     assert review_schedule is not None
+
+    schedules_response = await client.get("/api/srs/schedules", headers=auth_headers)
+    assert schedules_response.status_code == 200
+    schedules = schedules_response.json()
+    assert len(schedules) == 1
+    assert schedules[0]["origin"]["problem_id"] == str(problem.id)
+    assert schedules[0]["origin"]["problem_title"] == "Test Problem"
+    assert schedules[0]["origin"]["concept_text"] == "precision threshold"
+    assert schedules[0]["origin"]["source_turn_id"] == str(turn.id)
+    assert "calibrating the threshold tradeoff" in schedules[0]["origin"]["source_turn_preview"]
 
 
 @pytest.mark.asyncio

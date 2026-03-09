@@ -376,6 +376,7 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     assert len(schedules) == 1
     assert schedules[0]["title"] == "Retrieval Practice"
     assert schedules[0]["interval_days"] == 1
+    assert schedules[0]["origin"] is None
 
     from datetime import datetime, timedelta
 
@@ -392,6 +393,7 @@ async def test_srs_schedule_due_and_review_flow(client, db_session):
     assert len(due_cards) == 1
     assert due_cards[0]["schedule_id"] == schedule_id
     assert due_cards[0]["title"] == "Retrieval Practice"
+    assert due_cards[0]["origin"] is None
 
     review_response = await client.post(
         f"/api/srs/review/{schedule_id}",

@@ -61,6 +61,11 @@
                   <strong>{{ workspaceNextAction }}</strong>
                   <p>{{ learningMode === 'exploration' ? t('problemDetail.modeExplorationHint') : t('problemDetail.modeSocraticHint') }}</p>
                 </article>
+                <article class="workspace-summary-card" data-testid="workspace-review-summary">
+                  <span class="workspace-summary-label">{{ t('problemDetail.reviewLoopTitle') }}</span>
+                  <strong>{{ workspaceReviewSummary }}</strong>
+                  <p>{{ workspaceReviewDescription }}</p>
+                </article>
               </div>
 
               <div class="workspace-mode-row">
@@ -373,6 +378,7 @@
               :action-pending-id="candidateSubmittingId"
               :handoff-pending-id="handoffSubmittingId"
               :scheduled-model-card-ids="scheduledModelCardIds"
+              :scheduled-reviews-by-model-card-id="scheduledReviewsByModelCardId"
               @accept="acceptCandidate"
               @reject="rejectCandidate"
               @postpone="postponeCandidate"
@@ -454,6 +460,7 @@ const handoffSubmittingId = ref<string | null>(null)
 const pathCandidateLoading = ref(false)
 const pathCandidateSubmittingId = ref<string | null>(null)
 const scheduledModelCardIds = ref<string[]>([])
+const scheduledReviews = ref<any[]>([])
 const workspaceNotes = ref<any[]>([])
 const noteSaving = ref(false)
 const workspaceResources = ref<any[]>([])
@@ -556,12 +563,68 @@ const conceptMergeTargets = computed(() => {
     return true
   })
 })
+const scheduledReviewsByModelCardId = computed(() => {
+  return Object.fromEntries(
+    scheduledReviews.value.map((schedule: any) => [String(schedule.model_card_id), schedule])
+  )
+})
+const problemReviewEntries = computed(() => {
+  const problemId = String(route.params.id || '')
+  return [...scheduledReviews.value]
+    .filter((schedule: any) => String(schedule.origin?.problem_id || '') === problemId)
+    .sort((left: any, right: any) => String(left.next_review_at || '').localeCompare(String(right.next_review_at || '')))
+})
+const currentTurnReviewEntries = computed(() => {
+  if (!activeConceptTurnId.value) return []
+  return problemReviewEntries.value.filter(
+    (schedule: any) => String(schedule.origin?.source_turn_id || '') === String(activeConceptTurnId.value)
+  )
+})
+const latestProblemReviewEntry = computed(() => problemReviewEntries.value[0] || null)
+const pendingPathFollowUpCount = computed(() => {
+  return pathCandidates.value.filter((candidate) => ['planned', 'bookmarked'].includes(candidate.status)).length
+})
+const workspaceReviewSummary = computed(() => {
+  if (!problemReviewEntries.value.length) {
+    return t('problemDetail.workspaceReviewEmpty')
+  }
+  if (currentTurnReviewEntries.value.length) {
+    return t('problemDetail.workspaceReviewCurrentTurn', { count: currentTurnReviewEntries.value.length })
+  }
+  return t('problemDetail.workspaceReviewScheduled', { count: problemReviewEntries.value.length })
+})
+const workspaceReviewDescription = computed(() => {
+  const latest = latestProblemReviewEntry.value
+  if (!latest) {
+    if (pendingPathFollowUpCount.value) {
+      return t('problemDetail.workspaceReviewPathsPending', { count: pendingPathFollowUpCount.value })
+    }
+    return t('problemDetail.workspaceReviewEmptyHint')
+  }
+
+  const conceptLabel = latest.origin?.concept_text || latest.title || t('problemDetail.derivedConceptsTitle')
+  if (latest.last_reviewed_at) {
+    return t('problemDetail.workspaceReviewLastReviewed', {
+      concept: conceptLabel,
+      date: formatDateTime(latest.last_reviewed_at),
+    })
+  }
+  return t('problemDetail.workspaceReviewNextRecall', {
+    concept: conceptLabel,
+    date: formatDateTime(latest.next_review_at),
+  })
+})
 
 const formatConfidence = (value: number | string | undefined | null) => {
   const parsed = Number(value ?? 0)
   if (!Number.isFinite(parsed)) return '0%'
   const percent = Math.round(Math.max(0, Math.min(1, parsed)) * 100)
   return `${percent}%`
+}
+
+const formatDateTime = (dateValue: string | undefined | null) => {
+  if (!dateValue) return '-'
+  return new Date(dateValue).toLocaleString()
 }
 
 const formatLearningMode = (mode: string | undefined | null) => {
@@ -670,9 +733,11 @@ const fetchPathCandidates = async () => {
 const fetchReviewSchedules = async () => {
   try {
     const response = await api.get('/srs/schedules')
-    scheduledModelCardIds.value = (response.data || []).map((schedule: any) => String(schedule.model_card_id))
+    scheduledReviews.value = response.data || []
+    scheduledModelCardIds.value = scheduledReviews.value.map((schedule: any) => String(schedule.model_card_id))
   } catch (e) {
     console.error('Failed to fetch review schedules:', e)
+    scheduledReviews.value = []
     scheduledModelCardIds.value = []
   }
 }
@@ -746,7 +811,8 @@ const fetchProblem = async () => {
     pathCandidates.value = pathCandidatesRes.data || []
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
     socraticQuestion.value = socraticRes.data || null
-    scheduledModelCardIds.value = (schedulesRes.data || []).map((schedule: any) => String(schedule.model_card_id))
+    scheduledReviews.value = schedulesRes.data || []
+    scheduledModelCardIds.value = scheduledReviews.value.map((schedule: any) => String(schedule.model_card_id))
     workspaceNotes.value = notesRes.data || []
     workspaceResources.value = resourcesRes.data || []
   } catch (e) {
@@ -1031,14 +1097,11 @@ const openModelCard = (modelCardId: string) => {
 const scheduleCandidateReview = async (candidateId: string) => {
   handoffSubmittingId.value = candidateId
   try {
-    const response = await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/schedule-review`)
-    const modelCardId = String(response.data?.model_card?.id || '')
-    if (modelCardId && !scheduledModelCardIds.value.includes(modelCardId)) {
-      scheduledModelCardIds.value = [...scheduledModelCardIds.value, modelCardId]
-    } else if (!modelCardId) {
-      await fetchReviewSchedules()
-    }
-    await fetchConceptCandidates()
+    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/schedule-review`)
+    await Promise.all([
+      fetchReviewSchedules(),
+      fetchConceptCandidates(),
+    ])
   } catch (e) {
     console.error('Failed to schedule concept candidate review:', e)
   } finally {

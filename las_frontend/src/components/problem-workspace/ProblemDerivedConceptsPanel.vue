@@ -119,6 +119,10 @@
                 <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
                 {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
               </p>
+              <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                {{ formatReviewSchedule(candidate) }}
+              </p>
               <div class="candidate-actions">
                 <button
                   v-if="!isLinkedToModelCard(candidate)"
@@ -178,6 +182,7 @@ const props = defineProps<{
   actionPendingId?: string | null
   handoffPendingId?: string | null
   scheduledModelCardIds?: string[]
+  scheduledReviewsByModelCardId?: Record<string, any>
 }>()
 
 const emit = defineEmits<{
@@ -282,6 +287,23 @@ const isReviewScheduled = (candidate: any) => {
   )
 }
 
+const getReviewSchedule = (candidate: any) => {
+  if (!candidate?.linked_model_card_id) return null
+  return props.scheduledReviewsByModelCardId?.[String(candidate.linked_model_card_id)] || null
+}
+
+const formatReviewSchedule = (candidate: any) => {
+  const schedule = getReviewSchedule(candidate)
+  if (!schedule) return t('problemDetail.reviewScheduled')
+
+  const dateValue = schedule.last_reviewed_at || schedule.next_review_at
+  const formattedDate = dateValue ? new Date(dateValue).toLocaleString() : '-'
+  if (schedule.last_reviewed_at) {
+    return t('problemDetail.reviewScheduledLastReviewedAt', { date: formattedDate })
+  }
+  return t('problemDetail.reviewScheduledNextAt', { date: formattedDate })
+}
+
 const emitMerge = (candidateId: string) => {
   const targetConcept = selectedMergeTargets.value[candidateId]
   if (!targetConcept) return
@@ -354,6 +376,10 @@ const emitMerge = (candidateId: string) => {
 
 .candidate-meta {
   margin-top: 0.4rem;
+}
+
+.candidate-review-meta {
+  color: #bbf7d0;
 }
 
 .candidate-evidence {

@@ -40,18 +40,35 @@
         <p class="section-meta">{{ t('reviews.queueMeta') }}</p>
         <h2>{{ t('reviews.queueTitle') }}</h2>
         <div v-if="dueCards.length" class="queue-list">
-          <router-link
+          <article
             v-for="card in dueCards.slice(0, 4)"
             :key="card.schedule_id"
-            to="/srs-review"
             class="queue-item"
           >
-            <div>
-              <strong>{{ card.title }}</strong>
+            <div class="queue-copy">
+              <div class="queue-title-row">
+                <strong>{{ card.title }}</strong>
+                <span class="review-badge">{{ t('reviews.startSrs') }}</span>
+              </div>
               <p>{{ card.next_review_at ? formatDateTime(card.next_review_at) : t('reviews.reviewQueueHint') }}</p>
+              <p class="origin-line">{{ formatReviewOrigin(card) }}</p>
+              <p class="origin-line">{{ formatReviewReason(card) }}</p>
+              <p v-if="card.origin?.source_turn_preview" class="origin-preview">{{ card.origin.source_turn_preview }}</p>
             </div>
-            <span class="review-badge">{{ t('reviews.startSrs') }}</span>
-          </router-link>
+            <div class="queue-actions">
+              <router-link to="/srs-review" class="btn btn-secondary">{{ t('reviews.startSrs') }}</router-link>
+              <router-link
+                v-if="card.origin?.problem_id"
+                :to="`/problems/${card.origin.problem_id}`"
+                class="btn btn-secondary"
+              >
+                {{ t('reviews.openWorkspace') }}
+              </router-link>
+              <router-link :to="`/model-cards/${card.model_card_id}`" class="btn btn-secondary">
+                {{ t('problemDetail.openModelCard') }}
+              </router-link>
+            </div>
+          </article>
         </div>
         <div v-else class="empty-block">
           <p class="empty">{{ t('reviews.noDueReviews') }}</p>
@@ -73,7 +90,7 @@
           >
             <div>
               <strong>{{ card.title }}</strong>
-              <p>{{ card.user_notes || t('reviews.modelLifecycleHint') }}</p>
+              <p>{{ formatModelCardSupportText(card) }}</p>
             </div>
             <span class="status" :class="{ scheduled: isCardScheduled(card.id) }">
               {{ isCardScheduled(card.id) ? t('modelCards.scheduled') : t('reviews.needsReviewPlan') }}
@@ -213,13 +230,17 @@ const dueReviewCount = computed(() => dueCards.value.length)
 const scheduledCount = computed(() => schedules.value.length)
 const savedReviewCount = computed(() => reviews.value.length)
 const scheduledCardIds = computed(() => new Set(schedules.value.map((schedule: any) => schedule.model_card_id)))
+const scheduleByCardId = computed(() => {
+  return new Map(schedules.value.map((schedule: any) => [String(schedule.model_card_id), schedule]))
+})
 
 const focusCard = computed(() => {
   if (dueCards.value.length > 0) {
+    const firstDueCard = dueCards.value[0]
     return {
       eyebrow: t('reviews.focusTitle'),
       title: t('reviews.focusReady', { count: dueCards.value.length }),
-      description: t('reviews.reviewQueueHint'),
+      description: formatReviewOrigin(firstDueCard),
       cta: t('reviews.startSrs'),
       to: '/srs-review',
       tone: 'tone-alert',
@@ -251,6 +272,40 @@ const formatDate = (dateValue: string) => new Date(dateValue).toLocaleDateString
 const formatDateTime = (dateValue: string) => new Date(dateValue).toLocaleString()
 
 const isCardScheduled = (cardId: string) => scheduledCardIds.value.has(cardId)
+
+const formatReviewOrigin = (entry: any) => {
+  const origin = entry?.origin
+  if (!origin?.problem_title) {
+    return t('reviews.originUnknown')
+  }
+  const conceptLabel = origin.concept_text || entry?.title || t('problemDetail.derivedConceptsTitle')
+  return t('reviews.originFromProblem', {
+    concept: conceptLabel,
+    problem: origin.problem_title,
+  })
+}
+
+const formatReviewReason = (entry: any) => {
+  const origin = entry?.origin
+  if (origin?.learning_mode === 'exploration') return t('reviews.originModeExploration')
+  if (origin?.learning_mode === 'socratic') return t('reviews.originModeSocratic')
+  return t('reviews.originModeUnknown')
+}
+
+const formatModelCardSupportText = (card: any) => {
+  const schedule = scheduleByCardId.value.get(String(card.id))
+  if (!schedule) {
+    return card.user_notes || t('reviews.modelLifecycleHint')
+  }
+
+  const originLabel = formatReviewOrigin(schedule)
+  const reason = formatReviewReason(schedule)
+  const origin = schedule.origin?.source_turn_preview
+  if (origin) {
+    return `${originLabel}. ${reason} ${origin}`
+  }
+  return `${originLabel}. ${reason}`
+}
 
 const fetchReviewLifecycle = async () => {
   try {
@@ -498,6 +553,37 @@ onMounted(() => {
   text-decoration: none;
 }
 
+.queue-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.queue-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.queue-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.origin-line,
+.origin-preview {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.origin-preview {
+  white-space: pre-wrap;
+}
+
 .queue-item p,
 .card-item p,
 .review-content p,
@@ -618,6 +704,10 @@ onMounted(() => {
   .queue-item,
   .card-item {
     display: grid;
+  }
+
+  .queue-actions {
+    justify-content: flex-start;
   }
 }
 </style>
