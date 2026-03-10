@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import List, Dict, Any, Optional
 import asyncio
 import hashlib
@@ -63,30 +64,62 @@ class ModelOSService:
         problem_title: str,
         problem_description: str,
         existing_knowledge: List[str],
+        associated_concepts: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         knowledge_text = ", ".join(existing_knowledge) if existing_knowledge else "your current foundation"
-        first_resource = "Existing notes and prior project docs"
-        if problem_description:
-            first_resource = problem_description[:120]
+        title_text = re.sub(r"\s+", " ", str(problem_title or "")).strip()
+        description_text = re.sub(r"\s+", " ", str(problem_description or "")).strip()
+        problem_context = description_text or title_text or "the current problem"
+        first_resource = problem_context[:120] or "Existing notes and prior project docs"
+        focus_concepts = self.normalize_concepts(
+            [*(associated_concepts or []), title_text],
+            limit=3,
+        )
+        primary_focus = focus_concepts[0] if focus_concepts else (title_text or "Core concept")
+        secondary_focus = focus_concepts[1] if len(focus_concepts) > 1 else None
+        combined_text = f"{title_text} {description_text}".casefold()
+        is_comparison_focus = bool(
+            secondary_focus
+            and any(marker in combined_text for marker in ["difference between", "compare", "versus", " vs ", "tradeoff", "区别", "对比"])
+        )
+
+        if is_comparison_focus:
+            step_one_concept = f"Compare {primary_focus} and {secondary_focus}"
+            step_one_description = (
+                f"Explain how {primary_focus} differs from {secondary_focus} for '{problem_title}', "
+                f"and anchor the distinction using {knowledge_text}."
+            )
+            step_two_concept = f"Apply {primary_focus} and {secondary_focus} in one focused scenario"
+            step_two_description = (
+                f"Work through one concrete scenario from '{problem_title}', justify the tradeoff between "
+                f"{primary_focus} and {secondary_focus}, and record the next uncertainty to resolve."
+            )
+            step_two_resources = [first_resource, primary_focus, secondary_focus]
+        else:
+            step_one_concept = primary_focus
+            step_one_description = (
+                f"Explain the core idea of {primary_focus} for '{problem_title}', "
+                f"and connect it to the problem goal using {knowledge_text}."
+            )
+            step_two_concept = f"Apply {primary_focus} in a minimal example"
+            step_two_description = (
+                f"Use one concrete example from '{problem_title}' to apply {primary_focus}, "
+                "validate the result, and note the next open question."
+            )
+            step_two_resources = [first_resource, primary_focus]
 
         return [
             {
                 "step": 1,
-                "concept": "Clarify goal and constraints",
-                "description": (
-                    f"Define success criteria for '{problem_title}' and list hard constraints. "
-                    f"Anchor decisions using {knowledge_text}."
-                ),
+                "concept": step_one_concept,
+                "description": step_one_description,
                 "resources": [first_resource, "Problem statement"],
             },
             {
                 "step": 2,
-                "concept": "Create and validate a minimal solution",
-                "description": (
-                    "Build the smallest viable implementation, run one validation cycle, "
-                    "and record open risks for the next iteration."
-                ),
-                "resources": ["Current codebase", "Test checklist"],
+                "concept": step_two_concept,
+                "description": step_two_description,
+                "resources": step_two_resources,
             },
         ]
 
@@ -401,8 +434,10 @@ Rules:
         problem_description: str,
         limit: int = 8,
     ) -> List[str]:
-        combined = "\n".join([problem_title or "", problem_description or ""])
-        candidates: List[str] = [problem_title]
+        title_text = str(problem_title or "")
+        description_text = str(problem_description or "")
+        combined = "\n".join([title_text, description_text])
+        candidates: List[str] = []
 
         if self._contains_cjk(combined):
             candidates.extend(re.findall(r"[\u4e00-\u9fff]{2,12}", combined))
@@ -410,11 +445,100 @@ Rules:
             stop_words = {
                 "what", "when", "where", "which", "with", "from", "into", "this", "that",
                 "need", "want", "have", "has", "for", "and", "the", "you", "your", "about",
+                "understand", "understanding", "learn", "learning", "changes", "change",
+                "explain", "question", "problem", "goal", "how", "why", "using", "use",
+                "to", "in", "on", "at", "by", "of", "as", "is", "are", "be", "an", "a",
+                "i", "we", "me", "my", "our",
             }
-            words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", combined)
-            candidates.extend([word for word in words if word.casefold() not in stop_words])
+            low_signal_single_words = {"false", "true"}
+            combined_words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{1,}", combined)
+            filtered_words = [word for word in combined_words if word.casefold() not in stop_words]
+            word_frequencies = Counter(word.casefold() for word in filtered_words)
+
+            frequent_words: List[str] = []
+            seen_frequent = set()
+            for word in filtered_words:
+                key = word.casefold()
+                if word_frequencies[key] < 2 or key in seen_frequent or key in low_signal_single_words:
+                    continue
+                seen_frequent.add(key)
+                frequent_words.append(word)
+
+            def _extract_source_candidates(source: str) -> tuple[List[str], List[str]]:
+                source_words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{1,}", source)
+                phrases: List[str] = []
+                singles: List[str] = []
+                seen_phrases = set()
+                seen_singles = set()
+
+                for first, second in zip(source_words, source_words[1:]):
+                    if first.casefold() in stop_words or second.casefold() in stop_words:
+                        continue
+                    if second.casefold() in low_signal_single_words:
+                        continue
+                    if first.endswith("s") and not second.endswith("s") and second[0].islower():
+                        continue
+                    phrase = f"{first} {second}"
+                    key = phrase.casefold()
+                    if key in seen_phrases:
+                        continue
+                    seen_phrases.add(key)
+                    phrases.append(phrase)
+
+                for word in source_words:
+                    key = word.casefold()
+                    if (
+                        key in stop_words
+                        or key in seen_singles
+                        or key in low_signal_single_words
+                        or word_frequencies[key] >= 2
+                    ):
+                        continue
+                    seen_singles.add(key)
+                    singles.append(word)
+
+                return phrases, singles
+
+            description_phrases, description_singles = _extract_source_candidates(description_text)
+            title_phrases, title_singles = _extract_source_candidates(title_text)
+            candidates.extend(frequent_words)
+            if frequent_words:
+                candidates.extend(description_phrases)
+                candidates.extend(description_singles)
+                candidates.extend(title_phrases)
+                candidates.extend(title_singles)
+            else:
+                candidates.extend(description_singles)
+                candidates.extend(description_phrases)
+                candidates.extend(title_singles)
+                candidates.extend(title_phrases)
+
+        if not candidates and problem_title:
+            candidates.append(problem_title)
 
         return self.normalize_concepts(candidates, limit=limit)
+
+    def build_problem_concepts_local(
+        self,
+        problem_title: str,
+        problem_description: str,
+        seed_concepts: Optional[List[str]] = None,
+        max_concepts: int = 8,
+    ) -> List[str]:
+        normalized_limit = max(3, min(max_concepts, 12))
+        seed = self.normalize_concepts(seed_concepts or [], limit=normalized_limit)
+        if len(seed) >= normalized_limit:
+            return seed
+
+        inferred = self._fallback_concepts_from_problem(
+            problem_title=problem_title,
+            problem_description=problem_description,
+            limit=normalized_limit,
+        )
+        concepts = self.normalize_concepts(seed + inferred, limit=normalized_limit)
+        if concepts:
+            return concepts
+        return self.normalize_concepts([problem_title], limit=max(1, normalized_limit))
 
     async def extract_related_concepts(
         self,
@@ -1029,11 +1153,13 @@ Return as JSON array:
         problem_title: str,
         problem_description: str,
         existing_knowledge: List[str],
+        associated_concepts: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         language_instruction = self._build_language_instruction(
             problem_title,
             problem_description,
             ", ".join(existing_knowledge or []),
+            ", ".join(associated_concepts or []),
             json_mode=True,
         )
         prompt = f"""Generate an optimized learning path for:
@@ -1041,6 +1167,7 @@ Return as JSON array:
 Problem/Goal: {problem_title}
 Description: {problem_description}
 User's Existing Knowledge: {', '.join(existing_knowledge)}
+Associated Concepts: {', '.join(associated_concepts or []) or 'N/A'}
 
 Create a step-by-step learning path that:
 1. Builds on existing knowledge
@@ -1076,6 +1203,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
         problem_title: str,
         problem_description: str,
         existing_knowledge: List[str],
+        associated_concepts: Optional[List[str]] = None,
         timeout_seconds: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         effective_timeout = timeout_seconds or get_settings().LEARNING_PATH_TIMEOUT_SECONDS
@@ -1085,6 +1213,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
                     problem_title=problem_title,
                     problem_description=problem_description,
                     existing_knowledge=existing_knowledge,
+                    associated_concepts=associated_concepts,
                 ),
                 timeout=max(1, int(effective_timeout)),
             )
@@ -1099,6 +1228,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
             problem_title=problem_title,
             problem_description=problem_description,
             existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
         )
     
     async def generate_feedback(

@@ -667,7 +667,7 @@ async def test_admin_users_and_llm_config_flow(client, db_session, monkeypatch):
             self.chat = self
             self.completions = self
 
-        def create(self, model, messages, max_tokens):
+        def create(self, model, messages, max_tokens, timeout):
             assert self.api_key == "super-secret-key"
             assert self.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
             assert model == "qwen-plus"
@@ -787,6 +787,67 @@ async def test_password_reset_flow(client, db_session, monkeypatch):
         data={"username": "tester", "password": "new-secret123"},
     )
     assert relogin_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_admin_llm_provider_test_returns_timeout_error(client, db_session, monkeypatch):
+    import openai
+    import time
+
+    from app.api.routes import admin_llm
+
+    tokens = await register_and_login(client)
+    await promote_user_to_admin(db_session)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    create_provider_response = await client.post(
+        "/api/admin/llm-config/providers",
+        json={
+            "name": "Qwen Timeout",
+            "provider_type": "qwen",
+            "api_key": "super-secret-key",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "enabled": True,
+            "priority": 1,
+        },
+        headers=headers,
+    )
+    assert create_provider_response.status_code == 200
+    provider_id = create_provider_response.json()["id"]
+
+    create_model_response = await client.post(
+        "/api/admin/llm-config/models",
+        json={
+            "provider_id": provider_id,
+            "model_id": "qwen-plus",
+            "model_name": "Qwen Plus",
+            "enabled": True,
+            "is_default": True,
+        },
+        headers=headers,
+    )
+    assert create_model_response.status_code == 200
+
+    class SlowOpenAI:
+        def __init__(self, api_key, base_url=None):
+            self.chat = self
+            self.completions = self
+
+        def create(self, model, messages, max_tokens, timeout):
+            time.sleep(0.05)
+            return {"ok": True}
+
+    monkeypatch.setattr(admin_llm, "_provider_test_timeout_seconds", lambda: 0.01)
+    monkeypatch.setattr(openai, "OpenAI", SlowOpenAI)
+
+    provider_test_response = await client.get(
+        f"/api/admin/llm-config/providers/{provider_id}/test",
+        headers=headers,
+    )
+    assert provider_test_response.status_code == 200
+    body = provider_test_response.json()
+    assert body["status"] == "error"
+    assert "timed out" in body["message"].lower()
 
 
 @pytest.mark.asyncio

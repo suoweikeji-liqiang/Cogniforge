@@ -111,6 +111,7 @@
     "testConnection": "Test Connection",
     "testSuccess": "Connection successful",
     "testFailed": "Connection failed",
+    "testTimeout": "Connection test timed out. Check model, base URL, or network.",
     "addModel": "Add Model",
     "editModel": "Edit Model",
     "deleteModel": "Delete Model",

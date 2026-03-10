@@ -157,6 +157,11 @@ const handleLogin = async () => {
   font-size: 0.9rem;
 }
 
+.remember-option input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .remember-hint {
   margin: 0;
   color: var(--text-muted);

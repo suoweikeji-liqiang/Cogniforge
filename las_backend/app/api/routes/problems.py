@@ -63,6 +63,14 @@ router = APIRouter(prefix="/problems", tags=["Problems"])
 settings = get_settings()
 
 
+def _problem_create_concept_timeout_seconds() -> float:
+    return float(max(2, min(int(settings.LLM_REQUEST_TIMEOUT_SECONDS), 4)))
+
+
+def _problem_create_path_timeout_seconds() -> float:
+    return float(max(4, min(int(settings.LEARNING_PATH_TIMEOUT_SECONDS), 7)))
+
+
 def _resolve_current_step(learning_path: Optional[LearningPath]) -> tuple[int, Optional[dict]]:
     if not learning_path or not isinstance(learning_path.path_data, list) or not learning_path.path_data:
         return 0, None
@@ -366,13 +374,121 @@ def _infer_exploration_answer_type(question: str) -> str:
     return "concept_explanation"
 
 
+def _sanitize_question_concept_phrase(raw: Optional[str]) -> str:
+    phrase = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n,.;:!?\"'()[]{}")
+    phrase = re.sub(r"^(the|a|an)\s+", "", phrase, flags=re.IGNORECASE)
+    return phrase.strip()
+
+
+def _extract_comparison_targets_from_question(question: str) -> List[str]:
+    text = str(question or "").strip()
+    if not text:
+        return []
+
+    patterns = [
+        r"(?:difference between|compare)\s+(?P<left>.+?)\s+(?:and|with|to|vs\.?|versus)\s+(?P<right>.+?)(?:\s+when\b|\s+if\b|\s+under\b|\s+for\b|[?.!,]|$)",
+        r"(?P<left>.+?)\s+(?:vs\.?|versus)\s+(?P<right>.+?)(?:\s+when\b|\s+if\b|\s+under\b|\s+for\b|[?.!,]|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        left = _sanitize_question_concept_phrase(match.group("left"))
+        right = _sanitize_question_concept_phrase(match.group("right"))
+        concepts = model_os_service.normalize_concepts([left, right], limit=2)
+        if len(concepts) >= 2:
+            return concepts
+    return []
+
+
+def _find_question_concept_mentions(question: str, candidate_concepts: List[str]) -> List[str]:
+    question_key = model_os_service.normalize_concept_key(question)
+    question_text = str(question or "")
+    matches: List[tuple[int, int, str]] = []
+    for concept in model_os_service.normalize_concepts(candidate_concepts, limit=10):
+        concept_key = model_os_service.normalize_concept_key(concept)
+        if not concept_key or concept_key not in question_key:
+            continue
+        position = question_text.casefold().find(str(concept).casefold())
+        matches.append((position if position >= 0 else 10_000, -len(concept), concept))
+    matches.sort(key=lambda item: (item[0], item[1]))
+    return [concept for _position, _neg_len, concept in matches]
+
+
+def _derive_question_concepts(
+    *,
+    question: str,
+    answer_type: str,
+    candidate_concepts: List[str],
+) -> List[str]:
+    if answer_type == "comparison":
+        extracted = _extract_comparison_targets_from_question(question)
+        if extracted:
+            return extracted
+
+    mentioned = _find_question_concept_mentions(question, candidate_concepts)
+    if answer_type == "comparison" and len(mentioned) >= 2:
+        return model_os_service.normalize_concepts(mentioned[:2], limit=2)
+    if answer_type != "comparison" and mentioned:
+        return model_os_service.normalize_concepts(mentioned[:1], limit=1)
+    return []
+
+
+def _filter_grounded_ask_concepts(
+    *,
+    question: str,
+    answer: str,
+    ask_concepts: List[str],
+    question_concepts: List[str],
+    step_concept: str,
+) -> List[str]:
+    concepts = model_os_service.normalize_concepts(ask_concepts, limit=8)
+    if not question_concepts:
+        return concepts
+
+    grounded_text = model_os_service.normalize_concept_key(f"{question}\n{answer}")
+    step_key = model_os_service.normalize_concept_key(step_concept)
+    filtered: List[str] = []
+    for concept in concepts:
+        concept_key = model_os_service.normalize_concept_key(concept)
+        if not concept_key:
+            continue
+        if concept_key == step_key:
+            continue
+        if concept_key in grounded_text:
+            filtered.append(concept)
+    return filtered
+
+
+def _pick_secondary_concept(
+    *,
+    primary: str,
+    answered_concepts: List[str],
+    related_concepts: List[str],
+    step_concept: str,
+) -> str:
+    primary_key = model_os_service.normalize_concept_key(primary)
+    for concept in [*answered_concepts[1:], *related_concepts, step_concept]:
+        concept_key = model_os_service.normalize_concept_key(concept)
+        if concept_key and concept_key != primary_key:
+            return concept
+    return step_concept or primary
+
+
 def _select_answered_concepts(
     *,
     question: str,
     step_concept: str,
     inferred_concepts: List[str],
     answer_type: str,
+    question_concepts: Optional[List[str]] = None,
 ) -> List[str]:
+    prioritized = model_os_service.normalize_concepts(question_concepts or [], limit=2)
+    if answer_type == "comparison" and len(prioritized) >= 2:
+        return prioritized[:2]
+    if answer_type != "comparison" and prioritized:
+        return prioritized[:1]
+
     concept_pool = model_os_service.normalize_concepts(
         [*inferred_concepts, step_concept],
         limit=6,
@@ -426,10 +542,11 @@ def _build_exploration_next_actions(
 ) -> List[str]:
     cjk = _contains_cjk_text(question, step_concept, *answered_concepts, *related_concepts)
     primary = answered_concepts[0] if answered_concepts else step_concept or "this concept"
-    secondary = (
-        answered_concepts[1]
-        if len(answered_concepts) > 1
-        else (related_concepts[0] if related_concepts else step_concept or primary)
+    secondary = _pick_secondary_concept(
+        primary=primary,
+        answered_concepts=answered_concepts,
+        related_concepts=related_concepts,
+        step_concept=step_concept or primary,
     )
 
     if cjk:
@@ -516,10 +633,11 @@ def _build_exploration_path_suggestions(
 ) -> List[dict]:
     cjk = _contains_cjk_text(question, step_concept, *answered_concepts, *related_concepts)
     primary = answered_concepts[0] if answered_concepts else step_concept or "this concept"
-    secondary = (
-        answered_concepts[1]
-        if len(answered_concepts) > 1
-        else (related_concepts[0] if related_concepts else step_concept or primary)
+    secondary = _pick_secondary_concept(
+        primary=primary,
+        answered_concepts=answered_concepts,
+        related_concepts=related_concepts,
+        step_concept=step_concept or primary,
     )
 
     suggestions: List[dict] = []
@@ -871,7 +989,7 @@ async def _ensure_concept_record(
             Concept.normalized_name == normalized,
         )
     )
-    concept = concept_result.scalar_one_or_none()
+    concept = concept_result.scalars().first()
     if concept is None:
         concept = Concept(
             user_id=user_id,
@@ -889,7 +1007,7 @@ async def _ensure_concept_record(
             ConceptAlias.normalized_alias == normalized,
         )
     )
-    if alias_result.scalar_one_or_none() is None:
+    if alias_result.scalars().first() is None:
         db.add(
             ConceptAlias(
                 concept_id=concept.id,
@@ -1460,12 +1578,31 @@ async def create_problem(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    associated_concepts = await model_os_service.build_problem_concepts_resilient(
+    max_concepts = 8
+    seed_concepts = model_os_service.normalize_concepts(problem_data.associated_concepts or [], limit=max_concepts)
+    fallback_concepts = model_os_service.build_problem_concepts_local(
         problem_title=problem_data.title,
         problem_description=problem_data.description or "",
         seed_concepts=problem_data.associated_concepts,
-        max_concepts=8,
+        max_concepts=max_concepts,
     )
+    try:
+        associated_concepts = await asyncio.wait_for(
+            model_os_service.build_problem_concepts_resilient(
+                problem_title=problem_data.title,
+                problem_description=problem_data.description or "",
+                seed_concepts=problem_data.associated_concepts,
+                max_concepts=max_concepts,
+            ),
+            timeout=_problem_create_concept_timeout_seconds(),
+        )
+    except asyncio.TimeoutError:
+        associated_concepts = fallback_concepts
+    except Exception:
+        associated_concepts = fallback_concepts
+    associated_concepts = model_os_service.normalize_concepts(associated_concepts or fallback_concepts, limit=max_concepts)
+    if not associated_concepts:
+        associated_concepts = ["Core concept"]
 
     db_problem = Problem(
         user_id=current_user.id,
@@ -1487,12 +1624,39 @@ async def create_problem(
     await db.refresh(db_problem)
     
     existing_knowledge = []
-    learning_path_data = await model_os_service.generate_learning_path_resilient(
-        problem_title=problem_data.title,
-        problem_description=problem_data.description or "",
-        existing_knowledge=existing_knowledge,
-        timeout_seconds=settings.LEARNING_PATH_TIMEOUT_SECONDS,
-    )
+    path_timeout = _problem_create_path_timeout_seconds()
+    try:
+        learning_path_data = await asyncio.wait_for(
+            model_os_service.generate_learning_path_resilient(
+                problem_title=problem_data.title,
+                problem_description=problem_data.description or "",
+                existing_knowledge=existing_knowledge,
+                associated_concepts=associated_concepts,
+                timeout_seconds=path_timeout,
+            ),
+            timeout=max(path_timeout + 1, 5),
+        )
+    except asyncio.TimeoutError:
+        learning_path_data = model_os_service._build_fallback_learning_path(
+            problem_title=problem_data.title,
+            problem_description=problem_data.description or "",
+            existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
+        )
+    except Exception:
+        learning_path_data = model_os_service._build_fallback_learning_path(
+            problem_title=problem_data.title,
+            problem_description=problem_data.description or "",
+            existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
+        )
+    if not learning_path_data:
+        learning_path_data = model_os_service._build_fallback_learning_path(
+            problem_title=problem_data.title,
+            problem_description=problem_data.description or "",
+            existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
+        )
     
     db_learning_path = LearningPath(
         problem_id=db_problem.id,
@@ -2585,7 +2749,7 @@ async def merge_problem_concept_candidate(
                 Concept.normalized_name == target_key,
             )
         )
-        target_exists = concept_result.scalar_one_or_none() is not None
+        target_exists = concept_result.scalars().first() is not None
     if not target_exists:
         alias_result = await db.execute(
             select(ConceptAlias)
@@ -2595,7 +2759,7 @@ async def merge_problem_concept_candidate(
                 ConceptAlias.normalized_alias == target_key,
             )
         )
-        target_exists = alias_result.scalar_one_or_none() is not None
+        target_exists = alias_result.scalars().first() is not None
     if not target_exists:
         raise HTTPException(status_code=400, detail="Merge target must already exist")
 
@@ -2605,7 +2769,7 @@ async def merge_problem_concept_candidate(
             Concept.normalized_name == target_key,
         )
     )
-    target_concept = target_concept_result.scalar_one_or_none()
+    target_concept = target_concept_result.scalars().first()
     if target_concept is None:
         alias_concept_result = await db.execute(
             select(Concept)
@@ -2615,7 +2779,7 @@ async def merge_problem_concept_candidate(
                 ConceptAlias.normalized_alias == target_key,
             )
         )
-        target_concept = alias_concept_result.scalar_one_or_none()
+        target_concept = alias_concept_result.scalars().first()
     if target_concept is None:
         target_concept = await _ensure_concept_record(
             db=db,
@@ -2635,7 +2799,7 @@ async def merge_problem_concept_candidate(
             ConceptAlias.normalized_alias == candidate.normalized_text,
         )
     )
-    if alias_result.scalar_one_or_none() is None:
+    if alias_result.scalars().first() is None:
         db.add(
             ConceptAlias(
                 concept_id=target_concept.id,
@@ -3195,6 +3359,23 @@ Learner question: {payload.question}
     await db.flush()
 
     evidence_snippet = _build_concept_evidence_snippet(payload.question, answer)
+    answer_type = _normalize_exploration_answer_type(_infer_exploration_answer_type(payload.question))
+    question_concepts = _derive_question_concepts(
+        question=payload.question,
+        answer_type=answer_type,
+        candidate_concepts=[*(problem.associated_concepts or []), *ask_concepts, step_concept],
+    )
+    filtered_ask_concepts = _filter_grounded_ask_concepts(
+        question=payload.question,
+        answer=answer,
+        ask_concepts=ask_concepts,
+        question_concepts=question_concepts,
+        step_concept=step_concept,
+    )
+    candidate_concepts = model_os_service.normalize_concepts(
+        [*question_concepts, *filtered_ask_concepts],
+        limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
+    ) or [step_concept]
     accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
         db=db,
         user_id=str(current_user.id),
@@ -3202,7 +3383,7 @@ Learner question: {payload.question}
         learning_mode=learning_mode,
         source_turn_id=str(db_turn.id),
         source_path_id=str(learning_path.id) if learning_path else None,
-        inferred_concepts=ask_concepts + [step_concept],
+        inferred_concepts=candidate_concepts,
         source="ask",
         anchor_concept=step_concept,
         user_text=f"{payload.question}\n{answer}",
@@ -3210,9 +3391,8 @@ Learner question: {payload.question}
         evidence_snippet=evidence_snippet,
     )
     await db.flush()
-    answer_type = _normalize_exploration_answer_type(_infer_exploration_answer_type(payload.question))
     concept_pool = model_os_service.normalize_concepts(
-        [*ask_concepts, *accepted_concepts, *pending_concepts],
+        [*question_concepts, *filtered_ask_concepts, *accepted_concepts, *pending_concepts],
         limit=8,
     )
     answered_concepts = _select_answered_concepts(
@@ -3220,6 +3400,7 @@ Learner question: {payload.question}
         step_concept=step_concept,
         inferred_concepts=concept_pool,
         answer_type=answer_type,
+        question_concepts=question_concepts,
     )
     related_concepts = _select_related_concepts(
         answered_concepts=answered_concepts,

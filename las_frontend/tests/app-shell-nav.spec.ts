@@ -120,6 +120,35 @@ test('standalone chat is marked as a secondary legacy surface', async ({ page, r
   await expect(page.getByRole('link', { name: /Go to Problems/i })).toBeVisible()
 })
 
+test('login and register pages keep auth controls compact and avoid shell overflow', async ({ page }) => {
+  // Contract Assertions:
+  // - Critical Path: login/signup must remain usable as an entry point into the learning loop.
+  // - Base Button (.btn): primary auth submit buttons remain visible and operable on first load.
+  await page.goto('/login')
+
+  await expect(page.getByRole('heading', { name: /Login|登录/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Login|登录/i })).toBeVisible()
+
+  const loginOverflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+  expect(loginOverflow).toBeLessThanOrEqual(4)
+
+  const checkboxes = page.locator('input[type="checkbox"]')
+  await expect(checkboxes).toHaveCount(2)
+  for (let index = 0; index < 2; index += 1) {
+    const box = await checkboxes.nth(index).boundingBox()
+    expect(box?.width ?? 0).toBeLessThan(24)
+    expect(box?.height ?? 0).toBeLessThan(24)
+  }
+
+  await page.goto('/register')
+
+  await expect(page.getByRole('heading', { name: /Register|注册/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Register|注册/i })).toBeVisible()
+
+  const registerOverflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+  expect(registerOverflow).toBeLessThanOrEqual(4)
+})
+
 test('reviews page centers model-card review and evolution work', async ({ page, request }) => {
   const tokens = await authenticate(page, request)
   const card = await createModelCard(request, tokens.access_token, 'Review Hub Card')

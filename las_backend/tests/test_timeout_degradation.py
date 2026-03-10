@@ -10,6 +10,51 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_problem_creation_degrades_to_local_fallback_under_llm_timeouts(client: AsyncClient, auth_headers: dict, monkeypatch):
+    from app.api.routes import problems as problem_routes
+    from app.services.model_os_service import model_os_service
+
+    async def slow_concepts(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        return ["late concept"]
+
+    async def slow_learning_path(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        return []
+
+    monkeypatch.setattr(problem_routes, "_problem_create_concept_timeout_seconds", lambda: 0.01)
+    monkeypatch.setattr(problem_routes, "_problem_create_path_timeout_seconds", lambda: 0.01)
+    monkeypatch.setattr(model_os_service, "build_problem_concepts_resilient", slow_concepts)
+    monkeypatch.setattr(model_os_service, "generate_learning_path_resilient", slow_learning_path)
+
+    response = await client.post(
+        "/api/problems/",
+        headers=auth_headers,
+        json={
+            "title": "Metrics Launch Test",
+            "description": "Understand precision and recall tradeoffs.",
+            "associated_concepts": [],
+            "learning_mode": "exploration",
+        },
+    )
+
+    assert response.status_code == 201
+    problem = response.json()
+    associated_concepts = [item.lower() for item in problem["associated_concepts"]]
+    assert "precision" in associated_concepts
+    assert "recall" in associated_concepts
+
+    path_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=auth_headers,
+    )
+    assert path_response.status_code == 200
+    path = path_response.json()
+    assert path["path_data"]
+    assert "precision" in path["path_data"][0]["concept"].lower()
+
+
+@pytest.mark.asyncio
 async def test_llm_timeout_triggers_fallback(client: AsyncClient, auth_headers: dict, db_session):
     """When LLM times out, should use fallback and record reason"""
     problem_response = await client.post(
