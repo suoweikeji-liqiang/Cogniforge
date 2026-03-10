@@ -2,7 +2,7 @@ gsd_state_version: 1.2
 milestone: v1.2
 milestone_name: learning-asset-evolution
 status: functionally-complete
-last_updated: "2026-03-09T00:00:00Z"
+last_updated: "2026-03-10T00:00:00Z"
 ---
 
 # Project State
@@ -38,6 +38,8 @@ This means:
   - source/error/evidence-aware starters
   - model-card evolution state
   - revision focus hints
+  - real-provider timeout degradation on create-problem and provider-test paths
+  - auth entry layout hardening for login/register surfaces
 
 ## Current Known Gaps
 

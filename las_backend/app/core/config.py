@@ -22,16 +22,18 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 300
     LOGIN_RATE_LIMIT_BLOCK_SECONDS: int = 600
     
-    # LLM - OpenAI
+    # Legacy env-based provider fields kept for compatibility.
+    # Primary runtime provider configuration now lives in
+    # Admin -> LLM Configuration and is stored in the database.
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     
-    # LLM - Anthropic
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
     
-    # Default LLM Provider
     DEFAULT_LLM_PROVIDER: str = "openai"
+
+    # LLM runtime controls
     LLM_REQUEST_TIMEOUT_SECONDS: int = 25
     LEARNING_PATH_TIMEOUT_SECONDS: int = 8
     PROBLEM_AUTO_ADVANCE_MODE: str = "balanced"

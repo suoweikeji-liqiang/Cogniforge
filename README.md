@@ -85,7 +85,7 @@ Out of scope for that milestone:
 
 ## Tech Stack
 
-- **Backend**: FastAPI + LLM (OpenAI/Anthropic) + PostgreSQL
+- **Backend**: FastAPI + multi-provider LLM integrations (OpenAI-compatible / Qwen, Anthropic, Ollama) + PostgreSQL
 - **Frontend**: Vue3 + Pinia + Vue Router
 
 ## Quick Start
@@ -93,16 +93,38 @@ Out of scope for that milestone:
 ### Docker
 
 ```bash
-docker compose up --build
+cp .env.example .env
+# Edit .env before server deploy:
+# - SECRET_KEY
+# - POSTGRES_PASSWORD
+# - BACKEND_CORS_ORIGINS
+# - FRONTEND_URL
+# Optional:
+# - FRONTEND_PORT=80
+docker compose up -d --build
 ```
 
 默认容器环境现在使用 PostgreSQL（`pgvector/pgvector` 镜像）作为数据库。
+后端容器启动时会先自动执行 `alembic upgrade head`，然后再启动 API，所以直接 `docker compose up -d` 不会漏掉 schema migration。
+
+部署前至少需要准备根目录 `.env`：
+
+```env
+APP_ENV=production
+SECRET_KEY=replace-with-a-long-random-secret
+POSTGRES_PASSWORD=replace-with-a-strong-password
+BACKEND_CORS_ORIGINS=https://your-domain.example
+FRONTEND_URL=https://your-domain.example
+FRONTEND_PORT=80
+```
 
 ### Deploy Script
 
 生产环境可直接使用根目录的 `deploy.sh`：
 
 ```bash
+cp .env.example .env
+# edit .env first
 ./deploy.sh
 ```
 
@@ -123,12 +145,14 @@ docker compose up --build
 ```bash
 cd las_backend
 cp .env.example .env
-# Edit .env with your configuration (LLM API keys, DATABASE_URL if needed)
+# Edit .env with your runtime configuration (DATABASE_URL / SECRET_KEY / CORS)
 pip install -r requirements.txt
 alembic upgrade head
-python3 scripts/backfill_model_card_embeddings.py
 uvicorn app.main:app --reload
 ```
+
+LLM provider credentials are no longer expected in backend `.env`.
+Configure provider API keys, base URLs, and default models in `Admin -> LLM Configuration`.
 
 如需把旧 SQLite 数据迁移到 PostgreSQL：
 
@@ -166,7 +190,9 @@ npm run dev
 
 ## Environment Variables
 
-See `.env.example` for all configuration options.
+- Docker / deploy variables: root `.env.example`
+- Local backend variables: `las_backend/.env.example`
+- Provider credentials: `Admin -> LLM Configuration` (stored in DB, not in `.env`)
 
 ## API Documentation
 

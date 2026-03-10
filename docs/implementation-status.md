@@ -1,6 +1,6 @@
 # Implementation Status
 
-**Last updated:** 2026-03-09
+**Last updated:** 2026-03-10
 
 ## Current Major Milestone
 
@@ -76,6 +76,20 @@ The current learning flow can already produce:
 
 - `ModelCardDetail` now shows a lightweight revision focus hint.
 - The hint uses current recall / reinforcement / evolution signals to point toward a first revision direction without rewriting the card automatically.
+
+### 10. Runtime Hardening For Real Providers
+
+- Real-provider timeout behavior has been tightened in the highest-value production paths:
+  - admin provider test
+  - create-problem concept extraction
+  - create-problem learning-path generation
+- These paths now degrade under bounded budgets instead of hanging indefinitely or surfacing inconsistent 500s.
+- Local fallback concept extraction has been improved so degraded create-problem output stays concept-oriented instead of collapsing to title-only output.
+
+### 11. Auth Entry Layout Hardening
+
+- Login and register entry layouts were tightened to fit the current app shell more reliably.
+- This was a UI hardening pass, not a new product surface.
 
 ## What Is Still Thin
 

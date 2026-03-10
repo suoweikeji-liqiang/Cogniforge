@@ -1,20 +1,18 @@
-version: '3.8'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: las-postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=las_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=${POSTGRES_DB:-las_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d las_db"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,14 +23,24 @@ services:
       dockerfile: Dockerfile
     container_name: las-backend
     restart: unless-stopped
+    env_file:
+      - ${COMPOSE_ENV_FILE:-.env}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/las_db
+      - APP_ENV=${APP_ENV:-production}
+      - SECRET_KEY=${SECRET_KEY:-change-me-to-a-long-random-secret}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-las_db}
       - AUTO_CREATE_TABLES=false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
 
   frontend:
     build:
@@ -41,9 +49,10 @@ services:
     container_name: las-frontend
     restart: unless-stopped
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

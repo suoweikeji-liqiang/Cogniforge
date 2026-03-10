@@ -13,7 +13,7 @@ set -Eeuo pipefail
 APP_DIR="/data/Cogniforge"
 BRANCH="main"
 BACKUP_MODE="auto"
-DB_VOLUME_LOGICAL="las_db_data"
+DB_VOLUME_LOGICAL="postgres_data"
 POSTGRES_SERVICE="postgres"
 POSTGRES_DB="las_db"
 POSTGRES_USER="postgres"
@@ -50,7 +50,7 @@ Options:
   --branch <name>           Git branch to deploy (default: main)
   --services <list>         Comma-separated service list (default: backend,frontend)
   --backup-mode <mode>      auto, postgres, or sqlite (default: auto)
-  --db-volume <name>        Logical DB volume name in compose (default: las_db_data)
+  --db-volume <name>        Logical DB volume name in compose (default: postgres_data)
   --pg-service <name>       PostgreSQL service name in compose (default: postgres)
   --pg-db <name>            PostgreSQL database name (default: las_db)
   --pg-user <name>          PostgreSQL user (default: postgres)
@@ -314,7 +314,7 @@ backup_postgres_db() {
 
   log "Backing up PostgreSQL database '$POSTGRES_DB' from service '$POSTGRES_SERVICE' -> $backup_path"
   dc exec -T "$POSTGRES_SERVICE" sh -lc \
-    "PGPASSWORD=\$POSTGRES_PASSWORD pg_dump -U \"$POSTGRES_USER\" \"$POSTGRES_DB\"" \
+    'PGPASSWORD="${POSTGRES_PASSWORD:?}" pg_dump -U "${POSTGRES_USER:?}" "${POSTGRES_DB:?}"' \
     | gzip > "$backup_path"
 }
 
@@ -487,6 +487,7 @@ restart_services() {
 
 wait_backend_health() {
   local max_retry=30
+  local backend_port
   local i
 
   if ! printf '%s\n' "${SERVICES[@]}" | grep -qx "backend"; then
@@ -498,9 +499,12 @@ wait_backend_health() {
     return 0
   fi
 
-  log "Waiting for backend health endpoint..."
+  backend_port="$(dc port backend 8000 2>/dev/null | awk -F: 'END{print $NF}')"
+  backend_port="${backend_port:-8000}"
+
+  log "Waiting for backend health endpoint on port ${backend_port}..."
   for ((i=1; i<=max_retry; i++)); do
-    if curl -fsS "http://127.0.0.1:8000/health" >/dev/null 2>&1; then
+    if curl -fsS "http://127.0.0.1:${backend_port}/health" >/dev/null 2>&1; then
       log "Backend health check passed."
       return 0
     fi
@@ -536,6 +540,7 @@ main() {
   [[ -d "$APP_DIR" ]] || die "App dir not found: $APP_DIR"
   cd "$APP_DIR"
   [[ -f "docker-compose.yml" ]] || die "docker-compose.yml not found in $APP_DIR"
+  [[ -f ".env" ]] || die ".env not found in $APP_DIR. Copy .env.example to .env and set deployment secrets before deploy."
 
   if [[ "$SKIP_PULL" -eq 0 ]]; then
     check_repo_clean
