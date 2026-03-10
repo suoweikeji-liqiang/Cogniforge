@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 package-lock.json
+!las_frontend/package-lock.json
 
 # Python
 __pycache__/
