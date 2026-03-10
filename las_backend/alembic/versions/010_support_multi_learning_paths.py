@@ -15,7 +15,24 @@ branch_labels = None
 depends_on = None
 
 
+def _drop_learning_paths_problem_id_unique_constraint() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    constraint_name = next(
+        (
+            constraint["name"]
+            for constraint in inspector.get_unique_constraints("learning_paths")
+            if constraint.get("column_names") == ["problem_id"] and constraint.get("name")
+        ),
+        None,
+    )
+    if constraint_name:
+        op.drop_constraint(constraint_name, "learning_paths", type_="unique")
+
+
 def upgrade():
+    _drop_learning_paths_problem_id_unique_constraint()
+
     with op.batch_alter_table("learning_paths") as batch_op:
         batch_op.add_column(sa.Column("title", sa.String(length=200), nullable=True))
         batch_op.add_column(sa.Column("kind", sa.String(length=20), nullable=False, server_default="main"))
@@ -24,7 +41,6 @@ def upgrade():
         batch_op.add_column(sa.Column("return_step_id", sa.Integer(), nullable=True))
         batch_op.add_column(sa.Column("branch_reason", sa.Text(), nullable=True))
         batch_op.add_column(sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()))
-        batch_op.drop_constraint(None, type_="unique")
         batch_op.create_index(op.f("ix_learning_paths_problem_id"), ["problem_id"], unique=False)
         batch_op.create_index(op.f("ix_learning_paths_kind"), ["kind"], unique=False)
         batch_op.create_index(op.f("ix_learning_paths_parent_path_id"), ["parent_path_id"], unique=False)
@@ -67,7 +83,7 @@ def downgrade():
         batch_op.drop_index(op.f("ix_learning_paths_parent_path_id"))
         batch_op.drop_index(op.f("ix_learning_paths_kind"))
         batch_op.drop_index(op.f("ix_learning_paths_problem_id"))
-        batch_op.create_unique_constraint(None, ["problem_id"])
+        batch_op.create_unique_constraint("uq_learning_paths_problem_id", ["problem_id"])
         batch_op.drop_column("is_active")
         batch_op.drop_column("branch_reason")
         batch_op.drop_column("return_step_id")
