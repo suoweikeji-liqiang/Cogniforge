@@ -30,6 +30,21 @@ def _drop_learning_paths_problem_id_unique_constraint() -> None:
         op.drop_constraint(constraint_name, "learning_paths", type_="unique")
 
 
+def _backfill_learning_paths_defaults() -> None:
+    learning_paths = sa.table(
+        "learning_paths",
+        sa.column("title", sa.String(length=200)),
+        sa.column("kind", sa.String(length=20)),
+        sa.column("is_active", sa.Boolean()),
+    )
+    op.execute("UPDATE learning_paths SET kind = 'main' WHERE kind IS NULL")
+    op.execute(
+        learning_paths.update()
+        .where(learning_paths.c.is_active.is_(None))
+        .values(is_active=sa.true())
+    )
+
+
 def upgrade():
     _drop_learning_paths_problem_id_unique_constraint()
 
@@ -70,8 +85,7 @@ def upgrade():
         WHERE title IS NULL
         """
     )
-    op.execute("UPDATE learning_paths SET kind = 'main' WHERE kind IS NULL")
-    op.execute("UPDATE learning_paths SET is_active = 1 WHERE is_active IS NULL")
+    _backfill_learning_paths_defaults()
 
 
 def downgrade():

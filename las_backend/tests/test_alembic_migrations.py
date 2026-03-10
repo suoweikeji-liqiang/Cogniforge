@@ -3,6 +3,8 @@ import types
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
+from sqlalchemy.dialects import postgresql
+
 
 def _load_migration_module():
     module_name = "test_migration_010_support_multi_learning_paths"
@@ -74,3 +76,22 @@ def test_drop_learning_paths_problem_id_unique_constraint_noops_when_missing(mon
     migration._drop_learning_paths_problem_id_unique_constraint()
 
     assert dropped == []
+
+
+def test_backfill_learning_paths_defaults_uses_boolean_true(monkeypatch):
+    migration = _load_migration_module()
+    executed = []
+
+    monkeypatch.setattr(migration.op, "execute", lambda statement: executed.append(statement), raising=False)
+
+    migration._backfill_learning_paths_defaults()
+
+    assert executed[0] == "UPDATE learning_paths SET kind = 'main' WHERE kind IS NULL"
+    compiled = str(
+        executed[1].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "UPDATE learning_paths SET is_active=true" in compiled
+    assert "WHERE learning_paths.is_active IS NULL" in compiled
