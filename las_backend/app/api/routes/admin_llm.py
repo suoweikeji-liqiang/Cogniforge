@@ -1,8 +1,11 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.entities.llm_provider import LLMProvider, LLMModel
 from app.models.entities.user import User
@@ -12,6 +15,10 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 
 router = APIRouter(prefix="/admin/llm-config", tags=["Admin"])
+
+
+def _provider_test_timeout_seconds() -> float:
+    return float(max(5, min(int(get_settings().LLM_REQUEST_TIMEOUT_SECONDS), 12)))
 
 
 class ProviderCreate(BaseModel):
@@ -252,41 +259,61 @@ async def test_provider(
     provider = result.scalar_one_or_none()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    
-    try:
+
+    model_id = (
+        provider.models[0].model_id
+        if provider.models
+        else ("qwen-plus" if provider.provider_type == "qwen" else "gpt-4o-mini")
+    )
+
+    def _run_provider_test() -> dict:
         if provider.provider_type in OPENAI_COMPATIBLE_PROVIDERS:
             import openai
+
             client = openai.OpenAI(
                 api_key=provider.api_key,
                 base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
             )
-            response = client.chat.completions.create(
-                model=provider.models[0].model_id if provider.models else ("qwen-plus" if provider.provider_type == "qwen" else "gpt-4o-mini"),
+            client.chat.completions.create(
+                model=model_id,
                 messages=[{"role": "user", "content": "Hi"}],
-                max_tokens=10
-            )
-            return {"status": "success", "response": "Connected successfully"}
-        
-        elif provider.provider_type == "anthropic":
-            from anthropic import Anthropic
-            client = Anthropic(api_key=provider.api_key, base_url=provider.base_url or None)
-            response = client.messages.create(
-                model=provider.models[0].model_id if provider.models else "claude-3-5-sonnet-20241022",
                 max_tokens=10,
-                messages=[{"role": "user", "content": "Hi"}]
+                timeout=_provider_test_timeout_seconds(),
             )
             return {"status": "success", "response": "Connected successfully"}
-        
-        elif provider.provider_type == "ollama":
+
+        if provider.provider_type == "anthropic":
+            from anthropic import Anthropic
+
+            client = Anthropic(api_key=provider.api_key, base_url=provider.base_url or None)
+            client.messages.create(
+                model=model_id if provider.models else "claude-3-5-sonnet-20241022",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Hi"}],
+                timeout=_provider_test_timeout_seconds(),
+            )
+            return {"status": "success", "response": "Connected successfully"}
+
+        if provider.provider_type == "ollama":
             import httpx
+
             base = provider.base_url or "http://localhost:11434"
-            response = httpx.get(f"{base}/api/tags", timeout=5)
+            response = httpx.get(f"{base}/api/tags", timeout=min(_provider_test_timeout_seconds(), 5))
             if response.status_code == 200:
                 return {"status": "success", "response": "Connected to Ollama"}
-            raise Exception("Failed to connect")
-        
-        else:
-            return {"status": "error", "message": f"Provider type {provider.provider_type} test not implemented"}
-    
+            raise RuntimeError("Failed to connect")
+
+        return {"status": "error", "message": f"Provider type {provider.provider_type} test not implemented"}
+
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_run_provider_test),
+            timeout=_provider_test_timeout_seconds(),
+        )
+    except asyncio.TimeoutError:
+        return {
+            "status": "error",
+            "message": "Connection test timed out. Check model, base URL, or network.",
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}

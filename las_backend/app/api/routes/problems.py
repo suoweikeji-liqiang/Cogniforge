@@ -63,6 +63,14 @@ router = APIRouter(prefix="/problems", tags=["Problems"])
 settings = get_settings()
 
 
+def _problem_create_concept_timeout_seconds() -> float:
+    return float(max(2, min(int(settings.LLM_REQUEST_TIMEOUT_SECONDS), 4)))
+
+
+def _problem_create_path_timeout_seconds() -> float:
+    return float(max(4, min(int(settings.LEARNING_PATH_TIMEOUT_SECONDS), 7)))
+
+
 def _resolve_current_step(learning_path: Optional[LearningPath]) -> tuple[int, Optional[dict]]:
     if not learning_path or not isinstance(learning_path.path_data, list) or not learning_path.path_data:
         return 0, None
@@ -1570,12 +1578,31 @@ async def create_problem(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    associated_concepts = await model_os_service.build_problem_concepts_resilient(
+    max_concepts = 8
+    seed_concepts = model_os_service.normalize_concepts(problem_data.associated_concepts or [], limit=max_concepts)
+    fallback_concepts = model_os_service.build_problem_concepts_local(
         problem_title=problem_data.title,
         problem_description=problem_data.description or "",
         seed_concepts=problem_data.associated_concepts,
-        max_concepts=8,
+        max_concepts=max_concepts,
     )
+    try:
+        associated_concepts = await asyncio.wait_for(
+            model_os_service.build_problem_concepts_resilient(
+                problem_title=problem_data.title,
+                problem_description=problem_data.description or "",
+                seed_concepts=problem_data.associated_concepts,
+                max_concepts=max_concepts,
+            ),
+            timeout=_problem_create_concept_timeout_seconds(),
+        )
+    except asyncio.TimeoutError:
+        associated_concepts = fallback_concepts
+    except Exception:
+        associated_concepts = fallback_concepts
+    associated_concepts = model_os_service.normalize_concepts(associated_concepts or fallback_concepts, limit=max_concepts)
+    if not associated_concepts:
+        associated_concepts = ["Core concept"]
 
     db_problem = Problem(
         user_id=current_user.id,
@@ -1597,13 +1624,39 @@ async def create_problem(
     await db.refresh(db_problem)
     
     existing_knowledge = []
-    learning_path_data = await model_os_service.generate_learning_path_resilient(
-        problem_title=problem_data.title,
-        problem_description=problem_data.description or "",
-        existing_knowledge=existing_knowledge,
-        associated_concepts=associated_concepts,
-        timeout_seconds=settings.LEARNING_PATH_TIMEOUT_SECONDS,
-    )
+    path_timeout = _problem_create_path_timeout_seconds()
+    try:
+        learning_path_data = await asyncio.wait_for(
+            model_os_service.generate_learning_path_resilient(
+                problem_title=problem_data.title,
+                problem_description=problem_data.description or "",
+                existing_knowledge=existing_knowledge,
+                associated_concepts=associated_concepts,
+                timeout_seconds=path_timeout,
+            ),
+            timeout=max(path_timeout + 1, 5),
+        )
+    except asyncio.TimeoutError:
+        learning_path_data = model_os_service._build_fallback_learning_path(
+            problem_title=problem_data.title,
+            problem_description=problem_data.description or "",
+            existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
+        )
+    except Exception:
+        learning_path_data = model_os_service._build_fallback_learning_path(
+            problem_title=problem_data.title,
+            problem_description=problem_data.description or "",
+            existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
+        )
+    if not learning_path_data:
+        learning_path_data = model_os_service._build_fallback_learning_path(
+            problem_title=problem_data.title,
+            problem_description=problem_data.description or "",
+            existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
+        )
     
     db_learning_path = LearningPath(
         problem_id=db_problem.id,

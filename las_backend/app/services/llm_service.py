@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import openai
 from sqlalchemy import select
@@ -77,48 +78,65 @@ class LLMService:
     
     async def _generate_openai_compatible(self, prompt: str, provider: LLMProvider, model: str) -> str:
         try:
-            client = openai.OpenAI(
-                api_key=provider.api_key,
-                base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
-            )
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
-            )
-            return response.choices[0].message.content
+            def _call() -> str:
+                client = openai.OpenAI(
+                    api_key=provider.api_key,
+                    base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
+                )
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                )
+                return response.choices[0].message.content
+
+            return await asyncio.to_thread(_call)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             return f"Error generating response: {str(e)}"
     
     async def _generate_anthropic(self, prompt: str, provider: LLMProvider, model: str) -> str:
         try:
-            from anthropic import Anthropic
-            client = Anthropic(
-                api_key=provider.api_key,
-                base_url=provider.base_url or None
-            )
-            response = client.messages.create(
-                model=model,
-                max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.content[0].text
+            def _call() -> str:
+                from anthropic import Anthropic
+
+                client = Anthropic(
+                    api_key=provider.api_key,
+                    base_url=provider.base_url or None
+                )
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.content[0].text
+
+            return await asyncio.to_thread(_call)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             return f"Error generating response: {str(e)}"
     
     async def _generate_ollama(self, prompt: str, provider: LLMProvider, model: str) -> str:
         try:
-            import httpx
-            base_url = provider.base_url or "http://localhost:11434"
-            response = httpx.post(
-                f"{base_url}/api/generate",
-                json={"model": model, "prompt": prompt, "stream": False},
-                timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
-            )
-            if response.status_code == 200:
-                return response.json().get("response", "No response")
-            return f"Error: {response.status_code}"
+            def _call() -> str:
+                import httpx
+
+                base_url = provider.base_url or "http://localhost:11434"
+                response = httpx.post(
+                    f"{base_url}/api/generate",
+                    json={"model": model, "prompt": prompt, "stream": False},
+                    timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                )
+                if response.status_code == 200:
+                    return response.json().get("response", "No response")
+                return f"Error: {response.status_code}"
+
+            return await asyncio.to_thread(_call)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             return f"Error generating response: {str(e)}"
     

@@ -5,6 +5,8 @@ Tests core business logic with real LLM integration
 
 import pytest
 import os
+import asyncio
+import time
 
 
 @pytest.mark.asyncio
@@ -67,3 +69,51 @@ async def test_model_os_feedback_structure():
     assert "correctness" in feedback
     assert "suggestions" in feedback
     assert feedback["correctness"] in ["correct", "partially correct", "incorrect"]
+
+
+@pytest.mark.asyncio
+async def test_llm_service_generate_respects_wait_for_with_blocking_provider(monkeypatch):
+    from app.services.llm_service import LLMService, llm_service
+    import openai
+
+    provider = type(
+        "Provider",
+        (),
+        {
+            "name": "Blocking Qwen",
+            "provider_type": "qwen",
+            "api_key": "super-secret-key",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "enabled": True,
+            "priority": 100,
+            "id": 1,
+        },
+    )()
+    default_model = type("Model", (), {"model_id": "qwen-plus"})()
+
+    class SlowOpenAI:
+        def __init__(self, api_key, base_url=None):
+            self.chat = self
+            self.completions = self
+
+        def create(self, model, messages, temperature, timeout):
+            time.sleep(0.2)
+            message = type("Message", (), {"content": "late"})()
+            choice = type("Choice", (), {"message": message})()
+            return type("Response", (), {"choices": [choice]})()
+
+    async def fake_get_active_provider(db, provider_type=None):
+        return provider
+
+    async def fake_get_default_model(db, provider_id):
+        return default_model
+
+    # tests/conftest.py autouse-stubs model_os_service.llm.generate; restore the real
+    # implementation here so this regression actually exercises wait_for cancellation.
+    monkeypatch.setattr(llm_service, "generate", LLMService.generate.__get__(llm_service, LLMService))
+    monkeypatch.setattr(openai, "OpenAI", SlowOpenAI)
+    monkeypatch.setattr(llm_service, "_get_active_provider", fake_get_active_provider)
+    monkeypatch.setattr(llm_service, "_get_default_model", fake_get_default_model)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(llm_service.generate("hello", provider_type="qwen"), timeout=0.01)

@@ -295,13 +295,19 @@ const deleteProvider = async () => {
 
 const testConnection = async () => {
   try {
-    const response = await api.get(`/admin/llm-config/providers/${selectedProvider.value.id}/test`)
+    const response = await api.get(`/admin/llm-config/providers/${selectedProvider.value.id}/test`, {
+      timeout: 15000,
+    })
     if (response.data.status === 'success') {
       alert(t('llm.testSuccess'))
     } else {
       alert(t('llm.testFailed') + ': ' + response.data.message)
     }
   } catch (e) {
+    if (e.code === 'ECONNABORTED') {
+      alert(t('llm.testTimeout'))
+      return
+    }
     alert(t('llm.testFailed') + ': ' + (e.response?.data?.detail || e.message))
   }
 }

@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import List, Dict, Any, Optional
 import asyncio
 import hashlib
@@ -433,8 +434,10 @@ Rules:
         problem_description: str,
         limit: int = 8,
     ) -> List[str]:
-        combined = "\n".join([problem_title or "", problem_description or ""])
-        candidates: List[str] = [problem_title]
+        title_text = str(problem_title or "")
+        description_text = str(problem_description or "")
+        combined = "\n".join([title_text, description_text])
+        candidates: List[str] = []
 
         if self._contains_cjk(combined):
             candidates.extend(re.findall(r"[\u4e00-\u9fff]{2,12}", combined))
@@ -442,11 +445,100 @@ Rules:
             stop_words = {
                 "what", "when", "where", "which", "with", "from", "into", "this", "that",
                 "need", "want", "have", "has", "for", "and", "the", "you", "your", "about",
+                "understand", "understanding", "learn", "learning", "changes", "change",
+                "explain", "question", "problem", "goal", "how", "why", "using", "use",
+                "to", "in", "on", "at", "by", "of", "as", "is", "are", "be", "an", "a",
+                "i", "we", "me", "my", "our",
             }
-            words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", combined)
-            candidates.extend([word for word in words if word.casefold() not in stop_words])
+            low_signal_single_words = {"false", "true"}
+            combined_words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{1,}", combined)
+            filtered_words = [word for word in combined_words if word.casefold() not in stop_words]
+            word_frequencies = Counter(word.casefold() for word in filtered_words)
+
+            frequent_words: List[str] = []
+            seen_frequent = set()
+            for word in filtered_words:
+                key = word.casefold()
+                if word_frequencies[key] < 2 or key in seen_frequent or key in low_signal_single_words:
+                    continue
+                seen_frequent.add(key)
+                frequent_words.append(word)
+
+            def _extract_source_candidates(source: str) -> tuple[List[str], List[str]]:
+                source_words = re.findall(r"[A-Za-z][A-Za-z0-9_-]{1,}", source)
+                phrases: List[str] = []
+                singles: List[str] = []
+                seen_phrases = set()
+                seen_singles = set()
+
+                for first, second in zip(source_words, source_words[1:]):
+                    if first.casefold() in stop_words or second.casefold() in stop_words:
+                        continue
+                    if second.casefold() in low_signal_single_words:
+                        continue
+                    if first.endswith("s") and not second.endswith("s") and second[0].islower():
+                        continue
+                    phrase = f"{first} {second}"
+                    key = phrase.casefold()
+                    if key in seen_phrases:
+                        continue
+                    seen_phrases.add(key)
+                    phrases.append(phrase)
+
+                for word in source_words:
+                    key = word.casefold()
+                    if (
+                        key in stop_words
+                        or key in seen_singles
+                        or key in low_signal_single_words
+                        or word_frequencies[key] >= 2
+                    ):
+                        continue
+                    seen_singles.add(key)
+                    singles.append(word)
+
+                return phrases, singles
+
+            description_phrases, description_singles = _extract_source_candidates(description_text)
+            title_phrases, title_singles = _extract_source_candidates(title_text)
+            candidates.extend(frequent_words)
+            if frequent_words:
+                candidates.extend(description_phrases)
+                candidates.extend(description_singles)
+                candidates.extend(title_phrases)
+                candidates.extend(title_singles)
+            else:
+                candidates.extend(description_singles)
+                candidates.extend(description_phrases)
+                candidates.extend(title_singles)
+                candidates.extend(title_phrases)
+
+        if not candidates and problem_title:
+            candidates.append(problem_title)
 
         return self.normalize_concepts(candidates, limit=limit)
+
+    def build_problem_concepts_local(
+        self,
+        problem_title: str,
+        problem_description: str,
+        seed_concepts: Optional[List[str]] = None,
+        max_concepts: int = 8,
+    ) -> List[str]:
+        normalized_limit = max(3, min(max_concepts, 12))
+        seed = self.normalize_concepts(seed_concepts or [], limit=normalized_limit)
+        if len(seed) >= normalized_limit:
+            return seed
+
+        inferred = self._fallback_concepts_from_problem(
+            problem_title=problem_title,
+            problem_description=problem_description,
+            limit=normalized_limit,
+        )
+        concepts = self.normalize_concepts(seed + inferred, limit=normalized_limit)
+        if concepts:
+            return concepts
+        return self.normalize_concepts([problem_title], limit=max(1, normalized_limit))
 
     async def extract_related_concepts(
         self,
