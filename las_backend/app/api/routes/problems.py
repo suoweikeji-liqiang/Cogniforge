@@ -413,16 +413,16 @@ def _derive_question_concepts(
     answer_type: str,
     candidate_concepts: List[str],
 ) -> List[str]:
+    if answer_type == "comparison":
+        extracted = _extract_comparison_targets_from_question(question)
+        if extracted:
+            return extracted
+
     mentioned = _find_question_concept_mentions(question, candidate_concepts)
     if answer_type == "comparison" and len(mentioned) >= 2:
         return model_os_service.normalize_concepts(mentioned[:2], limit=2)
     if answer_type != "comparison" and mentioned:
         return model_os_service.normalize_concepts(mentioned[:1], limit=1)
-
-    if answer_type == "comparison":
-        extracted = _extract_comparison_targets_from_question(question)
-        if extracted:
-            return extracted
     return []
 
 
@@ -981,7 +981,7 @@ async def _ensure_concept_record(
             Concept.normalized_name == normalized,
         )
     )
-    concept = concept_result.scalar_one_or_none()
+    concept = concept_result.scalars().first()
     if concept is None:
         concept = Concept(
             user_id=user_id,
@@ -999,7 +999,7 @@ async def _ensure_concept_record(
             ConceptAlias.normalized_alias == normalized,
         )
     )
-    if alias_result.scalar_one_or_none() is None:
+    if alias_result.scalars().first() is None:
         db.add(
             ConceptAlias(
                 concept_id=concept.id,
@@ -2696,7 +2696,7 @@ async def merge_problem_concept_candidate(
                 Concept.normalized_name == target_key,
             )
         )
-        target_exists = concept_result.scalar_one_or_none() is not None
+        target_exists = concept_result.scalars().first() is not None
     if not target_exists:
         alias_result = await db.execute(
             select(ConceptAlias)
@@ -2706,7 +2706,7 @@ async def merge_problem_concept_candidate(
                 ConceptAlias.normalized_alias == target_key,
             )
         )
-        target_exists = alias_result.scalar_one_or_none() is not None
+        target_exists = alias_result.scalars().first() is not None
     if not target_exists:
         raise HTTPException(status_code=400, detail="Merge target must already exist")
 
@@ -2716,7 +2716,7 @@ async def merge_problem_concept_candidate(
             Concept.normalized_name == target_key,
         )
     )
-    target_concept = target_concept_result.scalar_one_or_none()
+    target_concept = target_concept_result.scalars().first()
     if target_concept is None:
         alias_concept_result = await db.execute(
             select(Concept)
@@ -2726,7 +2726,7 @@ async def merge_problem_concept_candidate(
                 ConceptAlias.normalized_alias == target_key,
             )
         )
-        target_concept = alias_concept_result.scalar_one_or_none()
+        target_concept = alias_concept_result.scalars().first()
     if target_concept is None:
         target_concept = await _ensure_concept_record(
             db=db,
@@ -2746,7 +2746,7 @@ async def merge_problem_concept_candidate(
             ConceptAlias.normalized_alias == candidate.normalized_text,
         )
     )
-    if alias_result.scalar_one_or_none() is None:
+    if alias_result.scalars().first() is None:
         db.add(
             ConceptAlias(
                 concept_id=target_concept.id,

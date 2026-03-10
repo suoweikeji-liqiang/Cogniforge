@@ -639,6 +639,132 @@ async def test_problem_ask_prioritizes_explicit_question_concepts_over_generic_s
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_prefers_atomic_comparison_targets_over_comparison_step_label(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    async def fake_learning_path(*args, **kwargs):
+        return [
+            {
+                "step": 1,
+                "concept": "Compare precision and recall",
+                "description": "Explain how precision differs from recall in one threshold-setting scenario.",
+                "resources": ["precision", "recall"],
+            }
+        ]
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "When the threshold rises, precision often improves because fewer cases are predicted positive, "
+            "while recall often drops because more true positives are missed."
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return ["Compare precision and recall"]
+
+    monkeypatch.setattr(model_os_service, "generate_learning_path", fake_learning_path)
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    create_response = await client.post(
+        "/api/problems/",
+        json={
+            "title": "Real Metrics Test",
+            "description": "Understand precision, recall, and threshold tradeoffs.",
+            "associated_concepts": ["precision", "recall"],
+            "learning_mode": "exploration",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    problem = create_response.json()
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "How should I compare precision and recall when the threshold moves?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+
+    assert body["answer_type"] == "comparison"
+    assert body["answered_concepts"][:2] == ["precision", "recall"]
+    assert all("compare precision and recall" not in item.lower() for item in body["answered_concepts"])
+    assert any("precision" in item.lower() and "recall" in item.lower() for item in body["next_learning_actions"])
+    assert all("compare precision and recall' and 'precision" not in item.lower() for item in body["next_learning_actions"])
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_tolerates_duplicate_concept_alias_rows(client, db_session, monkeypatch):
+    from app.models.entities.user import Concept, ConceptAlias
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    me_response = await client.get("/api/auth/me", headers=headers)
+    assert me_response.status_code == 200
+    user_id = me_response.json()["id"]
+
+    concept = Concept(
+        user_id=user_id,
+        canonical_name="precision",
+        normalized_name="precision",
+        language="auto",
+        status="active",
+    )
+    db_session.add(concept)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            ConceptAlias(concept_id=concept.id, alias="precision", normalized_alias="precision"),
+            ConceptAlias(concept_id=concept.id, alias="Precision", normalized_alias="precision"),
+        ]
+    )
+    await db_session.commit()
+
+    create_response = await client.post(
+        "/api/problems/",
+        json={
+            "title": "Real Metrics Test",
+            "description": "Understand precision, recall, and threshold tradeoffs.",
+            "associated_concepts": ["precision", "recall"],
+            "learning_mode": "exploration",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    problem = create_response.json()
+
+    async def fake_answer(*args, **kwargs):
+        return "Precision and recall move in opposite directions as the threshold rises."
+
+    async def fake_extract(*args, **kwargs):
+        return ["precision", "recall"]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "How should I compare precision and recall when the threshold moves?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["answered_concepts"][:2] == ["precision", "recall"]
+
+
+@pytest.mark.asyncio
 async def test_problem_response_generates_path_candidates_in_socratic_mode(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
