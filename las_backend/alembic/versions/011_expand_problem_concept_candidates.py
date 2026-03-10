@@ -1,7 +1,7 @@
 """expand problem concept candidates
 
 Revision ID: 011_expand_problem_concept_candidates
-Revises: 010_support_multi_learning_paths
+Revises: 010
 Create Date: 2026-03-08 13:55:00.000000
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "011_expand_problem_concept_candidates"
-down_revision = "010_support_multi_learning_paths"
+down_revision = "010"
 branch_labels = None
 depends_on = None
 
