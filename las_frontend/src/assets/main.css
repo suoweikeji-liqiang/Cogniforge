@@ -30,7 +30,7 @@ button {
   font-family: inherit;
 }
 
-input, textarea, select {
+input:not([type='checkbox']):not([type='radio']), textarea, select {
   font-family: inherit;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -40,9 +40,18 @@ input, textarea, select {
   width: 100%;
 }
 
-input:focus, textarea:focus, select:focus {
+input:not([type='checkbox']):not([type='radio']):focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--primary);
 }
 
 .btn {

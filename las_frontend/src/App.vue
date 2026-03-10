@@ -36,7 +36,7 @@
       </div>
     </nav>
 
-    <main class="main-content">
+    <main class="main-content" :class="{ 'main-content-auth': isAuthLayoutRoute }">
       <router-view />
     </main>
   </div>
@@ -53,6 +53,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+const authLayoutRoutes = new Set(['login', 'register', 'forgot-password', 'reset-password'])
 
 const primaryNavItems = computed(() => {
   const items = [
@@ -71,6 +72,8 @@ const primaryNavItems = computed(() => {
 
 const isRouteActive = (path: string) =>
   route.path === path || route.path.startsWith(`${path}/`)
+
+const isAuthLayoutRoute = computed(() => authLayoutRoutes.has(String(route.name || '')))
 
 const logout = async () => {
   await authStore.logout()
@@ -223,6 +226,12 @@ const logout = async () => {
   margin: 0 auto;
 }
 
+.main-content-auth {
+  padding: 0;
+  max-width: none;
+  min-height: 100vh;
+}
+
 @media (max-width: 900px) {
   .navbar {
     padding: 0.9rem 1rem 0;
@@ -244,6 +253,10 @@ const logout = async () => {
 
   .main-content {
     padding: 1rem;
+  }
+
+  .main-content-auth {
+    padding: 0;
   }
 }
 </style>
