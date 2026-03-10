@@ -43,7 +43,12 @@ async def fake_build_problem_concepts_resilient(
     return _normalized_seed(problem_title, problem_description or "", seed_concepts or [])[:max_concepts]
 
 
-async def fake_generate_learning_path(problem_title: str, problem_description: str, existing_knowledge: list[str]):
+async def fake_generate_learning_path(
+    problem_title: str,
+    problem_description: str,
+    existing_knowledge: list[str],
+    associated_concepts: Optional[list[str]] = None,
+):
     return [
         {
             "step": 1,
@@ -64,10 +69,16 @@ async def fake_generate_learning_path_resilient(
     problem_title: str,
     problem_description: Optional[str] = None,
     existing_knowledge: Optional[list[str]] = None,
+    associated_concepts: Optional[list[str]] = None,
     timeout_seconds: Optional[int] = None,
     **_: object,
 ):
-    return await fake_generate_learning_path(problem_title, problem_description or "", existing_knowledge or [])
+    return await fake_generate_learning_path(
+        problem_title,
+        problem_description or "",
+        existing_knowledge or [],
+        associated_concepts or [],
+    )
 
 
 async def fake_generate_socratic_question(

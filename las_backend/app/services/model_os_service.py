@@ -63,30 +63,62 @@ class ModelOSService:
         problem_title: str,
         problem_description: str,
         existing_knowledge: List[str],
+        associated_concepts: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         knowledge_text = ", ".join(existing_knowledge) if existing_knowledge else "your current foundation"
-        first_resource = "Existing notes and prior project docs"
-        if problem_description:
-            first_resource = problem_description[:120]
+        title_text = re.sub(r"\s+", " ", str(problem_title or "")).strip()
+        description_text = re.sub(r"\s+", " ", str(problem_description or "")).strip()
+        problem_context = description_text or title_text or "the current problem"
+        first_resource = problem_context[:120] or "Existing notes and prior project docs"
+        focus_concepts = self.normalize_concepts(
+            [*(associated_concepts or []), title_text],
+            limit=3,
+        )
+        primary_focus = focus_concepts[0] if focus_concepts else (title_text or "Core concept")
+        secondary_focus = focus_concepts[1] if len(focus_concepts) > 1 else None
+        combined_text = f"{title_text} {description_text}".casefold()
+        is_comparison_focus = bool(
+            secondary_focus
+            and any(marker in combined_text for marker in ["difference between", "compare", "versus", " vs ", "tradeoff", "区别", "对比"])
+        )
+
+        if is_comparison_focus:
+            step_one_concept = f"Compare {primary_focus} and {secondary_focus}"
+            step_one_description = (
+                f"Explain how {primary_focus} differs from {secondary_focus} for '{problem_title}', "
+                f"and anchor the distinction using {knowledge_text}."
+            )
+            step_two_concept = f"Apply {primary_focus} and {secondary_focus} in one focused scenario"
+            step_two_description = (
+                f"Work through one concrete scenario from '{problem_title}', justify the tradeoff between "
+                f"{primary_focus} and {secondary_focus}, and record the next uncertainty to resolve."
+            )
+            step_two_resources = [first_resource, primary_focus, secondary_focus]
+        else:
+            step_one_concept = primary_focus
+            step_one_description = (
+                f"Explain the core idea of {primary_focus} for '{problem_title}', "
+                f"and connect it to the problem goal using {knowledge_text}."
+            )
+            step_two_concept = f"Apply {primary_focus} in a minimal example"
+            step_two_description = (
+                f"Use one concrete example from '{problem_title}' to apply {primary_focus}, "
+                "validate the result, and note the next open question."
+            )
+            step_two_resources = [first_resource, primary_focus]
 
         return [
             {
                 "step": 1,
-                "concept": "Clarify goal and constraints",
-                "description": (
-                    f"Define success criteria for '{problem_title}' and list hard constraints. "
-                    f"Anchor decisions using {knowledge_text}."
-                ),
+                "concept": step_one_concept,
+                "description": step_one_description,
                 "resources": [first_resource, "Problem statement"],
             },
             {
                 "step": 2,
-                "concept": "Create and validate a minimal solution",
-                "description": (
-                    "Build the smallest viable implementation, run one validation cycle, "
-                    "and record open risks for the next iteration."
-                ),
-                "resources": ["Current codebase", "Test checklist"],
+                "concept": step_two_concept,
+                "description": step_two_description,
+                "resources": step_two_resources,
             },
         ]
 
@@ -1029,11 +1061,13 @@ Return as JSON array:
         problem_title: str,
         problem_description: str,
         existing_knowledge: List[str],
+        associated_concepts: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         language_instruction = self._build_language_instruction(
             problem_title,
             problem_description,
             ", ".join(existing_knowledge or []),
+            ", ".join(associated_concepts or []),
             json_mode=True,
         )
         prompt = f"""Generate an optimized learning path for:
@@ -1041,6 +1075,7 @@ Return as JSON array:
 Problem/Goal: {problem_title}
 Description: {problem_description}
 User's Existing Knowledge: {', '.join(existing_knowledge)}
+Associated Concepts: {', '.join(associated_concepts or []) or 'N/A'}
 
 Create a step-by-step learning path that:
 1. Builds on existing knowledge
@@ -1076,6 +1111,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
         problem_title: str,
         problem_description: str,
         existing_knowledge: List[str],
+        associated_concepts: Optional[List[str]] = None,
         timeout_seconds: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         effective_timeout = timeout_seconds or get_settings().LEARNING_PATH_TIMEOUT_SECONDS
@@ -1085,6 +1121,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
                     problem_title=problem_title,
                     problem_description=problem_description,
                     existing_knowledge=existing_knowledge,
+                    associated_concepts=associated_concepts,
                 ),
                 timeout=max(1, int(effective_timeout)),
             )
@@ -1099,6 +1136,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
             problem_title=problem_title,
             problem_description=problem_description,
             existing_knowledge=existing_knowledge,
+            associated_concepts=associated_concepts,
         )
     
     async def generate_feedback(

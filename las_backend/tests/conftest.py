@@ -53,7 +53,12 @@ async def stub_llm(monkeypatch):
             "limitations": [f"edge case for {title}"],
         }
 
-    async def fake_generate_learning_path(problem_title: str, problem_description: str, existing_knowledge: list[str]):
+    async def fake_generate_learning_path(
+        problem_title: str,
+        problem_description: str,
+        existing_knowledge: list[str],
+        associated_concepts: Optional[list[str]] = None,
+    ):
         return [
             {
                 "step": 1,
