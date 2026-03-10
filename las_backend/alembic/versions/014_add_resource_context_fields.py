@@ -1,7 +1,7 @@
 """add resource context fields
 
-Revision ID: 014_add_resource_context_fields
-Revises: 013_add_note_context_fields
+Revision ID: 014
+Revises: 013
 Create Date: 2026-03-08 17:25:00.000000
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "014_add_resource_context_fields"
-down_revision = "013_add_note_context_fields"
+revision = "014"
+down_revision = "013"
 branch_labels = None
 depends_on = None
 

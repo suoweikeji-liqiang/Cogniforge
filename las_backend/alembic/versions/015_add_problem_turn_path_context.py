@@ -1,7 +1,7 @@
 """add problem turn path context
 
-Revision ID: 015_add_problem_turn_path_context
-Revises: 014_add_resource_context_fields
+Revision ID: 015
+Revises: 014
 Create Date: 2026-03-09 12:00:00.000000
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "015_add_problem_turn_path_context"
-down_revision = "014_add_resource_context_fields"
+revision = "015"
+down_revision = "014"
 branch_labels = None
 depends_on = None
 

@@ -1,7 +1,7 @@
 """link problem concept candidates to model cards
 
-Revision ID: 012_link_problem_candidates_to_model_cards
-Revises: 011_expand_problem_concept_candidates
+Revision ID: 012
+Revises: 011
 Create Date: 2026-03-08 15:30:00.000000
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "012_link_problem_candidates_to_model_cards"
-down_revision = "011_expand_problem_concept_candidates"
+revision = "012"
+down_revision = "011"
 branch_labels = None
 depends_on = None
 

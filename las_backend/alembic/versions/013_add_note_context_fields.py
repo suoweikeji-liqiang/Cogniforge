@@ -1,7 +1,7 @@
 """add note context fields
 
-Revision ID: 013_add_note_context_fields
-Revises: 012_link_problem_candidates_to_model_cards
+Revision ID: 013
+Revises: 012
 Create Date: 2026-03-08 16:55:00.000000
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "013_add_note_context_fields"
-down_revision = "012_link_problem_candidates_to_model_cards"
+revision = "013"
+down_revision = "012"
 branch_labels = None
 depends_on = None
 
