@@ -1,148 +1,172 @@
 <template>
   <div class="reviews-page" data-testid="review-lifecycle-page">
-    <section class="hero-shell">
-      <div class="hero-copy">
-        <p class="hero-kicker">{{ t('reviews.focusTitle') }}</p>
-        <h1>{{ t('reviews.title') }}</h1>
-        <p class="hero-subtitle">{{ t('reviews.subtitle') }}</p>
-      </div>
+    <PrimaryAsyncStateCard
+      v-if="pageState === 'error'"
+      kind="error"
+      :title="t('reviews.errorTitle')"
+      :message="pageError || t('reviews.errorMessage')"
+      :retry-label="t('common.retry')"
+      test-id="reviews-error-state"
+      retry-test-id="reviews-error-retry"
+      @retry="fetchReviewLifecycle"
+    />
 
-      <router-link
-        :to="focusCard.to"
-        class="focus-card"
-        :class="focusCard.tone"
-        data-testid="reviews-focus-card"
-      >
-        <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
-        <h2>{{ focusCard.title }}</h2>
-        <p>{{ focusCard.description }}</p>
-        <span class="focus-cta">{{ focusCard.cta }}</span>
-      </router-link>
+    <div v-else-if="pageState === 'loading'" class="empty">{{ t('common.loading') }}</div>
 
-      <div class="metric-grid">
-        <div class="metric-card">
-          <span>{{ t('reviews.queueCount') }}</span>
-          <strong>{{ dueReviewCount }}</strong>
+    <template v-else>
+      <section class="hero-shell">
+        <div class="hero-copy">
+          <p class="hero-kicker">{{ t('reviews.focusTitle') }}</p>
+          <h1>{{ t('reviews.title') }}</h1>
+          <p class="hero-subtitle">{{ t('reviews.subtitle') }}</p>
         </div>
-        <div class="metric-card">
-          <span>{{ t('reviews.scheduledCount') }}</span>
-          <strong>{{ scheduledCount }}</strong>
-        </div>
-        <div class="metric-card">
-          <span>{{ t('reviews.savedCount') }}</span>
-          <strong>{{ savedReviewCount }}</strong>
-        </div>
-      </div>
-    </section>
 
-    <section class="reviews-grid">
-      <section class="card-panel" data-testid="review-queue-panel">
-        <p class="section-meta">{{ t('reviews.queueMeta') }}</p>
-        <h2>{{ t('reviews.queueTitle') }}</h2>
-        <div v-if="dueCards.length" class="queue-list">
-          <article
-            v-for="card in dueCards.slice(0, 4)"
-            :key="card.schedule_id"
-            class="queue-item"
-          >
-            <div class="queue-copy">
-              <div class="queue-title-row">
-                <strong>{{ card.title }}</strong>
-                <span class="review-badge">{{ t('reviews.startSrs') }}</span>
+        <router-link
+          :to="focusCard.to"
+          class="focus-card"
+          :class="focusCard.tone"
+          data-testid="reviews-focus-card"
+        >
+          <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
+          <h2>{{ focusCard.title }}</h2>
+          <p>{{ focusCard.description }}</p>
+          <span class="focus-cta">{{ focusCard.cta }}</span>
+        </router-link>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <span>{{ t('reviews.queueCount') }}</span>
+            <strong>{{ dueReviewCount }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>{{ t('reviews.scheduledCount') }}</span>
+            <strong>{{ scheduledCount }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>{{ t('reviews.savedCount') }}</span>
+            <strong>{{ savedReviewCount }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="reviews-grid">
+        <section class="card-panel" data-testid="review-queue-panel">
+          <p class="section-meta">{{ t('reviews.queueMeta') }}</p>
+          <h2>{{ t('reviews.queueTitle') }}</h2>
+          <div v-if="dueCards.length" class="queue-list">
+            <article
+              v-for="card in dueCards.slice(0, 4)"
+              :key="card.schedule_id"
+              class="queue-item"
+            >
+              <div class="queue-copy">
+                <div class="queue-title-row">
+                  <strong>{{ card.title }}</strong>
+                  <span class="review-badge">{{ t('reviews.startSrs') }}</span>
+                </div>
+                <p>{{ card.next_review_at ? formatDateTime(card.next_review_at) : t('reviews.reviewQueueHint') }}</p>
+                <p class="origin-line">{{ formatReviewOrigin(card) }}</p>
+                <p class="origin-line">{{ formatReviewReason(card) }}</p>
+                <p v-if="card.origin?.source_turn_preview" class="origin-preview">{{ card.origin.source_turn_preview }}</p>
               </div>
-              <p>{{ card.next_review_at ? formatDateTime(card.next_review_at) : t('reviews.reviewQueueHint') }}</p>
-              <p class="origin-line">{{ formatReviewOrigin(card) }}</p>
-              <p class="origin-line">{{ formatReviewReason(card) }}</p>
-              <p v-if="card.origin?.source_turn_preview" class="origin-preview">{{ card.origin.source_turn_preview }}</p>
-            </div>
-            <div class="queue-actions">
-              <router-link to="/srs-review" class="btn btn-secondary">{{ t('reviews.startSrs') }}</router-link>
-              <router-link
-                v-if="card.origin?.problem_id"
-                :to="buildWorkspaceRoute(card)"
-                class="btn btn-secondary"
-              >
-                {{ t('reviews.openWorkspace') }}
-              </router-link>
-              <router-link :to="`/model-cards/${card.model_card_id}`" class="btn btn-secondary">
-                {{ t('problemDetail.openModelCard') }}
-              </router-link>
-            </div>
-          </article>
-        </div>
-        <div v-else class="empty-block">
-          <p class="empty">{{ t('reviews.noDueReviews') }}</p>
-          <router-link to="/model-cards" class="inline-link">
-            {{ t('reviews.openModelCards') }}
-          </router-link>
-        </div>
+              <div class="queue-actions">
+                <router-link to="/srs-review" class="btn btn-secondary">{{ t('reviews.startSrs') }}</router-link>
+                <router-link
+                  v-if="card.origin?.problem_id"
+                  :to="buildWorkspaceRoute(card)"
+                  class="btn btn-secondary"
+                >
+                  {{ t('reviews.openWorkspace') }}
+                </router-link>
+                <router-link :to="`/model-cards/${card.model_card_id}`" class="btn btn-secondary">
+                  {{ t('problemDetail.openModelCard') }}
+                </router-link>
+              </div>
+            </article>
+          </div>
+          <div v-else class="empty-block">
+            <p class="empty">{{ t('reviews.noDueReviews') }}</p>
+            <router-link to="/model-cards" class="inline-link">
+              {{ t('reviews.openModelCards') }}
+            </router-link>
+          </div>
+        </section>
+
+        <section class="card-panel" data-testid="review-model-cards-panel">
+          <p class="section-meta">{{ t('reviews.lifecycleMeta') }}</p>
+          <h2>{{ t('reviews.lifecycleTitle') }}</h2>
+          <div v-if="recentModelCards.length" class="card-list">
+            <router-link
+              v-for="card in recentModelCards"
+              :key="card.id"
+              :to="`/model-cards/${card.id}`"
+              class="card-item"
+            >
+              <div class="card-copy">
+                <strong>{{ card.title }}</strong>
+                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleSourceLabel') }}:</strong> {{ formatModelCardSource(card) }}</p>
+                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleStateLabel') }}:</strong> {{ formatModelCardState(card) }}</p>
+                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleActionLabel') }}:</strong> {{ formatModelCardAction(card) }}</p>
+              </div>
+              <span class="status" :class="{ scheduled: isCardScheduled(card.id) }">
+                {{ isCardScheduled(card.id) ? t('modelCards.scheduled') : t('reviews.needsReviewPlan') }}
+              </span>
+            </router-link>
+          </div>
+          <div v-else class="empty-block">
+            <p class="empty">{{ t('modelCards.createFirst') }}</p>
+            <router-link to="/model-cards" class="inline-link">
+              {{ t('reviews.openModelCards') }}
+            </router-link>
+          </div>
+        </section>
       </section>
 
-      <section class="card-panel" data-testid="review-model-cards-panel">
-        <p class="section-meta">{{ t('reviews.lifecycleMeta') }}</p>
-        <h2>{{ t('reviews.lifecycleTitle') }}</h2>
-        <div v-if="recentModelCards.length" class="card-list">
-          <router-link
-            v-for="card in recentModelCards"
-            :key="card.id"
-            :to="`/model-cards/${card.id}`"
-            class="card-item"
-          >
-            <div>
-              <strong>{{ card.title }}</strong>
-              <p>{{ formatModelCardSupportText(card) }}</p>
-            </div>
-            <span class="status" :class="{ scheduled: isCardScheduled(card.id) }">
-              {{ isCardScheduled(card.id) ? t('modelCards.scheduled') : t('reviews.needsReviewPlan') }}
-            </span>
-          </router-link>
-        </div>
-        <div v-else class="empty-block">
-          <p class="empty">{{ t('modelCards.createFirst') }}</p>
-          <router-link to="/model-cards" class="inline-link">
-            {{ t('reviews.openModelCards') }}
-          </router-link>
-        </div>
-      </section>
-    </section>
-
-    <section class="card-panel" data-testid="review-archive-panel">
-      <div class="section-heading">
-        <div>
-          <p class="section-meta">{{ t('reviews.archiveMeta') }}</p>
-          <h2>{{ t('reviews.archiveTitle') }}</h2>
-        </div>
-        <button class="btn btn-secondary" @click="showCreateModal = true">
-          {{ t('reviews.newReview') }}
-        </button>
-      </div>
-
-      <div v-if="reviews.length" class="review-archive">
-        <div v-for="review in reviews" :key="review.id" class="review-card">
-          <div class="review-header">
-            <div>
-              <h3>{{ review.review_type }}</h3>
-              <p class="review-date">{{ formatDate(review.created_at) }}</p>
-            </div>
-            <span class="period">{{ review.period }}</span>
+      <details class="card-panel archive-panel" data-testid="review-archive-panel">
+        <summary class="section-heading archive-summary" data-testid="review-archive-toggle">
+          <div>
+            <p class="section-meta">{{ t('reviews.archiveMeta') }}</p>
+            <h2>{{ t('reviews.archiveTitle') }}</h2>
           </div>
-          <div class="review-content">
-            <p v-if="review.content?.summary"><strong>{{ t('reviews.content') }}:</strong> {{ review.content.summary }}</p>
-            <p v-if="review.content?.insights"><strong>{{ t('reviews.insights') }}:</strong> {{ review.content.insights }}</p>
-            <p v-if="review.content?.next_steps"><strong>{{ t('reviews.nextSteps') }}:</strong> {{ review.content.next_steps }}</p>
-            <p v-if="review.content?.misconceptions?.length">
-              <strong>{{ t('reviews.misconceptions') }}:</strong> {{ review.content.misconceptions.join(' / ') }}
-            </p>
-          </div>
-          <div class="review-actions-row">
-            <button class="btn btn-secondary" @click="exportReview(review)">
-              {{ t('common.download') }}
+          <span class="period">{{ savedReviewCount }}</span>
+        </summary>
+
+        <div class="archive-body">
+          <div class="section-heading archive-actions">
+            <p class="hero-subtitle">{{ t('reviews.archiveHint') }}</p>
+            <button class="btn btn-secondary" @click="showCreateModal = true">
+              {{ t('reviews.newReview') }}
             </button>
           </div>
+
+          <div v-if="reviews.length" class="review-archive">
+            <div v-for="review in reviews" :key="review.id" class="review-card">
+              <div class="review-header">
+                <div>
+                  <h3>{{ review.review_type }}</h3>
+                  <p class="review-date">{{ formatDate(review.created_at) }}</p>
+                </div>
+                <span class="period">{{ review.period }}</span>
+              </div>
+              <div class="review-content">
+                <p v-if="review.content?.summary"><strong>{{ t('reviews.content') }}:</strong> {{ review.content.summary }}</p>
+                <p v-if="review.content?.insights"><strong>{{ t('reviews.insights') }}:</strong> {{ review.content.insights }}</p>
+                <p v-if="review.content?.next_steps"><strong>{{ t('reviews.nextSteps') }}:</strong> {{ review.content.next_steps }}</p>
+                <p v-if="review.content?.misconceptions?.length">
+                  <strong>{{ t('reviews.misconceptions') }}:</strong> {{ review.content.misconceptions.join(' / ') }}
+                </p>
+              </div>
+              <div class="review-actions-row">
+                <button class="btn btn-secondary" @click="exportReview(review)">
+                  {{ t('common.download') }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty">{{ t('reviews.noReviews') }}</p>
         </div>
-      </div>
-      <p v-else class="empty">{{ t('reviews.noReviews') }}</p>
-    </section>
+      </details>
+    </template>
 
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
@@ -204,6 +228,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import api from '@/api'
+import PrimaryAsyncStateCard from '@/components/PrimaryAsyncStateCard.vue'
+import type { AsyncPageState } from '@/types/ui'
 
 const { t } = useI18n()
 
@@ -211,6 +237,8 @@ const reviews = ref<any[]>([])
 const dueCards = ref<any[]>([])
 const schedules = ref<any[]>([])
 const modelCards = ref<any[]>([])
+const pageState = ref<AsyncPageState>('loading')
+const pageError = ref('')
 const showCreateModal = ref(false)
 const creating = ref(false)
 const generating = ref(false)
@@ -309,36 +337,57 @@ const buildWorkspaceRoute = (entry: any) => {
   }
 }
 
-const formatModelCardSupportText = (card: any) => {
+const formatModelCardSource = (card: any) => {
   const schedule = scheduleByCardId.value.get(String(card.id))
   if (!schedule) {
-    return card.user_notes || t('reviews.modelLifecycleHint')
+    return t('reviews.modelLifecycleSourceNone')
   }
+  return formatReviewOrigin(schedule)
+}
 
-  const originLabel = formatReviewOrigin(schedule)
-  const reason = formatReviewReason(schedule)
-  const origin = schedule.origin?.source_turn_preview
-  if (origin) {
-    return `${originLabel}. ${reason} ${origin}`
+const formatModelCardState = (card: any) => {
+  const schedule = scheduleByCardId.value.get(String(card.id))
+  if (!schedule) {
+    return t('reviews.modelLifecycleStateUnscheduled')
   }
-  return `${originLabel}. ${reason}`
+  if (schedule.needs_reinforcement) return t('reviews.modelLifecycleStateReinforcement')
+  if (dueCards.value.some((entry: any) => String(entry.model_card_id) === String(card.id))) {
+    return t('reviews.modelLifecycleStateDue')
+  }
+  if (schedule.last_reviewed_at) return t('reviews.modelLifecycleStateReviewed')
+  return t('reviews.modelLifecycleStateScheduled')
+}
+
+const formatModelCardAction = (card: any) => {
+  const schedule = scheduleByCardId.value.get(String(card.id))
+  if (!schedule) return t('reviews.modelLifecycleActionSchedule')
+  if (schedule.needs_reinforcement) return t('reviews.modelLifecycleActionRevisit')
+  if (dueCards.value.some((entry: any) => String(entry.model_card_id) === String(card.id))) {
+    return t('reviews.modelLifecycleActionRecallNow')
+  }
+  return t('reviews.modelLifecycleActionOpen')
 }
 
 const fetchReviewLifecycle = async () => {
+  pageError.value = ''
+  pageState.value = 'loading'
   try {
     const [reviewsRes, dueRes, schedulesRes, modelCardsRes] = await Promise.all([
       api.get('/reviews/'),
-      api.get('/srs/due').catch(() => ({ data: [] })),
-      api.get('/srs/schedules').catch(() => ({ data: [] })),
-      api.get('/model-cards/').catch(() => ({ data: [] })),
+      api.get('/srs/due'),
+      api.get('/srs/schedules'),
+      api.get('/model-cards/'),
     ])
 
     reviews.value = reviewsRes.data || []
     dueCards.value = dueRes.data || []
     schedules.value = schedulesRes.data || []
     modelCards.value = modelCardsRes.data || []
+    pageState.value = 'ready'
   } catch (fetchError) {
     console.error('Failed to fetch review lifecycle data:', fetchError)
+    pageError.value = t('reviews.errorMessage')
+    pageState.value = 'error'
   }
 }
 
@@ -576,6 +625,16 @@ onMounted(() => {
   gap: 0.3rem;
 }
 
+.card-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.card-meta-line {
+  font-size: 0.84rem;
+}
+
 .queue-title-row {
   display: flex;
   align-items: center;
@@ -626,6 +685,30 @@ onMounted(() => {
 .period {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
+}
+
+.archive-panel {
+  padding-bottom: 0.9rem;
+}
+
+.archive-summary {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+
+.archive-summary::-webkit-details-marker {
+  display: none;
+}
+
+.archive-body {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.archive-actions {
+  margin-bottom: 0;
 }
 
 .review-card {

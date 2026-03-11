@@ -35,6 +35,9 @@ type ProblemDetailDataDeps = {
   candidateLoading: RefLike<boolean>
   pathCandidateLoading: RefLike<boolean>
   hydrateWorkspaceSnapshot: (snapshot: WorkspaceSnapshot) => void
+  onActionError: (message: string) => void
+  clearActionError: () => void
+  t: (key: string, params?: Record<string, unknown>) => string
 }
 
 export const createProblemDetailDataSupport = ({
@@ -58,6 +61,9 @@ export const createProblemDetailDataSupport = ({
   candidateLoading,
   pathCandidateLoading,
   hydrateWorkspaceSnapshot,
+  onActionError,
+  clearActionError,
+  t,
 }: ProblemDetailDataDeps) => {
   const normalizeExplorationTurn = (turn: any) => ({
     turn_id: turn.turn_id || turn.id || null,
@@ -99,6 +105,7 @@ export const createProblemDetailDataSupport = ({
   }
 
   const fetchSocraticQuestion = async () => {
+    clearActionError()
     fetchingSocraticQuestion.value = true
     streamingSocraticQuestion.value = ''
     socraticQuestion.value = null
@@ -151,6 +158,7 @@ export const createProblemDetailDataSupport = ({
     } catch (e) {
       console.error('Failed to fetch socratic question:', e)
       socraticQuestion.value = null
+      onActionError(t('problemDetail.actionErrorFetchQuestion'))
     } finally {
       streamingSocraticQuestion.value = ''
       fetchingSocraticQuestion.value = false
@@ -194,6 +202,7 @@ export const createProblemDetailDataSupport = ({
   }
 
   const fetchProblem = async () => {
+    loading.value = true
     try {
       const [
         problemRes,
@@ -244,8 +253,18 @@ export const createProblemDetailDataSupport = ({
       } else {
         socraticQuestion.value = null
       }
+      return true
     } catch (e) {
       console.error('Failed to fetch problem:', e)
+      problem.value = null
+      learningPath.value = null
+      allLearningPaths.value = []
+      responses.value = []
+      qaHistory.value = []
+      conceptCandidates.value = []
+      pathCandidates.value = []
+      socraticQuestion.value = null
+      return false
     } finally {
       loading.value = false
     }

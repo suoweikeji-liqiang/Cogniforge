@@ -1,6 +1,17 @@
 <template>
   <div class="problem-detail" data-testid="problem-detail-workspace">
-    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
+    <PrimaryAsyncStateCard
+      v-if="pageState === 'error'"
+      kind="error"
+      :title="t('problemDetail.errorTitle')"
+      :message="pageError || t('problemDetail.errorMessage')"
+      :retry-label="t('common.retry')"
+      test-id="problem-detail-error-state"
+      retry-test-id="problem-detail-error-retry"
+      @retry="loadWorkspace"
+    />
+
+    <div v-else-if="loading" class="loading">{{ t('common.loading') }}</div>
 
     <template v-else-if="problem">
       <div class="problem-header">
@@ -91,7 +102,7 @@
                     type="button"
                     class="btn btn-secondary"
                     :class="{ active: learningMode === 'socratic' }"
-                    :disabled="switchingMode || submitting || askingQuestion"
+                    :disabled="switchingMode || submitting || askingQuestion || fetchingSocraticQuestion"
                     data-testid="mode-switch-socratic"
                     @click="setLearningMode('socratic')"
                   >
@@ -101,7 +112,7 @@
                     type="button"
                     class="btn btn-secondary"
                     :class="{ active: learningMode === 'exploration' }"
-                    :disabled="switchingMode || submitting || askingQuestion"
+                    :disabled="switchingMode || submitting || askingQuestion || fetchingSocraticQuestion"
                     data-testid="mode-switch-exploration"
                     @click="setLearningMode('exploration')"
                   >
@@ -109,6 +120,10 @@
                   </button>
                 </div>
               </div>
+
+              <p v-if="workspaceActionError" class="workspace-action-error" data-testid="workspace-action-error">
+                {{ workspaceActionError }}
+              </p>
             </section>
 
             <section
@@ -321,7 +336,7 @@
                   {{ t('problemDetail.previousStep') }}
                 </button>
                 <button
-                  v-if="!isPathCompleted"
+                  v-if="!isPathCompleted && learningMode !== 'socratic'"
                   type="button"
                   class="btn btn-primary"
                   :disabled="updatingPath"
@@ -330,7 +345,7 @@
                 >
                   {{ t('problemDetail.markStepDone') }}
                 </button>
-                <span v-else class="completed-badge">{{ t('problemDetail.completed') }}</span>
+                <span v-if="isPathCompleted" class="completed-badge">{{ t('problemDetail.completed') }}</span>
               </div>
 
               <details v-if="completedStepList.length" class="completed-panel">
@@ -350,6 +365,7 @@
             <section v-if="learningMode === 'socratic'" class="card responses-section workspace-primary-action-card" data-testid="workspace-primary-action">
               <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
               <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
+              <p class="protocol-note" data-testid="socratic-protocol-note">{{ t('problemDetail.socraticProgressControlled') }}</p>
 
               <div v-if="socraticQuestion" class="socratic-question-panel" data-testid="socratic-question-panel">
                 <div class="question-head">
@@ -573,7 +589,31 @@
                   <p>{{ t('problemDetail.workspaceArtifactPathCountHint') }}</p>
                 </article>
               </div>
-              <div class="workspace-artifacts-sections">
+              <div
+                v-if="!hasCurrentInteractionOutput"
+                class="workspace-current-output-empty"
+                data-testid="workspace-current-output-empty"
+              >
+                <strong>{{ t('problemDetail.currentOutputEmptyTitle') }}</strong>
+                <p>
+                  {{
+                    learningMode === 'socratic'
+                      ? t('problemDetail.currentOutputEmptyDescriptionSocratic')
+                      : t('problemDetail.currentOutputEmptyDescriptionExploration')
+                  }}
+                </p>
+              </div>
+              <div v-if="hasAnyArtifacts" class="workspace-artifacts-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  data-testid="workspace-artifacts-toggle"
+                  @click="artifactsExpanded = !artifactsExpanded"
+                >
+                  {{ artifactsExpanded ? t('problemDetail.hideTurnOutput') : t('problemDetail.processTurnOutput') }}
+                </button>
+              </div>
+              <div v-if="artifactsExpanded" class="workspace-artifacts-sections">
                 <ProblemTurnOutcomePanel
                   embedded
                   :learning-mode="learningMode"
@@ -584,6 +624,7 @@
                 <ProblemDerivedConceptsPanel
                   embedded
                   collapse-older
+                  :older-only="!hasCurrentInteractionOutput"
                   :candidates="conceptCandidates"
                   :loading="candidateLoading"
                   :current-turn-id="artifactFocusTurnId"
@@ -607,6 +648,7 @@
                 <ProblemDerivedPathsPanel
                   embedded
                   collapse-older
+                  :older-only="!hasCurrentInteractionOutput"
                   :candidates="pathCandidates"
                   :current-turn-id="artifactFocusTurnId"
                   :loading="pathCandidateLoading"
@@ -655,6 +697,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import PrimaryAsyncStateCard from '@/components/PrimaryAsyncStateCard.vue'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
 import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
 import ProblemDerivedPathsPanel from '@/components/problem-workspace/ProblemDerivedPathsPanel.vue'
@@ -666,6 +709,7 @@ import { createProblemDetailPathActions } from '@/views/problem-detail/pathActio
 import { createProblemDetailDataSupport } from '@/views/problem-detail/problemDetailDataSupport'
 import { createProblemDetailWorkspaceAssetActions } from '@/views/problem-detail/workspaceAssetActions'
 import { createProblemDetailWorkspaceSummarySupport } from '@/views/problem-detail/workspaceSummarySupport'
+import type { AsyncPageState } from '@/types/ui'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -678,10 +722,13 @@ const allLearningPaths = ref<any[]>([])
 const responses = ref<any[]>([])
 const learningMode = ref<'socratic' | 'exploration'>('socratic')
 const loading = ref(true)
+const pageState = ref<AsyncPageState>('loading')
+const pageError = ref('')
 const submitting = ref(false)
 const updatingPath = ref(false)
 const switchingMode = ref(false)
 const hintLoading = ref(false)
+const workspaceActionError = ref('')
 const responseText = ref('')
 const autoAdvanceMessage = ref('')
 const canUndoAutoAdvance = ref(false)
@@ -712,13 +759,11 @@ const noteSaving = ref(false)
 const workspaceResources = ref<any[]>([])
 const resourceSaving = ref(false)
 const resourceInterpretingId = ref<string | null>(null)
-const latestQA = computed(() => {
-  if (latestExplorationTurnId.value) {
-    const exactTurn = qaHistory.value.find((turn: any) => String(turn.turn_id || '') === String(latestExplorationTurnId.value))
-    if (exactTurn) return exactTurn
-  }
-  return qaHistory.value[0] || null
-})
+const artifactsExpanded = ref(false)
+const currentInteractionTurnId = ref<string | null>(null)
+const currentInteractionMode = ref<'socratic' | 'exploration' | null>(null)
+const currentInteractionStepKey = ref<string | null>(null)
+const hasCurrentInteractionOutput = ref(false)
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
 const completedSteps = computed(() => learningPath.value?.current_step || 0)
@@ -737,29 +782,82 @@ const progressPercent = computed(() => {
   return Math.round((completedSteps.value / totalSteps.value) * 100)
 })
 const completedStepList = computed(() => (learningPath.value?.path_data || []).slice(0, completedSteps.value))
-const latestResponse = computed(() => responses.value[responses.value.length - 1] || null)
+
+const buildCurrentInteractionStepKey = (mode: 'socratic' | 'exploration' = learningMode.value) => {
+  return `${mode}:${String(learningPath.value?.id || 'no-path')}:${completedSteps.value}`
+}
+
+const clearActionError = () => {
+  workspaceActionError.value = ''
+}
+
+const onActionError = (message: string) => {
+  workspaceActionError.value = message
+}
+
+const clearCurrentInteractionContext = (mode: 'socratic' | 'exploration' = learningMode.value) => {
+  responseText.value = ''
+  learningQuestion.value = ''
+  stepHint.value = null
+  socraticQuestion.value = null
+  streamingSocraticQuestion.value = ''
+  streamingSocraticStatus.value = ''
+  streamingSocraticPreview.value = ''
+  streamingExplorationAnswer.value = ''
+  latestExplorationTurnId.value = null
+  currentInteractionTurnId.value = null
+  currentInteractionMode.value = mode
+  currentInteractionStepKey.value = buildCurrentInteractionStepKey(mode)
+  hasCurrentInteractionOutput.value = false
+  artifactsExpanded.value = false
+}
+
+const captureCurrentInteractionOutput = (
+  turnId: string | null,
+  mode: 'socratic' | 'exploration' = learningMode.value,
+) => {
+  currentInteractionTurnId.value = turnId
+  currentInteractionMode.value = mode
+  currentInteractionStepKey.value = buildCurrentInteractionStepKey(mode)
+  hasCurrentInteractionOutput.value = Boolean(turnId)
+  if (mode === 'exploration') {
+    latestExplorationTurnId.value = turnId
+  }
+  artifactsExpanded.value = false
+}
+
+const latestResponseRecord = computed(() => responses.value[responses.value.length - 1] || null)
+const latestExplorationTurn = computed(() => {
+  if (latestExplorationTurnId.value) {
+    const exactTurn = qaHistory.value.find((turn: any) => String(turn.turn_id || '') === String(latestExplorationTurnId.value))
+    if (exactTurn) return exactTurn
+  }
+  return qaHistory.value[0] || null
+})
+const currentInteractionMatchesContext = computed(() => (
+  Boolean(currentInteractionTurnId.value)
+  && hasCurrentInteractionOutput.value
+  && currentInteractionMode.value === learningMode.value
+  && Boolean(currentInteractionStepKey.value)
+))
+const latestResponse = computed(() => {
+  if (!currentInteractionMatchesContext.value || currentInteractionMode.value !== 'socratic') return null
+  return responses.value.find(
+    (response: any) => String(response.turn_id || '') === String(currentInteractionTurnId.value),
+  ) || null
+})
+const latestQA = computed(() => {
+  if (!currentInteractionMatchesContext.value || currentInteractionMode.value !== 'exploration') return null
+  return qaHistory.value.find(
+    (turn: any) => String(turn.turn_id || '') === String(currentInteractionTurnId.value),
+  ) || null
+})
 const responseHistory = computed(() => [...responses.value].reverse())
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
-const activeConceptTurnId = computed(() => {
-  if (learningMode.value === 'exploration') {
-    return latestExplorationTurnId.value || latestQA.value?.turn_id || null
-  }
-  return latestResponse.value?.turn_id || null
-})
-const artifactFocusTurnId = computed(() => {
-  if (activeConceptTurnId.value) return activeConceptTurnId.value
-
-  const explorationTurnId = latestExplorationTurnId.value || latestQA.value?.turn_id || null
-  if (explorationTurnId) return explorationTurnId
-
-  if (latestResponse.value?.turn_id) return latestResponse.value.turn_id
-
-  const newestArtifact = [...conceptCandidates.value, ...pathCandidates.value]
-    .sort((left: any, right: any) => String(right.created_at || '').localeCompare(String(left.created_at || '')))
-    .find((item: any) => item?.source_turn_id)
-
-  return newestArtifact?.source_turn_id || null
-})
+const activeConceptTurnId = computed(() => (
+  currentInteractionMatchesContext.value ? currentInteractionTurnId.value : null
+))
+const artifactFocusTurnId = computed(() => activeConceptTurnId.value)
 const latestPathArtifacts = computed(() => {
   if (learningMode.value === 'exploration') {
     return latestQA.value?.derived_path_candidates?.length
@@ -782,6 +880,9 @@ const currentTurnPathCandidates = computed(() => {
   if (!artifactFocusTurnId.value) return []
   return pathCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(artifactFocusTurnId.value))
 })
+const hasAnyArtifacts = computed(() => (
+  Boolean(conceptCandidates.value.length || pathCandidates.value.length || latestResponse.value || latestQA.value)
+))
 const {
   workspacePathSummary,
   workspaceTurnSummary,
@@ -873,6 +974,7 @@ const {
   fetchProblem,
 } = createProblemDetailDataSupport({
   api,
+  t,
   problemId: String(route.params.id),
   ensureFreshToken: () => authStore.ensureFreshToken(),
   refreshToken: () => authStore.refreshToken(),
@@ -892,6 +994,8 @@ const {
   candidateLoading,
   pathCandidateLoading,
   hydrateWorkspaceSnapshot,
+  onActionError,
+  clearActionError,
 })
 
 const {
@@ -927,6 +1031,10 @@ const {
   streamingExplorationAnswer,
   latestExplorationTurnId,
   currentStep,
+  clearCurrentInteractionContext,
+  captureCurrentInteractionOutput,
+  onActionError,
+  clearActionError,
   fetchConceptCandidates,
   fetchPathCandidates,
   fetchExplorationTurns,
@@ -971,6 +1079,9 @@ const {
   autoAdvanceMessage,
   canUndoAutoAdvance,
   undoTargetStep,
+  clearCurrentInteractionContext,
+  onActionError,
+  clearActionError,
   fetchLearningPath,
   fetchLearningPaths,
   fetchSocraticQuestion,
@@ -994,6 +1105,43 @@ const decidePathCandidate = async (candidateId: string, action: string) => {
 
 const handlePathCandidateDecision = ({ candidateId, action }: { candidateId: string; action: string }) => {
   decidePathCandidate(candidateId, action)
+}
+
+const hydrateCurrentInteractionFromWorkspace = () => {
+  if (learningMode.value === 'exploration') {
+    const turnId = String(latestExplorationTurn.value?.turn_id || '').trim()
+    if (turnId) {
+      captureCurrentInteractionOutput(turnId, 'exploration')
+      return
+    }
+  }
+
+  if (learningMode.value === 'socratic') {
+    const turnId = String(latestResponseRecord.value?.turn_id || '').trim()
+    if (turnId) {
+      captureCurrentInteractionOutput(turnId, 'socratic')
+      return
+    }
+  }
+
+  clearCurrentInteractionContext(learningMode.value)
+}
+
+const loadWorkspace = async () => {
+  pageError.value = ''
+  pageState.value = 'loading'
+  clearActionError()
+  const loaded = await fetchProblem()
+  if (!loaded) {
+    pageError.value = t('problemDetail.errorMessage')
+    pageState.value = 'error'
+    return
+  }
+
+  hydrateCurrentInteractionFromWorkspace()
+  pageState.value = 'ready'
+  await applyResumePathFromQuery()
+  await scrollToReinforcementFocus()
 }
 
 const scrollToWorkspaceInput = async (targetMode: 'socratic' | 'exploration') => {
@@ -1053,11 +1201,7 @@ const scrollToReinforcementFocus = async () => {
   }
 }
 
-onMounted(async () => {
-  await fetchProblem()
-  await applyResumePathFromQuery()
-  await scrollToReinforcementFocus()
-})
+onMounted(loadWorkspace)
 </script>
 
 <style scoped>
@@ -1278,6 +1422,58 @@ onMounted(async () => {
   flex-wrap: wrap;
   padding-top: 0.9rem;
   border-top: 1px solid var(--border);
+}
+
+.workspace-action-error {
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  background: rgba(120, 24, 24, 0.14);
+  color: #fecaca;
+}
+
+.protocol-note {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  background: rgba(96, 165, 250, 0.08);
+  color: var(--text-muted);
+}
+
+.workspace-artifacts-head {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.workspace-artifacts-strip {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.workspace-current-output-empty {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.workspace-current-output-empty p {
+  color: var(--text-muted);
+}
+
+.workspace-artifacts-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.workspace-artifacts-sections {
+  display: grid;
+  gap: 0.9rem;
 }
 
 .reinforcement-target-card {

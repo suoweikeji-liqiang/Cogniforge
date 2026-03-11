@@ -42,6 +42,10 @@ type LearningActionDeps = {
   streamingExplorationAnswer: RefLike<string>
   latestExplorationTurnId: RefLike<string | null>
   currentStep: RefLike<any | null>
+  clearCurrentInteractionContext: (mode?: LearningMode) => void
+  captureCurrentInteractionOutput: (turnId: string | null, mode?: LearningMode) => void
+  onActionError: (message: string) => void
+  clearActionError: () => void
   fetchConceptCandidates: () => Promise<void>
   fetchPathCandidates: () => Promise<void>
   fetchExplorationTurns: () => Promise<void>
@@ -81,6 +85,10 @@ export const createProblemDetailLearningActions = ({
   streamingExplorationAnswer,
   latestExplorationTurnId,
   currentStep,
+  clearCurrentInteractionContext,
+  captureCurrentInteractionOutput,
+  onActionError,
+  clearActionError,
   fetchConceptCandidates,
   fetchPathCandidates,
   fetchExplorationTurns,
@@ -136,30 +144,30 @@ export const createProblemDetailLearningActions = ({
   const setLearningMode = async (mode: LearningMode) => {
     if (switchingMode.value || learningMode.value === mode) return
 
-    const previousMode = learningMode.value
-    learningMode.value = mode
-    if (problem.value) {
-      problem.value.learning_mode = mode
-    }
-
+    clearActionError()
     switchingMode.value = true
     try {
       await api.put(`/problems/${problemId}`, { learning_mode: mode })
+      learningMode.value = mode
+      if (problem.value) {
+        problem.value.learning_mode = mode
+      }
+      clearCurrentInteractionContext(mode)
       if (mode === 'socratic') {
         await fetchSocraticQuestion()
+      } else {
+        socraticQuestion.value = null
       }
     } catch (e) {
       console.error('Failed to switch learning mode:', e)
-      learningMode.value = previousMode
-      if (problem.value) {
-        problem.value.learning_mode = previousMode
-      }
+      onActionError(t('problemDetail.actionErrorModeSwitch'))
     } finally {
       switchingMode.value = false
     }
   }
 
   const submitResponse = async () => {
+    clearActionError()
     submitting.value = true
     streamingSocraticStatus.value = ''
     streamingSocraticPreview.value = ''
@@ -230,6 +238,7 @@ export const createProblemDetailLearningActions = ({
       }
 
       responses.value.push(responseData)
+      captureCurrentInteractionOutput(normalizeTurnId(responseData?.turn_id), 'socratic')
       await Promise.all([
         fetchConceptCandidates(),
         fetchPathCandidates(),
@@ -257,6 +266,7 @@ export const createProblemDetailLearningActions = ({
       await fetchSocraticQuestion()
     } catch (e) {
       console.error('Failed to submit response:', e)
+      onActionError(t('problemDetail.actionErrorSubmitResponse'))
     } finally {
       streamingSocraticStatus.value = ''
       streamingSocraticPreview.value = ''
@@ -288,6 +298,7 @@ export const createProblemDetailLearningActions = ({
     const question = learningQuestion.value.trim()
     if (!question || askingQuestion.value) return
 
+    clearActionError()
     askingQuestion.value = true
     streamingExplorationAnswer.value = ''
     try {
@@ -347,9 +358,11 @@ export const createProblemDetailLearningActions = ({
       }
 
       await refreshExplorationWorkspace()
+      captureCurrentInteractionOutput(latestExplorationTurnId.value, 'exploration')
       learningQuestion.value = ''
     } catch (e) {
       console.error('Failed to ask learning question:', e)
+      onActionError(t('problemDetail.actionErrorAskQuestion'))
     } finally {
       streamingExplorationAnswer.value = ''
       askingQuestion.value = false

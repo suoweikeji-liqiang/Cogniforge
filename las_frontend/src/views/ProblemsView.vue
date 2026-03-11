@@ -35,9 +35,20 @@
         <option value="created_asc">{{ t('problems.sortOldest') }}</option>
       </select>
     </div>
-    
-    <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
-    
+
+    <PrimaryAsyncStateCard
+      v-if="pageState === 'error'"
+      kind="error"
+      :title="t('problems.errorTitle')"
+      :message="pageError || t('problems.errorMessage')"
+      :retry-label="t('common.retry')"
+      test-id="problems-error-state"
+      retry-test-id="problems-error-retry"
+      @retry="fetchProblems()"
+    />
+
+    <div v-else-if="loading" class="loading">{{ t('common.loading') }}</div>
+
     <template v-else-if="problems.length">
       <div class="problems-grid" data-testid="problems-grid">
       <router-link 
@@ -103,6 +114,43 @@
         </form>
       </div>
     </div>
+
+    <div
+      v-if="showStartModeChooser"
+      class="modal-overlay"
+      data-testid="problem-start-mode-chooser"
+      @click.self="closeStartModeChooser"
+    >
+      <div class="modal">
+        <h2>{{ t('problems.startModeTitle') }}</h2>
+        <p class="page-subtitle">{{ t('problems.startModeMessage') }}</p>
+        <div class="chooser-actions">
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="startingMode"
+            data-testid="problem-start-mode-socratic"
+            @click="startProblemInMode('socratic')"
+          >
+            {{ t('problems.startModeSocratic') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="startingMode"
+            data-testid="problem-start-mode-exploration"
+            @click="startProblemInMode('exploration')"
+          >
+            {{ t('problems.startModeExploration') }}
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" :disabled="startingMode" @click="closeStartModeChooser">
+            {{ t('common.close') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -111,6 +159,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import api from '@/api'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import PrimaryAsyncStateCard from '@/components/PrimaryAsyncStateCard.vue'
+import type { AsyncPageState } from '@/types/ui'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -121,12 +171,17 @@ const loading = ref(true)
 const loadingMore = ref(false)
 const hasMoreProblems = ref(false)
 const showCreateModal = ref(false)
+const showStartModeChooser = ref(false)
 const creating = ref(false)
+const startingMode = ref(false)
 const error = ref('')
+const pageState = ref<AsyncPageState>('loading')
+const pageError = ref('')
 const searchQuery = ref('')
 const learningModeFilter = ref('all')
 const statusFilter = ref('all')
 const sortBy = ref('updated_desc')
+const createdProblemId = ref<string | null>(null)
 const trimmedSearchQuery = computed(() => searchQuery.value.trim())
 const hasActiveFilters = computed(() => (
   Boolean(trimmedSearchQuery.value)
@@ -146,12 +201,28 @@ const newProblem = ref({
   concepts: '',
 })
 
+const closeStartModeChooser = () => {
+  if (startingMode.value) return
+  showStartModeChooser.value = false
+  createdProblemId.value = null
+}
+
+const resetNewProblem = () => {
+  newProblem.value = {
+    title: '',
+    description: '',
+    concepts: '',
+  }
+}
+
 const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
   const fetchId = ++latestFetchId
   if (append) {
     loadingMore.value = true
   } else {
     loading.value = true
+    pageError.value = ''
+    pageState.value = 'loading'
   }
 
   try {
@@ -169,13 +240,19 @@ const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
     const nextProblems = response.data || []
     problems.value = append ? [...problems.value, ...nextProblems] : nextProblems
     hasMoreProblems.value = nextProblems.length === PAGE_SIZE
+    if (!append) {
+      pageState.value = 'ready'
+    }
   } catch (e) {
     if (fetchId !== latestFetchId) return
     console.error('Failed to fetch problems:', e)
-    if (!append) {
+    if (append) {
+      hasMoreProblems.value = false
+    } else {
       problems.value = []
+      pageError.value = t('problems.errorMessage')
+      pageState.value = 'error'
     }
-    hasMoreProblems.value = false
   } finally {
     if (fetchId !== latestFetchId) return
     loading.value = false
@@ -215,8 +292,13 @@ const createProblem = async () => {
       timeout: 15000,
     })
     
+    const createdProblem = response.data
+    problems.value = [createdProblem, ...problems.value.filter((item) => item.id !== createdProblem.id)]
     showCreateModal.value = false
-    router.push(`/problems/${response.data.id}`)
+    showStartModeChooser.value = true
+    createdProblemId.value = createdProblem.id
+    resetNewProblem()
+    pageState.value = 'ready'
   } catch (e: any) {
     if (e.code === 'ECONNABORTED') {
       error.value = t('problems.createTimeout')
@@ -225,6 +307,29 @@ const createProblem = async () => {
     }
   } finally {
     creating.value = false
+  }
+}
+
+const startProblemInMode = async (mode: 'socratic' | 'exploration') => {
+  if (!createdProblemId.value || startingMode.value) return
+  startingMode.value = true
+  try {
+    if (mode === 'exploration') {
+      await api.put(`/problems/${createdProblemId.value}`, { learning_mode: 'exploration' })
+      problems.value = problems.value.map((item) => (
+        item.id === createdProblemId.value
+          ? { ...item, learning_mode: 'exploration' }
+          : item
+      ))
+    }
+    showStartModeChooser.value = false
+    await router.push(`/problems/${createdProblemId.value}`)
+    createdProblemId.value = null
+  } catch (e) {
+    console.error('Failed to set starting mode:', e)
+    error.value = t('problems.createFailed')
+  } finally {
+    startingMode.value = false
   }
 }
 
@@ -397,6 +502,12 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
   gap: 1rem;
   justify-content: flex-end;
   margin-top: 1.5rem;
+}
+
+.chooser-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
 }
 
 .loading, .empty {

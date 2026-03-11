@@ -16,7 +16,9 @@
     "submit": "提交",
     "close": "关闭",
     "download": "下载",
-    "loadMore": "加载更多"
+    "loadMore": "加载更多",
+    "retry": "重试",
+    "empty": "空状态"
   },
   "feedback": {
     "correctness": "正确性",
@@ -25,7 +27,7 @@
     "nextQuestion": "下一问"
   },
   "nav": {
-    "home": "学习",
+    "home": "继续学习",
     "dashboard": "仪表盘",
     "problems": "问题",
     "modelCards": "知识卡",
@@ -160,6 +162,7 @@
     "activeProblems": "活跃问题",
     "reviewQueueReady": "你有 {count} 个复习项目待完成",
     "reviewQueueDescription": "先清掉到期复习，再继续新问题，会让学习节奏更稳。",
+    "startReviewNow": "立即开始复习",
     "resumeLatestProblem": "继续最近的问题",
     "resumeLatestProblemDescription": "如果还没有明确的下一步，就先把一个问题推进到完成。",
     "resumePanelMeta": "继续学习",
@@ -205,6 +208,8 @@
     "viewReviewHistory": "查看复盘记录",
     "reviewCreated": "复盘已生成并保存。",
     "reviewCreateFailed": "复盘生成失败。",
+    "errorTitle": "仪表盘暂时不可用",
+    "errorMessage": "当前无法加载仪表盘。请重试以恢复主学习焦点。",
     "retrievalObserver": "召回观察",
     "retrievalTitle": "RAG 召回情况",
     "retrievalDescription": "快速看最近召回用了哪些上下文，避免知识命中变成黑盒。",
@@ -258,7 +263,13 @@
     "viewDetail": "查看",
     "openWorkspace": "打开工作区",
     "deleteProblem": "删除",
-    "confirmDelete": "确定要删除这个问题吗？"
+    "confirmDelete": "确定要删除这个问题吗？",
+    "errorTitle": "问题列表暂时不可用",
+    "errorMessage": "当前无法加载问题列表。请重试以恢复学习队列。",
+    "startModeTitle": "选择起始学习方式",
+    "startModeMessage": "问题已经创建完成。进入工作区前，先选择你要从哪种学习协议开始。",
+    "startModeSocratic": "从苏格拉底模式开始",
+    "startModeExploration": "从探索模式开始"
   },
   "problemDetail": {
     "title": "问题详情",
@@ -540,7 +551,22 @@
     "noProgressRecords": "暂无进展记录",
     "previousStep": "上一步",
     "markStepDone": "标记当前步骤完成",
-    "completed": "已完成"
+    "completed": "已完成",
+    "processTurnOutput": "处理本轮产物",
+    "hideTurnOutput": "收起详细产物",
+    "currentOutputEmptyTitle": "当前模式还没有新产物",
+    "currentOutputEmptyDescriptionSocratic": "这个模式下还没有当前回合产出。先回答当前问题，再生成新的评估结果。",
+    "currentOutputEmptyDescriptionExploration": "这个模式下还没有当前回合产出。先发起提问，再生成概念、路径和下一步建议。",
+    "socraticProgressControlled": "苏格拉底模式下的步骤推进由评估结果决定，不提供手动前进。",
+    "errorTitle": "工作区暂时不可用",
+    "errorMessage": "当前无法加载这个问题的工作区。请重试。",
+    "actionErrorModeSwitch": "学习模式切换失败，请重试。",
+    "actionErrorFetchQuestion": "当前苏格拉底问题加载失败，请重试。",
+    "actionErrorSubmitResponse": "这次苏格拉底作答提交失败，当前草稿仍然保留。",
+    "actionErrorAskQuestion": "这次探索提问提交失败，请重试。",
+    "actionErrorStepChange": "当前步骤更新失败，请重试。",
+    "actionErrorPathSwitch": "学习路径切换失败，请重试。",
+    "actionErrorReturnPath": "返回父路径失败，请重试。"
   },
   "modelCards": {
     "title": "知识卡",
@@ -704,7 +730,23 @@
     "nextSteps": "下一步",
     "misconceptions": "误区",
     "generate": "AI 生成",
-    "generating": "生成中..."
+    "generating": "生成中...",
+    "errorTitle": "复习中心暂时不可用",
+    "errorMessage": "当前无法加载复习中心。请重试以恢复 recall 队列和知识卡上下文。",
+    "archiveHint": "归档和手动生成的复盘保持次要位置。先把当前 recall 决策做清楚，再回来看这些内容。",
+    "lifecycleSourceLabel": "来源",
+    "lifecycleStateLabel": "当前状态",
+    "lifecycleActionLabel": "建议动作",
+    "modelLifecycleSourceNone": "当前还没有关联到具体工作区来源。",
+    "modelLifecycleStateUnscheduled": "还没有进入间隔回忆。",
+    "modelLifecycleStateScheduled": "已经排入 recall，等待下一次回忆。",
+    "modelLifecycleStateReviewed": "已经发生过回忆，仍在 recall 中。",
+    "modelLifecycleStateDue": "现在已经到期，应该先做 recall。",
+    "modelLifecycleStateReinforcement": "弱 recall 后需要回到工作区强化。",
+    "modelLifecycleActionSchedule": "打开知识卡并安排第一次 recall。",
+    "modelLifecycleActionOpen": "打开知识卡查看当前 recall 状态。",
+    "modelLifecycleActionRecallNow": "先开始 recall，再回来看归档内容。",
+    "modelLifecycleActionRevisit": "回到原始工作区或知识卡，先修稳再扩展。"
   },
   "chat": {
     "title": "旧版对话",
@@ -767,7 +809,10 @@
     "forgot": "忘记了",
     "ok": "还行",
     "perfect": "完美",
-    "allDone": "今日复习已全部完成！"
+    "allDone": "今日复习已全部完成！",
+    "errorTitle": "间隔复习暂时不可用",
+    "errorMessage": "当前无法加载复习队列。请重试以恢复到期卡片。",
+    "submitErrorMessage": "这次 recall 结果提交失败，当前卡片仍可继续评分。"
   },
   "graph": {
     "title": "知识图谱",

@@ -161,6 +161,7 @@ const props = defineProps<{
   currentTurnId?: string | null
   embedded?: boolean
   collapseOlder?: boolean
+  olderOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -186,10 +187,16 @@ const sortedCandidates = computed(() => {
   })
 })
 
-const isCurrentTurnCandidate = (candidate: any) => Boolean(props.currentTurnId && candidate.source_turn_id === props.currentTurnId)
+const isCurrentTurnCandidate = (candidate: any) => (
+  Boolean(props.currentTurnId)
+  && String(candidate.source_turn_id || '') === String(props.currentTurnId)
+)
 
 const candidateGroups = computed(() => {
   if (!props.currentTurnId) {
+    if (props.olderOnly) {
+      return [{ key: 'older', title: t('problemDetail.earlierPathCandidates'), items: sortedCandidates.value }]
+    }
     return [{ key: 'all', title: '', items: sortedCandidates.value }]
   }
 
