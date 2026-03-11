@@ -44,6 +44,10 @@ def _normalize_learning_mode(raw_mode: Optional[str], default: str = "socratic")
     return mode
 
 
+def _clamp_correctness_label(value: Optional[str], limit: int = 100) -> str:
+    return str(value or "").strip()[:limit]
+
+
 def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
     verdict = str((structured_feedback or {}).get("correctness", "")).strip().lower()
     if not verdict:
@@ -340,19 +344,25 @@ async def complete_socratic_response(
     await db.flush()
 
     evidence_snippet = deps.build_concept_evidence_snippet(response_data.user_response, step_concept)
-    accepted_concepts, pending_concepts = await deps.register_problem_concept_candidates(
+    accepted_concepts, pending_concepts = await run_optional_persist(
         db=db,
-        user_id=str(current_user.id),
-        problem=problem,
-        learning_mode=learning_mode,
-        source_turn_id=str(db_turn.id),
-        source_path_id=str(learning_path.id) if learning_path else None,
-        inferred_concepts=inferred_concepts + [step_concept],
-        source="response",
-        anchor_concept=step_concept,
-        user_text=response_data.user_response,
-        retrieval_context=retrieval_context,
-        evidence_snippet=evidence_snippet,
+        fallback_reasons=fallback_reasons,
+        label="concept_candidate_persist",
+        operation=lambda: deps.register_problem_concept_candidates(
+            db=db,
+            user_id=str(current_user.id),
+            problem=problem,
+            learning_mode=learning_mode,
+            source_turn_id=str(db_turn.id),
+            source_path_id=str(learning_path.id) if learning_path else None,
+            inferred_concepts=inferred_concepts + [step_concept],
+            source="response",
+            anchor_concept=step_concept,
+            user_text=response_data.user_response,
+            retrieval_context=retrieval_context,
+            evidence_snippet=evidence_snippet,
+        ),
+        default=([], []),
     )
 
     auto_advanced = False
@@ -493,7 +503,7 @@ async def complete_socratic_response(
         confidence=float(structured_feedback.get("confidence") or 0.0),
         pass_stage=bool(structured_feedback.get("pass_stage")),
         auto_advanced=auto_advanced,
-        correctness_label=str(structured_feedback.get("correctness") or ""),
+        correctness_label=_clamp_correctness_label(structured_feedback.get("correctness")),
         decision_reason=str(structured_feedback.get("decision_reason") or ""),
     )
     db.add(mastery_event)

@@ -166,6 +166,90 @@ async def test_problem_response_persists_core_turn_when_learning_event_logging_f
 
 
 @pytest.mark.asyncio
+async def test_problem_response_clamps_long_correctness_label(client, db_session, monkeypatch):
+    from app.models.entities.user import ProblemMasteryEvent
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Long correctness label")
+
+    long_correctness = "correct " + ("very " * 40) + "detailed explanation"
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": long_correctness,
+            "misconceptions": [],
+            "suggestions": ["Keep the explanation grounded in one example."],
+            "next_question": "What example best validates your claim?",
+            "mastery_score": 90,
+            "dimension_scores": {"accuracy": 90, "completeness": 88, "transfer": 84, "rigor": 86},
+            "confidence": 0.91,
+            "pass_stage": True,
+            "decision_reason": "Strong answer, but correctness text is intentionally long.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "Integral action eliminates steady-state error."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+    mastery_result = await db_session.execute(
+        select(ProblemMasteryEvent).where(ProblemMasteryEvent.problem_id == problem["id"])
+    )
+    mastery_event = mastery_result.scalar_one()
+    assert mastery_event.correctness_label == long_correctness[:100]
+
+
+@pytest.mark.asyncio
+async def test_problem_response_persists_core_turn_when_concept_candidate_logging_fails(
+    client,
+    db_session,
+    monkeypatch,
+):
+    from app.api.routes import problems as problems_route
+    from app.models.entities.user import ProblemMasteryEvent, ProblemResponse as ProblemResponseModel
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Optional concept candidate failure")
+
+    async def failing_register_problem_concept_candidates(*args, **kwargs):
+        raise RuntimeError("concept candidate store offline")
+
+    monkeypatch.setattr(
+        problems_route,
+        "_register_problem_concept_candidates",
+        failing_register_problem_concept_candidates,
+    )
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "Integral action accumulates residual error over time."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accepted_concepts"] == []
+    assert body["pending_concepts"] == []
+    assert "error:concept_candidate_persist" in (body.get("fallback_reason") or "")
+
+    response_result = await db_session.execute(
+        select(ProblemResponseModel).where(ProblemResponseModel.problem_id == problem["id"])
+    )
+    assert response_result.scalar_one_or_none() is not None
+
+    mastery_result = await db_session.execute(
+        select(ProblemMasteryEvent).where(ProblemMasteryEvent.problem_id == problem["id"])
+    )
+    assert mastery_result.scalar_one_or_none() is not None
+
+
+@pytest.mark.asyncio
 async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client, db_session):
     from app.models.entities.user import ProblemTurn
 
@@ -272,6 +356,54 @@ async def test_problem_ask_persists_turn_when_path_candidate_persistence_fails(
     assert body["turn_id"]
     assert body["derived_path_candidates"] == []
     assert "error:path_candidate_persist" in (body.get("fallback_reason") or "")
+
+    turn_rows = await db_session.execute(
+        select(ProblemTurn).where(
+            ProblemTurn.problem_id == problem["id"],
+            ProblemTurn.learning_mode == "exploration",
+        )
+    )
+    assert turn_rows.scalar_one_or_none() is not None
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_persists_turn_when_concept_candidate_persistence_fails(
+    client,
+    db_session,
+    monkeypatch,
+):
+    from app.api.routes import problems as problems_route
+    from app.models.entities.user import ProblemTurn
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Optional concept candidate failure ask")
+
+    async def failing_register_problem_concept_candidates(*args, **kwargs):
+        raise RuntimeError("concept candidate store offline")
+
+    monkeypatch.setattr(
+        problems_route,
+        "_register_problem_concept_candidates",
+        failing_register_problem_concept_candidates,
+    )
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "PID 中积分项为什么能消除稳态误差？",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["learning_mode"] == "exploration"
+    assert body["turn_id"]
+    assert body["accepted_concepts"] == []
+    assert body["pending_concepts"] == []
+    assert "error:concept_candidate_persist" in (body.get("fallback_reason") or "")
 
     turn_rows = await db_session.execute(
         select(ProblemTurn).where(

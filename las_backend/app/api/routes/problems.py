@@ -277,19 +277,25 @@ async def _complete_exploration_learning_turn(
         [*filtered_ask_concepts, *question_concepts],
         limit=_exploration_concept_candidate_limit(),
     ) or [step_concept]
-    accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
+    accepted_concepts, pending_concepts = await run_optional_persist(
         db=db,
-        user_id=str(current_user.id),
-        problem=problem,
-        learning_mode=learning_mode,
-        source_turn_id=str(db_turn.id),
-        source_path_id=str(learning_path.id) if learning_path else None,
-        inferred_concepts=candidate_concepts,
-        source="ask",
-        anchor_concept=step_concept,
-        user_text=f"{payload.question}\n{answer}",
-        retrieval_context=retrieval_context,
-        evidence_snippet=evidence_snippet,
+        fallback_reasons=fallback_reasons,
+        label="concept_candidate_persist",
+        operation=lambda: _register_problem_concept_candidates(
+            db=db,
+            user_id=str(current_user.id),
+            problem=problem,
+            learning_mode=learning_mode,
+            source_turn_id=str(db_turn.id),
+            source_path_id=str(learning_path.id) if learning_path else None,
+            inferred_concepts=candidate_concepts,
+            source="ask",
+            anchor_concept=step_concept,
+            user_text=f"{payload.question}\n{answer}",
+            retrieval_context=retrieval_context,
+            evidence_snippet=evidence_snippet,
+        ),
+        default=([], []),
     )
     await db.flush()
     concept_pool = model_os_service.normalize_concepts(
