@@ -121,6 +121,9 @@ test.describe('ProblemDetail main workflow', () => {
 
     await expect(latestTurnOutcome(page)).toContainText(/Advance/i)
     await expect(latestTurnOutcome(page)).toContainText(/Progression checked/i)
+    await page.getByText(/History \(/i).click()
+    await expect(page.getByTestId('socratic-history-item').first()).toContainText(/Checkpoint answer:/i)
+    await expect(page.getByTestId('socratic-history-item').first()).toContainText(/Question:/i)
     await expect(page.getByTestId('problem-detail-workspace')).toContainText(/Threshold decisions/i)
   })
 

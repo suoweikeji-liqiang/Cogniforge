@@ -126,6 +126,46 @@ async def test_problem_response_records_mastery_and_events(client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_problem_response_persists_core_turn_when_learning_event_logging_fails(
+    client,
+    db_session,
+    monkeypatch,
+):
+    from app.api.routes import problems as problems_route
+    from app.models.entities.user import ProblemMasteryEvent, ProblemResponse as ProblemResponseModel
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers)
+
+    async def failing_log_learning_event(*args, **kwargs):
+        raise RuntimeError("learning event store offline")
+
+    monkeypatch.setattr(problems_route, "_log_learning_event", failing_log_learning_event)
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "I can explain the core loop."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "error:learning_event_persist" in (body.get("fallback_reason") or "")
+
+    response_result = await db_session.execute(
+        select(ProblemResponseModel).where(ProblemResponseModel.problem_id == problem["id"])
+    )
+    stored_responses = response_result.scalars().all()
+    assert len(stored_responses) == 1
+    assert stored_responses[0].user_response == "I can explain the core loop."
+
+    mastery_result = await db_session.execute(
+        select(ProblemMasteryEvent).where(ProblemMasteryEvent.problem_id == problem["id"])
+    )
+    assert mastery_result.scalar_one_or_none() is not None
+
+
+@pytest.mark.asyncio
 async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client, db_session):
     from app.models.entities.user import ProblemTurn
 
@@ -193,6 +233,53 @@ async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client
     assert len(stored_turns) >= 2
     assert any(turn.learning_mode == "exploration" for turn in stored_turns)
     assert any(turn.learning_mode == "socratic" for turn in stored_turns)
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_persists_turn_when_path_candidate_persistence_fails(
+    client,
+    db_session,
+    monkeypatch,
+):
+    from app.api.routes import problems as problems_route
+    from app.models.entities.user import ProblemTurn
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Optional path candidate failure")
+
+    async def failing_register_problem_path_candidates(*args, **kwargs):
+        raise RuntimeError("path candidate store offline")
+
+    monkeypatch.setattr(
+        problems_route,
+        "register_problem_path_candidates",
+        failing_register_problem_path_candidates,
+    )
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "PID 中积分项为什么能消除稳态误差？",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["learning_mode"] == "exploration"
+    assert body["turn_id"]
+    assert body["derived_path_candidates"] == []
+    assert "error:path_candidate_persist" in (body.get("fallback_reason") or "")
+
+    turn_rows = await db_session.execute(
+        select(ProblemTurn).where(
+            ProblemTurn.problem_id == problem["id"],
+            ProblemTurn.learning_mode == "exploration",
+        )
+    )
+    assert turn_rows.scalar_one_or_none() is not None
 
 
 @pytest.mark.asyncio

@@ -422,7 +422,7 @@
               <details v-if="responses.length" class="history-panel">
                 <summary>{{ t('problemDetail.historyTitle', { count: responses.length }) }}</summary>
                 <div class="responses-list">
-                  <div v-for="response in responses" :key="response.id" class="response-item">
+                  <div v-for="response in responseHistory" :key="response.id" class="response-item" data-testid="socratic-history-item">
                     <div class="user-response">
                       <p class="mode-line">
                         <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
@@ -738,6 +738,7 @@ const progressPercent = computed(() => {
 })
 const completedStepList = computed(() => (learningPath.value?.path_data || []).slice(0, completedSteps.value))
 const latestResponse = computed(() => responses.value[responses.value.length - 1] || null)
+const responseHistory = computed(() => [...responses.value].reverse())
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
 const activeConceptTurnId = computed(() => {
   if (learningMode.value === 'exploration') {

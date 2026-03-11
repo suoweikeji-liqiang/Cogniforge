@@ -532,6 +532,7 @@ watch([trimmedSearchQuery, attentionFilter, originFilter, sortBy], () => {
 .filters-bar {
   display: flex;
   gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 1.5rem;
 }
 
@@ -545,7 +546,12 @@ watch([trimmedSearchQuery, attentionFilter, originFilter, sortBy], () => {
 }
 
 .search-input {
-  flex: 1;
+  flex: 1 1 18rem;
+  min-width: 16rem;
+}
+
+.filter-select {
+  min-width: 11rem;
 }
 
 .cards-grid {

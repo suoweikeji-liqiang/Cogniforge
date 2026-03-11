@@ -16,6 +16,7 @@ from app.api.routes.problem_learning_path_support import (
     _load_active_learning_path,
     _resolve_current_step,
 )
+from app.api.routes.problem_persistence_guard_support import run_optional_persist
 from app.api.routes.problem_socratic_support import _resolve_socratic_question_payload
 from app.core.config import get_settings
 from app.models.entities.user import (
@@ -437,20 +438,26 @@ async def complete_socratic_response(
     )
 
     await emit_progress("status", {"phase": "saving_turn"})
-    derived_path_candidates = await deps.register_problem_path_candidates(
+    derived_path_candidates = await run_optional_persist(
         db=db,
-        user_id=str(current_user.id),
-        problem_id=str(problem_id),
-        learning_mode=learning_mode,
-        source_turn_id=str(db_turn.id),
-        step_index=current_step_index,
-        candidate_specs=deps.build_socratic_path_candidate_specs(
-            step_concept=step_concept,
-            question_kind=question_kind,
-            structured_feedback=structured_feedback,
-            auto_advanced=auto_advanced,
+        fallback_reasons=fallback_reasons,
+        label="path_candidate_persist",
+        operation=lambda: deps.register_problem_path_candidates(
+            db=db,
+            user_id=str(current_user.id),
+            problem_id=str(problem_id),
+            learning_mode=learning_mode,
+            source_turn_id=str(db_turn.id),
+            step_index=current_step_index,
+            candidate_specs=deps.build_socratic_path_candidate_specs(
+                step_concept=step_concept,
+                question_kind=question_kind,
+                structured_feedback=structured_feedback,
+                auto_advanced=auto_advanced,
+            ),
+            evidence_snippet=response_data.user_response,
         ),
-        evidence_snippet=response_data.user_response,
+        default=[],
     )
 
     mode_metadata = {
@@ -491,26 +498,32 @@ async def complete_socratic_response(
     )
     db.add(mastery_event)
 
-    await deps.log_learning_event(
+    await run_optional_persist(
         db=db,
-        user_id=str(current_user.id),
-        problem_id=str(problem_id),
-        event_type="problem_response_evaluated",
-        learning_mode=learning_mode,
-        trace_id=trace_id,
-        payload={
-            "step_index": current_step_index,
-            "question_kind": question_kind,
-            "mastery_score": structured_feedback.get("mastery_score"),
-            "confidence": structured_feedback.get("confidence"),
-            "auto_advanced": auto_advanced,
-            "progression_ran": question_kind == "checkpoint",
-            "accepted_concepts": accepted_concepts,
-            "pending_concepts": pending_concepts,
-            "llm_calls": llm_calls,
-            "llm_latency_ms": llm_latency_ms,
-            "fallback_reason": deps.format_fallback_reason(fallback_reasons),
-        },
+        fallback_reasons=fallback_reasons,
+        label="learning_event_persist",
+        operation=lambda: deps.log_learning_event(
+            db=db,
+            user_id=str(current_user.id),
+            problem_id=str(problem_id),
+            event_type="problem_response_evaluated",
+            learning_mode=learning_mode,
+            trace_id=trace_id,
+            payload={
+                "step_index": current_step_index,
+                "question_kind": question_kind,
+                "mastery_score": structured_feedback.get("mastery_score"),
+                "confidence": structured_feedback.get("confidence"),
+                "auto_advanced": auto_advanced,
+                "progression_ran": question_kind == "checkpoint",
+                "accepted_concepts": accepted_concepts,
+                "pending_concepts": pending_concepts,
+                "llm_calls": llm_calls,
+                "llm_latency_ms": llm_latency_ms,
+                "fallback_reason": deps.format_fallback_reason(fallback_reasons),
+            },
+        ),
+        default=None,
     )
 
     await db.commit()

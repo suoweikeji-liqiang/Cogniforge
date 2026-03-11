@@ -49,6 +49,43 @@ def test_model_os_fallback_cjk_concepts_avoid_question_fragments():
     assert "根据当前误差大小成比例地" not in concepts
 
 
+def test_model_os_fallback_learning_path_uses_chinese_copy_for_cjk_problem():
+    from app.services.model_os_service import model_os_service
+
+    steps = model_os_service.build_fallback_learning_path(
+        problem_title="PID",
+        problem_description="理解 PID 控制器中的比例、积分、微分，并能在一个最小例子中应用。",
+        existing_knowledge=[],
+        associated_concepts=["PID"],
+    )
+
+    assert "Explain the core idea" not in steps[0]["description"]
+    assert "your current foundation" not in steps[0]["description"]
+    assert steps[0]["resources"][1] == "问题陈述"
+    assert "核心含义" in steps[0]["description"]
+    assert "最小例子" in steps[1]["concept"]
+
+
+def test_model_os_user_visible_fallbacks_localize_to_chinese():
+    from app.services.model_os_service import model_os_service
+
+    answer_fallback = model_os_service.build_learning_answer_fallback(
+        question="PID 中积分项为什么能消除稳态误差？",
+        step_concept="积分项",
+        mode="guided",
+    )
+    question_fallback = model_os_service.build_socratic_question_fallback(
+        step_concept="积分项",
+        question_kind="checkpoint",
+        latest_feedback={},
+    )
+
+    assert "Hint:" not in answer_fallback
+    assert "提示：" in answer_fallback
+    assert "Checkpoint:" not in question_fallback
+    assert question_fallback.startswith("检查题：")
+
+
 def test_build_concept_evidence_snippet_preserves_long_answers_without_mid_sentence_cut():
     from app.api.routes.problem_concept_registration_support import build_concept_evidence_snippet
 

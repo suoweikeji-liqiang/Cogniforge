@@ -24,6 +24,7 @@ class ModelOSService:
     _contains_cjk = staticmethod(structured_support.contains_cjk)
     _build_language_instruction = staticmethod(structured_support.build_language_instruction)
     _build_fallback_learning_path = staticmethod(structured_support.build_fallback_learning_path)
+    build_fallback_learning_path = staticmethod(structured_support.build_fallback_learning_path)
     normalize_concepts = staticmethod(structured_support.normalize_concepts)
     is_low_signal_concept_candidate = staticmethod(structured_support.is_low_signal_concept_candidate)
     filter_low_signal_concepts = staticmethod(structured_support.filter_low_signal_concepts)

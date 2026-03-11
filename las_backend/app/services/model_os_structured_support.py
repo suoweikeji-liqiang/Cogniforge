@@ -417,11 +417,24 @@ def normalize_feedback_structured(payload: Optional[Dict[str, Any]]) -> Dict[str
 def build_learning_answer_fallback(question: str, step_concept: str, mode: str = "direct") -> str:
     question = str(question or "").strip()
     step_concept = str(step_concept or "this concept").strip()
+    has_cjk = contains_cjk(question) or contains_cjk(step_concept)
     if mode == "guided":
+        if has_cjk:
+            return (
+                f"提示：先抓住“{step_concept or '这个概念'}”的核心边界。"
+                f"试着围绕“{question or '你的问题'}”举一个具体例子，"
+                "再说明一种看起来相近但其实不成立的解释为什么会失败。"
+            )
         return (
             f"Hint: focus on the core boundary of '{step_concept}'. "
             f"Try one concrete example for your question ({question or 'your question'}), "
             "then explain why an alternative interpretation would fail."
+        )
+    if has_cjk:
+        return (
+            f"一个简洁的起点：先用一句话定义“{step_concept or '这个概念'}”，"
+            "再把它和最容易混淆的相近概念区分开，"
+            "最后放进一个具体例子里验证它。"
         )
     return (
         f"A concise starting point for '{step_concept}': define it in one sentence, "
@@ -441,22 +454,35 @@ def build_socratic_question_fallback(
     misconceptions = feedback.get("misconceptions") or []
     if misconceptions:
         misconception = str(misconceptions[0] or "").strip()
+    has_cjk = contains_cjk(concept) or contains_cjk(next_question) or contains_cjk(misconception)
 
     if next_question:
         return next_question
 
     if question_kind == "checkpoint":
+        if has_cjk:
+            return (
+                f"检查题：请用一个具体例子解释“{concept or '这个概念'}”，"
+                "再补一个边界情况，说明在什么情况下你的解释会失效。"
+            )
         return (
             f"Checkpoint: explain '{concept}' with one concrete example and one boundary case "
             "that would make your explanation fail."
         )
 
     if misconception:
+        if has_cjk:
+            return (
+                f"追问题：你刚才提到了“{misconception}”。"
+                f"请用你自己的话重新解释它和“{concept or '这个概念'}”之间的关系。"
+            )
         return (
             f"Probe: you mentioned '{misconception}'. Re-explain how it relates to '{concept}' "
             "in your own words."
         )
 
+    if has_cjk:
+        return f"追问题：在继续之前，你会怎样概括“{concept or '这个概念'}”的核心思想？它最容易和什么混淆？"
     return (
         f"Probe: before moving on, what is the core idea of '{concept}', and what is the most likely confusion point?"
     )
@@ -815,13 +841,17 @@ def build_fallback_learning_path(
     existing_knowledge: List[str],
     associated_concepts: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    knowledge_text = ", ".join(existing_knowledge) if existing_knowledge else "your current foundation"
+    has_cjk = any(
+        contains_cjk(text)
+        for text in [problem_title, problem_description, *(existing_knowledge or []), *((associated_concepts or []))]
+    )
+    knowledge_text = ", ".join(existing_knowledge) if existing_knowledge else ("你当前已有的基础" if has_cjk else "your current foundation")
     title_text = re.sub(r"\s+", " ", str(problem_title or "")).strip()
     description_text = re.sub(r"\s+", " ", str(problem_description or "")).strip()
-    problem_context = description_text or title_text or "the current problem"
-    first_resource = problem_context[:120] or "Existing notes and prior project docs"
+    problem_context = description_text or title_text or ("当前问题" if has_cjk else "the current problem")
+    first_resource = problem_context[:120] or ("已有笔记与前置材料" if has_cjk else "Existing notes and prior project docs")
     focus_concepts = normalize_concepts([*(associated_concepts or []), title_text], limit=3)
-    primary_focus = focus_concepts[0] if focus_concepts else (title_text or "Core concept")
+    primary_focus = focus_concepts[0] if focus_concepts else (title_text or ("核心概念" if has_cjk else "Core concept"))
     secondary_focus = focus_concepts[1] if len(focus_concepts) > 1 else None
     combined_text = f"{title_text} {description_text}".casefold()
     is_comparison_focus = bool(
@@ -830,28 +860,51 @@ def build_fallback_learning_path(
     )
 
     if is_comparison_focus:
-        step_one_concept = f"Compare {primary_focus} and {secondary_focus}"
-        step_one_description = (
-            f"Explain how {primary_focus} differs from {secondary_focus} for '{problem_title}', "
-            f"and anchor the distinction using {knowledge_text}."
-        )
-        step_two_concept = f"Apply {primary_focus} and {secondary_focus} in one focused scenario"
-        step_two_description = (
-            f"Work through one concrete scenario from '{problem_title}', justify the tradeoff between "
-            f"{primary_focus} and {secondary_focus}, and record the next uncertainty to resolve."
-        )
+        if has_cjk:
+            step_one_concept = f"比较 {primary_focus} 和 {secondary_focus}"
+            step_one_description = (
+                f"先说明“{primary_focus}”与“{secondary_focus}”在“{problem_title}”里的关键区别，"
+                f"并用{knowledge_text}把这个差异锚定下来。"
+            )
+            step_two_concept = f"在一个聚焦场景里应用 {primary_focus} 和 {secondary_focus}"
+            step_two_description = (
+                f"围绕“{problem_title}”走一遍具体场景，解释为什么要在“{primary_focus}”与“{secondary_focus}”之间做取舍，"
+                "并记下接下来还不确定的问题。"
+            )
+        else:
+            step_one_concept = f"Compare {primary_focus} and {secondary_focus}"
+            step_one_description = (
+                f"Explain how {primary_focus} differs from {secondary_focus} for '{problem_title}', "
+                f"and anchor the distinction using {knowledge_text}."
+            )
+            step_two_concept = f"Apply {primary_focus} and {secondary_focus} in one focused scenario"
+            step_two_description = (
+                f"Work through one concrete scenario from '{problem_title}', justify the tradeoff between "
+                f"{primary_focus} and {secondary_focus}, and record the next uncertainty to resolve."
+            )
         step_two_resources = [first_resource, primary_focus, secondary_focus]
     else:
         step_one_concept = primary_focus
-        step_one_description = (
-            f"Explain the core idea of {primary_focus} for '{problem_title}', "
-            f"and connect it to the problem goal using {knowledge_text}."
-        )
-        step_two_concept = f"Apply {primary_focus} in a minimal example"
-        step_two_description = (
-            f"Use one concrete example from '{problem_title}' to apply {primary_focus}, "
-            "validate the result, and note the next open question."
-        )
+        if has_cjk:
+            step_one_description = (
+                f"先解释“{primary_focus}”在“{problem_title}”里的核心含义，"
+                f"并用{knowledge_text}把它和当前问题目标连起来。"
+            )
+            step_two_concept = f"用一个最小例子应用 {primary_focus}"
+            step_two_description = (
+                f"围绕“{problem_title}”挑一个具体的小例子来应用“{primary_focus}”，"
+                "验证结果是否成立，并记下下一步最值得追问的问题。"
+            )
+        else:
+            step_one_description = (
+                f"Explain the core idea of {primary_focus} for '{problem_title}', "
+                f"and connect it to the problem goal using {knowledge_text}."
+            )
+            step_two_concept = f"Apply {primary_focus} in a minimal example"
+            step_two_description = (
+                f"Use one concrete example from '{problem_title}' to apply {primary_focus}, "
+                "validate the result, and note the next open question."
+            )
         step_two_resources = [first_resource, primary_focus]
 
     return [
@@ -859,7 +912,7 @@ def build_fallback_learning_path(
             "step": 1,
             "concept": step_one_concept,
             "description": step_one_description,
-            "resources": [first_resource, "Problem statement"],
+            "resources": [first_resource, "问题陈述" if has_cjk else "Problem statement"],
         },
         {
             "step": 2,

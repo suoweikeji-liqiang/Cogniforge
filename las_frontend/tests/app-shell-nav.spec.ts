@@ -277,6 +277,8 @@ test('problem and model card libraries scale with load-more and search reset', a
 
   await page.goto('/model-cards')
   await expect(page.getByTestId('model-cards-grid')).toBeVisible()
+  const modelCardSearchBox = await page.getByTestId('model-cards-search-input').boundingBox()
+  expect(modelCardSearchBox?.width ?? 0).toBeGreaterThan(180)
   await page.getByTestId('model-cards-attention-filter').selectOption('needs_reinforcement')
   await expect(page.getByText(pagedCardTitle)).toBeVisible()
   await expect(page.getByText(`Library Card ${suffix}-02`)).toHaveCount(0)

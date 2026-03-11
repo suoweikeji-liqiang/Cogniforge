@@ -85,6 +85,7 @@ from app.api.routes.problem_learning_path_support import (
     _resolve_current_step,
 )
 from app.api.routes.problem_learning_path_routes import router as problem_learning_path_router
+from app.api.routes.problem_persistence_guard_support import run_optional_persist
 from app.api.routes.problem_path_candidate_support import (
     build_socratic_path_candidate_specs,
     decide_problem_path_candidate_action,
@@ -327,23 +328,29 @@ async def _complete_exploration_learning_turn(
         answered_concepts=answered_concepts,
         related_concepts=related_concepts,
     )
-    derived_path_candidates = await register_problem_path_candidates(
+    derived_path_candidates = await run_optional_persist(
         db=db,
-        user_id=str(current_user.id),
-        problem_id=str(problem.id),
-        learning_mode=learning_mode,
-        source_turn_id=str(db_turn.id),
-        step_index=step_index,
-        candidate_specs=[
-            {
-                "type": suggestion.get("type"),
-                "title": suggestion.get("title"),
-                "reason": suggestion.get("reason"),
-                "recommended_insertion": _default_path_insertion(str(suggestion.get("type") or "")),
-            }
-            for suggestion in path_suggestions
-        ],
-        evidence_snippet=payload.question,
+        fallback_reasons=fallback_reasons,
+        label="path_candidate_persist",
+        operation=lambda: register_problem_path_candidates(
+            db=db,
+            user_id=str(current_user.id),
+            problem_id=str(problem.id),
+            learning_mode=learning_mode,
+            source_turn_id=str(db_turn.id),
+            step_index=step_index,
+            candidate_specs=[
+                {
+                    "type": suggestion.get("type"),
+                    "title": suggestion.get("title"),
+                    "reason": suggestion.get("reason"),
+                    "recommended_insertion": _default_path_insertion(str(suggestion.get("type") or "")),
+                }
+                for suggestion in path_suggestions
+            ],
+            evidence_snippet=payload.question,
+        ),
+        default=[],
     )
     return_to_main_path_hint = not bool(path_suggestions)
     suggested_next_focus = next_learning_actions[0] if next_learning_actions else f"Use your question to refine one boundary of '{step_concept}'."
@@ -363,24 +370,30 @@ async def _complete_exploration_learning_turn(
     }
     db_turn.mode_metadata = mode_metadata
 
-    fallback_reason = _format_fallback_reason(fallback_reasons)
-    await _log_learning_event(
+    await run_optional_persist(
         db=db,
-        user_id=str(current_user.id),
-        problem_id=str(problem.id),
-        event_type="problem_inline_qa",
-        learning_mode=learning_mode,
-        trace_id=trace_id,
-        payload={
-            "step_index": step_index,
-            "answer_mode": mode,
-            "accepted_concepts": accepted_concepts,
-            "pending_concepts": pending_concepts,
-            "llm_calls": llm_metrics["llm_calls"],
-            "llm_latency_ms": llm_metrics["llm_latency_ms"],
-            "fallback_reason": fallback_reason,
-        },
+        fallback_reasons=fallback_reasons,
+        label="learning_event_persist",
+        operation=lambda: _log_learning_event(
+            db=db,
+            user_id=str(current_user.id),
+            problem_id=str(problem.id),
+            event_type="problem_inline_qa",
+            learning_mode=learning_mode,
+            trace_id=trace_id,
+            payload={
+                "step_index": step_index,
+                "answer_mode": mode,
+                "accepted_concepts": accepted_concepts,
+                "pending_concepts": pending_concepts,
+                "llm_calls": llm_metrics["llm_calls"],
+                "llm_latency_ms": llm_metrics["llm_latency_ms"],
+                "fallback_reason": _format_fallback_reason(fallback_reasons),
+            },
+        ),
+        default=None,
     )
+    fallback_reason = _format_fallback_reason(fallback_reasons)
     await db.commit()
 
     return {
