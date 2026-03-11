@@ -20,7 +20,14 @@ async def register_and_login(client):
     return body
 
 
-async def create_model_card(client, headers, title="Vector Search", user_notes="semantic retrieval"):
+async def create_model_card(
+    client,
+    headers,
+    title="Vector Search",
+    user_notes="semantic retrieval",
+    *,
+    activate=False,
+):
     response = await client.post(
         "/api/model-cards/",
         json={
@@ -31,7 +38,15 @@ async def create_model_card(client, headers, title="Vector Search", user_notes="
         headers=headers,
     )
     assert response.status_code == 201
-    return response.json()
+    card = response.json()
+    if activate:
+        activate_response = await client.post(
+            f"/api/model-cards/{card['id']}/activate",
+            headers=headers,
+        )
+        assert activate_response.status_code == 200
+        card = activate_response.json()
+    return card
 
 
 async def promote_user_to_admin(db_session, username="tester"):
@@ -114,6 +129,78 @@ async def test_auth_refresh_and_logout_flow(client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_model_card_create_sets_manual_origin(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    card = await create_model_card(client, headers, "Manual Card", "manual origin note")
+
+    assert card["lifecycle_stage"] == "draft"
+    assert card["origin_type"] == "manual"
+    assert card["origin_stage"] == "manual_creation"
+    assert card["origin_problem_id"] is None
+    assert card["origin_problem_title"] is None
+    assert card["origin_concept_candidate_id"] is None
+    assert card["origin_source_turn_id"] is None
+    assert card["origin_learning_mode"] is None
+    assert card["origin_concept_text"] is None
+
+
+@pytest.mark.asyncio
+async def test_model_card_draft_can_be_activated_and_scheduled(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    card = await create_model_card(client, headers, "Draft Card", "tightened note")
+
+    schedule_while_draft = await client.post(f"/api/srs/schedule/{card['id']}", headers=headers)
+    assert schedule_while_draft.status_code == 400
+    assert "marked ready" in schedule_while_draft.json()["detail"]
+
+    activate_response = await client.post(f"/api/model-cards/{card['id']}/activate", headers=headers)
+    assert activate_response.status_code == 200
+    activated = activate_response.json()
+    assert activated["lifecycle_stage"] == "active"
+
+    schedule_response = await client.post(f"/api/srs/schedule/{card['id']}", headers=headers)
+    assert schedule_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_model_card_update_accepts_revision_reason(client, db_session):
+    from sqlalchemy import select
+
+    from app.models.entities.user import EvolutionLog
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    card = await create_model_card(client, headers, "Revision Card", "initial note", activate=True)
+
+    update_response = await client.put(
+        f"/api/model-cards/{card['id']}",
+        json={
+            "user_notes": "tightened note after weak recall",
+            "counter_examples": ["Fails when the threshold is fixed too early."],
+            "change_reason": "Revision workflow: clarify boundary from weak recall",
+        },
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["user_notes"] == "tightened note after weak recall"
+
+    log_result = await db_session.execute(
+        select(EvolutionLog)
+        .where(EvolutionLog.model_id == card["id"], EvolutionLog.action_taken == "update")
+        .order_by(EvolutionLog.created_at.desc())
+    )
+    latest_log = log_result.scalars().first()
+    assert latest_log is not None
+    assert latest_log.reason_for_change == "Revision workflow: clarify boundary from weak recall"
+
+
+@pytest.mark.asyncio
 async def test_model_card_search_and_similar(client):
     tokens = await register_and_login(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -145,6 +232,53 @@ async def test_model_card_search_and_similar(client):
     assert similar_response.status_code == 200
     similar_titles = [item["title"] for item in similar_response.json()]
     assert "Vector Similarity" in similar_titles
+
+
+@pytest.mark.asyncio
+async def test_model_card_list_supports_limit_and_offset(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    await create_model_card(client, headers, "Card One", "first")
+    await create_model_card(client, headers, "Card Two", "second")
+    await create_model_card(client, headers, "Card Three", "third")
+
+    first_page = await client.get(
+        "/api/model-cards/",
+        params={"limit": 2, "offset": 0},
+        headers=headers,
+    )
+    assert first_page.status_code == 200
+    assert [item["title"] for item in first_page.json()] == ["Card Three", "Card Two"]
+
+    second_page = await client.get(
+        "/api/model-cards/",
+        params={"limit": 2, "offset": 2},
+        headers=headers,
+    )
+    assert second_page.status_code == 200
+    assert [item["title"] for item in second_page.json()] == ["Card One"]
+
+
+@pytest.mark.asyncio
+async def test_model_card_list_includes_review_schedule_summary(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    card = await create_model_card(client, headers, "Scheduled Card", "summary", activate=True)
+
+    schedule_response = await client.post(f"/api/srs/schedule/{card['id']}", headers=headers)
+    assert schedule_response.status_code == 200
+
+    list_response = await client.get("/api/model-cards/", headers=headers)
+    assert list_response.status_code == 200
+    listed_card = next(item for item in list_response.json() if item["id"] == card["id"])
+
+    assert listed_card["is_scheduled"] is True
+    assert listed_card["review_schedule"] is not None
+    assert listed_card["review_schedule"]["model_card_id"] == card["id"]
+    assert listed_card["review_schedule"]["recall_state"] == "scheduled"
+    assert listed_card["review_schedule"]["recommended_action"] == "complete_first_recall"
 
 
 @pytest.mark.asyncio
@@ -181,6 +315,40 @@ async def test_problem_and_resource_search(client):
     resource_search = await client.get("/api/resources/", params={"q": "pgvector guide"}, headers=headers)
     assert resource_search.status_code == 200
     assert any(item["title"] == "pgvector guide" for item in resource_search.json())
+
+
+@pytest.mark.asyncio
+async def test_problem_list_supports_limit_and_offset(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    for title in ["Problem One", "Problem Two", "Problem Three"]:
+        response = await client.post(
+            "/api/problems/",
+            json={
+                "title": title,
+                "description": f"{title} description",
+                "associated_concepts": ["threshold"],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201
+
+    first_page = await client.get(
+        "/api/problems/",
+        params={"limit": 2, "offset": 0},
+        headers=headers,
+    )
+    assert first_page.status_code == 200
+    assert [item["title"] for item in first_page.json()] == ["Problem Three", "Problem Two"]
+
+    second_page = await client.get(
+        "/api/problems/",
+        params={"limit": 2, "offset": 2},
+        headers=headers,
+    )
+    assert second_page.status_code == 200
+    assert [item["title"] for item in second_page.json()] == ["Problem One"]
 
 
 @pytest.mark.asyncio
@@ -359,7 +527,7 @@ async def test_reviews_generate_export_and_delete(client):
 async def test_srs_schedule_due_and_review_flow(client, db_session):
     tokens = await register_and_login(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-    card = await create_model_card(client, headers, "Retrieval Practice", "testing memory")
+    card = await create_model_card(client, headers, "Retrieval Practice", "testing memory", activate=True)
 
     schedule_response = await client.post(f"/api/srs/schedule/{card['id']}", headers=headers)
     assert schedule_response.status_code == 200

@@ -89,11 +89,45 @@ async def stub_llm(monkeypatch):
     ):
         return "stubbed contextual response"
 
+    async def fake_generate_structured_json(
+        prompt: str,
+        json_schema: dict,
+        schema_name: str = "structured_response",
+        **kwargs,
+    ):
+        if schema_name == "structured_feedback":
+            return {
+                "correctness": "partially correct",
+                "misconceptions": ["test misconception"],
+                "suggestions": ["test suggestion"],
+                "next_question": "What is the boundary of this concept?",
+                "mastery_score": 68,
+                "dimension_scores": {"accuracy": 70, "completeness": 66, "transfer": 67, "rigor": 69},
+                "confidence": 0.72,
+                "pass_stage": False,
+                "decision_reason": "Stubbed structured feedback",
+            }
+        return None
+
+    async def fake_stream_generate_with_context(
+        prompt: str,
+        context: list[dict],
+        retrieval_context: Optional[str] = None,
+        provider_type: Optional[str] = None,
+        model_id: Optional[str] = None,
+        temperature: float = 0.7,
+        **kwargs,
+    ):
+        for token in ["stubbed ", "contextual ", "response"]:
+            yield token
+
     monkeypatch.setattr(model_os_service, "create_model_card", fake_create_model_card)
     monkeypatch.setattr(model_os_service, "generate_learning_path", fake_generate_learning_path)
     monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_generate_feedback_structured)
     monkeypatch.setattr(model_os_service.llm, "generate", fake_generate)
     monkeypatch.setattr(model_os_service.llm, "generate_with_context", fake_generate_with_context)
+    monkeypatch.setattr(model_os_service.llm, "generate_structured_json", fake_generate_structured_json)
+    monkeypatch.setattr(model_os_service, "stream_generate_with_context", fake_stream_generate_with_context)
 
 
 @pytest_asyncio.fixture

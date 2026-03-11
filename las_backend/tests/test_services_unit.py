@@ -7,6 +7,7 @@ import pytest
 import os
 import asyncio
 import time
+from datetime import datetime, timedelta
 
 
 @pytest.mark.asyncio
@@ -22,6 +23,60 @@ async def test_model_os_extract_concepts():
 
     assert isinstance(concepts, list)
     assert len(concepts) <= 5
+
+
+def test_model_os_rank_model_cards_prefers_direct_match():
+    from app.services.model_os_service import model_os_service
+
+    now = datetime.utcnow()
+    direct = type(
+        "Card",
+        (),
+        {
+            "title": "Vector Threshold Tradeoff",
+            "user_notes": "precision recall threshold boundary",
+            "examples": ["threshold sweep"],
+            "counter_examples": [],
+            "embedding": None,
+            "updated_at": now,
+            "created_at": now,
+        },
+    )()
+    partial = type(
+        "Card",
+        (),
+        {
+            "title": "Threshold Notes",
+            "user_notes": "decision boundary",
+            "examples": ["comparison"],
+            "counter_examples": [],
+            "embedding": None,
+            "updated_at": now - timedelta(minutes=1),
+            "created_at": now - timedelta(minutes=1),
+        },
+    )()
+    unrelated = type(
+        "Card",
+        (),
+        {
+            "title": "SQL Basics",
+            "user_notes": "joins and filters",
+            "examples": ["select"],
+            "counter_examples": [],
+            "embedding": None,
+            "updated_at": now - timedelta(minutes=2),
+            "created_at": now - timedelta(minutes=2),
+        },
+    )()
+
+    ranked = model_os_service.rank_model_cards(
+        [unrelated, partial, direct],
+        "vector threshold",
+    )
+
+    assert ranked[0].title == "Vector Threshold Tradeoff"
+    assert any(card.title == "Threshold Notes" for card in ranked)
+    assert all(card.title != "SQL Basics" for card in ranked)
 
 
 @pytest.mark.asyncio
@@ -117,3 +172,59 @@ async def test_llm_service_generate_respects_wait_for_with_blocking_provider(mon
 
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(llm_service.generate("hello", provider_type="qwen"), timeout=0.01)
+
+
+@pytest.mark.asyncio
+async def test_llm_service_generate_structured_json_uses_openai_json_schema(monkeypatch):
+    from app.services.llm_service import LLMService, llm_service
+    import openai
+
+    provider = type(
+        "Provider",
+        (),
+        {
+            "name": "Structured Qwen",
+            "provider_type": "qwen",
+            "api_key": "super-secret-key",
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "enabled": True,
+            "priority": 100,
+            "id": 1,
+        },
+    )()
+    default_model = type("Model", (), {"model_id": "qwen-plus"})()
+
+    class StructuredOpenAI:
+        def __init__(self, api_key, base_url=None):
+            self.chat = self
+            self.completions = self
+
+        def create(self, model, messages, temperature, response_format, timeout):
+            assert model == "qwen-plus"
+            assert temperature == 0
+            assert response_format["type"] == "json_schema"
+            assert response_format["json_schema"]["name"] == "structured_feedback"
+            assert response_format["json_schema"]["schema"]["type"] == "object"
+            message = type("Message", (), {"content": '{"correctness":"correct"}'})()
+            choice = type("Choice", (), {"message": message})()
+            return type("Response", (), {"choices": [choice]})()
+
+    async def fake_get_active_provider(db, provider_type=None):
+        return provider
+
+    async def fake_get_default_model(db, provider_id):
+        return default_model
+
+    monkeypatch.setattr(llm_service, "generate_structured_json", LLMService.generate_structured_json.__get__(llm_service, LLMService))
+    monkeypatch.setattr(openai, "OpenAI", StructuredOpenAI)
+    monkeypatch.setattr(llm_service, "_get_active_provider", fake_get_active_provider)
+    monkeypatch.setattr(llm_service, "_get_default_model", fake_get_default_model)
+
+    result = await llm_service.generate_structured_json(
+        "Return structured feedback",
+        {"type": "object", "properties": {"correctness": {"type": "string"}}, "required": ["correctness"]},
+        schema_name="structured_feedback",
+        provider_type="qwen",
+    )
+
+    assert result == {"correctness": "correct"}

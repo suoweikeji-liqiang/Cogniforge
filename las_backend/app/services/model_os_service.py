@@ -1,13 +1,13 @@
 from collections import Counter
 from typing import List, Dict, Any, Optional
 import asyncio
-import hashlib
 from app.services.llm_service import llm_service
 from app.core.config import get_settings
-from app.core.vector import cosine_similarity
 from sqlalchemy import select
 import json
 import re
+
+from app.services import model_os_embedding_support as embedding_support
 
 def _clean_json_str(text: str) -> str:
     # First try to find a markdown block
@@ -39,6 +39,166 @@ class ModelOSService:
     def __init__(self):
         self.llm = llm_service
         self.embedding_dimensions = get_settings().MODEL_CARD_EMBEDDING_DIMENSIONS
+
+    def _feedback_structured_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "correctness": {"type": "string"},
+                "misconceptions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "suggestions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "next_question": {"type": "string"},
+                "mastery_score": {"type": "number"},
+                "dimension_scores": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "accuracy": {"type": "number"},
+                        "completeness": {"type": "number"},
+                        "transfer": {"type": "number"},
+                        "rigor": {"type": "number"},
+                    },
+                    "required": ["accuracy", "completeness", "transfer", "rigor"],
+                },
+                "confidence": {"type": "number"},
+                "pass_stage": {"type": "boolean"},
+                "decision_reason": {"type": "string"},
+            },
+            "required": [
+                "correctness",
+                "misconceptions",
+                "suggestions",
+                "next_question",
+                "mastery_score",
+                "dimension_scores",
+                "confidence",
+                "pass_stage",
+                "decision_reason",
+            ],
+        }
+
+    def _step_hint_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "focus": {"type": "string"},
+                "next_actions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "starter": {"type": "string"},
+            },
+            "required": ["focus", "next_actions", "starter"],
+        }
+
+    def _learning_path_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "step": {"type": "number"},
+                    "concept": {"type": "string"},
+                    "description": {"type": "string"},
+                    "resources": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["step", "concept", "description", "resources"],
+            },
+        }
+
+    def _related_concepts_schema(self, limit: int) -> Dict[str, Any]:
+        return {
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": max(1, limit),
+        }
+
+    def _model_card_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "concept_maps": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "nodes": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "label": {"type": "string"},
+                                    "type": {"type": "string"},
+                                },
+                                "required": ["id", "label", "type"],
+                            },
+                        },
+                        "edges": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "source": {"type": "string"},
+                                    "target": {"type": "string"},
+                                    "label": {"type": "string"},
+                                },
+                                "required": ["source", "target", "label"],
+                            },
+                        },
+                    },
+                    "required": ["nodes", "edges"],
+                },
+                "core_principles": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "examples": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "limitations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["concept_maps", "core_principles", "examples", "limitations"],
+        }
+
+    def _counter_examples_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "array",
+            "items": {"type": "string"},
+        }
+
+    def _migration_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "domain": {"type": "string"},
+                    "application": {"type": "string"},
+                    "key_adaptations": {"type": "string"},
+                },
+                "required": ["domain", "application", "key_adaptations"],
+            },
+        }
 
     def _tokenize_text(self, text: str) -> List[str]:
         return re.findall(r"[a-zA-Z0-9_]+", text.lower())
@@ -285,7 +445,7 @@ class ModelOSService:
             f"Probe: before moving on, what is the core idea of '{concept}', and what is the most likely confusion point?"
         )
 
-    async def generate_socratic_question(
+    def _build_socratic_question_prompt(
         self,
         problem_title: str,
         problem_description: str,
@@ -316,7 +476,7 @@ class ModelOSService:
             step_description,
             *(recent_responses or []),
         )
-        prompt = f"""You are preparing one Socratic learning question.
+        return f"""You are preparing one Socratic learning question.
 
 Problem: {problem_title}
 Problem description: {problem_description}
@@ -335,6 +495,25 @@ Rules:
 
 {language_instruction}"""
 
+    async def generate_socratic_question(
+        self,
+        problem_title: str,
+        problem_description: str,
+        step_concept: str,
+        step_description: str,
+        question_kind: str,
+        recent_responses: Optional[List[str]] = None,
+        latest_feedback: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        prompt = self._build_socratic_question_prompt(
+            problem_title,
+            problem_description,
+            step_concept,
+            step_description,
+            question_kind,
+            recent_responses,
+            latest_feedback,
+        )
         result = await self.llm.generate(prompt)
         question = str(result or "").strip()
         if not question:
@@ -344,6 +523,30 @@ Rules:
                 latest_feedback=latest_feedback,
             )
         return question
+
+    async def stream_socratic_question(
+        self,
+        problem_title: str,
+        problem_description: str,
+        step_concept: str,
+        step_description: str,
+        question_kind: str,
+        recent_responses: Optional[List[str]] = None,
+        latest_feedback: Optional[Dict[str, Any]] = None,
+    ):
+        prompt = self._build_socratic_question_prompt(
+            problem_title,
+            problem_description,
+            step_concept,
+            step_description,
+            question_kind,
+            recent_responses,
+            latest_feedback,
+        )
+        async for token in self.llm.stream_generate(
+            messages=[{"role": "user", "content": prompt}],
+        ):
+            yield token
 
     def _hint_tokens(self, text: str) -> set[str]:
         tokens = set(re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]", (text or "").lower()))
@@ -427,6 +630,73 @@ Rules:
                 break
 
         return output[:3]
+
+    def _normalize_step_hint_structured(
+        self,
+        parsed: Dict[str, Any],
+        *,
+        previous_hint_texts: Optional[List[str]] = None,
+        cjk_context: bool = False,
+    ) -> Dict[str, Any]:
+        actions = parsed.get("next_actions", [])
+        if not isinstance(actions, list):
+            actions = []
+        normalized_actions = [
+            str(item).strip()
+            for item in actions
+            if str(item).strip()
+        ][:3]
+        deduped_actions = self._dedupe_hint_actions(
+            actions=normalized_actions,
+            previous_texts=previous_hint_texts,
+            cjk_context=cjk_context,
+        )
+        return {
+            "focus": str(parsed.get("focus", "")).strip(),
+            "next_actions": deduped_actions,
+            "starter": str(parsed.get("starter", "")).strip(),
+        }
+
+    def _build_fallback_step_hint(
+        self,
+        *,
+        step_concept: str,
+        previous_hint_texts: Optional[List[str]] = None,
+        cjk_context: bool = False,
+    ) -> Dict[str, Any]:
+        fallback_focus = (
+            f"Focus on clarifying your understanding of '{step_concept}' in this step."
+            if not cjk_context
+            else f"先聚焦澄清你对“{step_concept}”这一步的理解。"
+        )
+        fallback_actions = (
+            [
+                "State what you already understand in 2-3 sentences.",
+                "Add one concrete example or mini attempt.",
+                "List one uncertainty you want feedback on.",
+            ]
+            if not cjk_context
+            else [
+                "先用 2-3 句话写出你已经理解的内容。",
+                "补一个具体例子或你的一次尝试。",
+                "写出一个最不确定的点，便于获得针对性反馈。",
+            ]
+        )
+        fallback_actions = self._dedupe_hint_actions(
+            actions=fallback_actions,
+            previous_texts=previous_hint_texts,
+            cjk_context=cjk_context,
+        )
+        fallback_starter = (
+            f"My current understanding of {step_concept} is:"
+            if not cjk_context
+            else f"我目前对“{step_concept}”的理解是："
+        )
+        return {
+            "focus": fallback_focus,
+            "next_actions": fallback_actions,
+            "starter": fallback_starter,
+        }
 
     def _fallback_concepts_from_problem(
         self,
@@ -540,6 +810,157 @@ Rules:
             return concepts
         return self.normalize_concepts([problem_title], limit=max(1, normalized_limit))
 
+    def normalize_learning_path_payload(self, payload: Any) -> List[Dict[str, Any]]:
+        steps = payload
+        if isinstance(payload, dict):
+            steps = payload.get("steps", [])
+        if not isinstance(steps, list):
+            return []
+
+        normalized: List[Dict[str, Any]] = []
+        for index, raw_step in enumerate(steps):
+            if not isinstance(raw_step, dict):
+                continue
+
+            concept = str(raw_step.get("concept", "") or "").strip()
+            description = str(raw_step.get("description", "") or "").strip()
+            resources_raw = raw_step.get("resources") or []
+            if not isinstance(resources_raw, list):
+                resources_raw = []
+            resources = [
+                str(item).strip()
+                for item in resources_raw
+                if str(item).strip()
+            ][:5]
+
+            if not concept and not description:
+                continue
+
+            normalized.append(
+                {
+                    "step": self._normalize_int(raw_step.get("step"), index + 1, 1, 100),
+                    "concept": concept,
+                    "description": description,
+                    "resources": resources,
+                }
+            )
+
+        return normalized
+
+    def _normalize_string_items(
+        self,
+        values: Any,
+        *,
+        limit: int,
+    ) -> List[str]:
+        if not isinstance(values, list):
+            return []
+        normalized: List[str] = []
+        seen = set()
+        for raw in values:
+            item = str(raw or "").strip()
+            if not item:
+                continue
+            key = item.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(item)
+            if len(normalized) >= limit:
+                break
+        return normalized
+
+    def _default_model_card_payload(self) -> Dict[str, Any]:
+        return {
+            "concept_maps": {"nodes": [], "edges": []},
+            "core_principles": [],
+            "examples": [],
+            "limitations": [],
+        }
+
+    def normalize_model_card_payload(self, payload: Any) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            return self._default_model_card_payload()
+
+        concept_maps = payload.get("concept_maps")
+        nodes_raw = concept_maps.get("nodes", []) if isinstance(concept_maps, dict) else []
+        edges_raw = concept_maps.get("edges", []) if isinstance(concept_maps, dict) else []
+
+        nodes: List[Dict[str, str]] = []
+        for raw in nodes_raw if isinstance(nodes_raw, list) else []:
+            if not isinstance(raw, dict):
+                continue
+            node_id = str(raw.get("id", "") or "").strip()
+            label = str(raw.get("label", "") or "").strip()
+            node_type = str(raw.get("type", "") or "").strip()
+            if not node_id or not label:
+                continue
+            nodes.append(
+                {
+                    "id": node_id,
+                    "label": label,
+                    "type": node_type or "concept",
+                }
+            )
+            if len(nodes) >= 24:
+                break
+
+        edges: List[Dict[str, str]] = []
+        for raw in edges_raw if isinstance(edges_raw, list) else []:
+            if not isinstance(raw, dict):
+                continue
+            source = str(raw.get("source", "") or "").strip()
+            target = str(raw.get("target", "") or "").strip()
+            label = str(raw.get("label", "") or "").strip()
+            if not source or not target:
+                continue
+            edges.append(
+                {
+                    "source": source,
+                    "target": target,
+                    "label": label,
+                }
+            )
+            if len(edges) >= 32:
+                break
+
+        return {
+            "concept_maps": {"nodes": nodes, "edges": edges},
+            "core_principles": self._normalize_string_items(payload.get("core_principles"), limit=8),
+            "examples": self._normalize_string_items(payload.get("examples"), limit=8),
+            "limitations": self._normalize_string_items(payload.get("limitations"), limit=8),
+        }
+
+    def normalize_migration_payload(self, payload: Any) -> List[Dict[str, str]]:
+        if not isinstance(payload, list):
+            return []
+
+        normalized: List[Dict[str, str]] = []
+        seen = set()
+        for raw in payload:
+            if not isinstance(raw, dict):
+                continue
+            domain = str(raw.get("domain", "") or "").strip()
+            application = str(raw.get("application", "") or "").strip()
+            key_adaptations = str(raw.get("key_adaptations", "") or "").strip()
+            if not domain or not application:
+                continue
+            dedupe_key = (domain.casefold(), application.casefold(), key_adaptations.casefold())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            normalized.append(
+                {
+                    "domain": domain,
+                    "application": application,
+                    "key_adaptations": key_adaptations,
+                }
+            )
+            if len(normalized) >= 5:
+                break
+
+        return normalized
+
     async def extract_related_concepts(
         self,
         problem_title: str,
@@ -567,6 +988,25 @@ Return ONLY a JSON array of strings, e.g.:
 ["concept A", "concept B"]
 
 {language_instruction}"""
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._related_concepts_schema(normalized_limit),
+                schema_name="related_concepts",
+            )
+        except Exception:
+            structured_result = None
+
+        if isinstance(structured_result, dict):
+            structured_result = structured_result.get("concepts", [])
+        if isinstance(structured_result, list):
+            normalized = self.normalize_concepts(
+                [str(item) for item in structured_result],
+                limit=normalized_limit,
+            )
+            if normalized:
+                return normalized
 
         result = await self.llm.generate(prompt)
         try:
@@ -635,13 +1075,12 @@ Return ONLY a JSON array of strings, e.g.:
         examples: Optional[List[str]] = None,
         counter_examples: Optional[List[str]] = None,
     ) -> str:
-        sections = [
-            title or "",
-            user_notes or "",
-            " ".join(examples or []),
-            " ".join(counter_examples or []),
-        ]
-        return "\n".join(section for section in sections if section).strip()
+        return embedding_support.build_embedding_text(
+            title=title,
+            user_notes=user_notes,
+            examples=examples,
+            counter_examples=counter_examples,
+        )
 
     def build_problem_embedding_text(
         self,
@@ -649,12 +1088,11 @@ Return ONLY a JSON array of strings, e.g.:
         description: Optional[str] = None,
         associated_concepts: Optional[List[str]] = None,
     ) -> str:
-        sections = [
-            title or "",
-            description or "",
-            " ".join(associated_concepts or []),
-        ]
-        return "\n".join(section for section in sections if section).strip()
+        return embedding_support.build_problem_embedding_text(
+            title=title,
+            description=description,
+            associated_concepts=associated_concepts,
+        )
 
     def build_resource_embedding_text(
         self,
@@ -664,32 +1102,20 @@ Return ONLY a JSON array of strings, e.g.:
         ai_summary: Optional[str] = None,
         status: Optional[str] = None,
     ) -> str:
-        sections = [
-            title or "",
-            url or "",
-            link_type or "",
-            ai_summary or "",
-            status or "",
-        ]
-        return "\n".join(section for section in sections if section).strip()
+        return embedding_support.build_resource_embedding_text(
+            title=title,
+            url=url,
+            link_type=link_type,
+            ai_summary=ai_summary,
+            status=status,
+        )
 
     def generate_embedding(self, text: str) -> List[float]:
-        tokens = self._tokenize_text(text)
-        if not tokens:
-            return [0.0] * self.embedding_dimensions
-
-        vector = [0.0] * self.embedding_dimensions
-        for token in tokens:
-            digest = hashlib.sha256(token.encode("utf-8")).digest()
-            index = int.from_bytes(digest[:4], "big") % self.embedding_dimensions
-            sign = 1.0 if digest[4] % 2 == 0 else -1.0
-            magnitude = 1.0 + (digest[5] / 255.0)
-            vector[index] += sign * magnitude
-
-        norm = sum(value * value for value in vector) ** 0.5
-        if norm == 0:
-            return [0.0] * self.embedding_dimensions
-        return [round(value / norm, 8) for value in vector]
+        return embedding_support.generate_embedding(
+            text,
+            embedding_dimensions=self.embedding_dimensions,
+            tokenize_text=self._tokenize_text,
+        )
 
     def generate_card_embedding(
         self,
@@ -708,8 +1134,10 @@ Return ONLY a JSON array of strings, e.g.:
         )
 
     def serialize_embedding_for_pgvector(self, embedding: List[float]) -> str:
-        normalized = embedding[:self.embedding_dimensions]
-        return "[" + ",".join(f"{value:.8f}" for value in normalized) + "]"
+        return embedding_support.serialize_embedding_for_pgvector(
+            embedding,
+            embedding_dimensions=self.embedding_dimensions,
+        )
 
     def refresh_card_embedding(self, card) -> List[float]:
         card.embedding = self.generate_card_embedding(
@@ -743,126 +1171,62 @@ Return ONLY a JSON array of strings, e.g.:
         return resource.embedding
 
     def score_model_card(self, card, query: str, query_embedding: List[float]) -> float:
-        card_text = self.build_embedding_text(
-            title=card.title,
-            user_notes=card.user_notes,
-            examples=card.examples,
-            counter_examples=card.counter_examples,
-        )
-        haystack_tokens = set(self._tokenize_text(card_text))
-        query_tokens = self._tokenize_text(query)
-        lexical_score = 0.0
-        if query_tokens:
-            token_hits = sum(1 for token in query_tokens if token in haystack_tokens)
-            lexical_score = token_hits / len(query_tokens)
-        if query.lower() in card_text.lower():
-            lexical_score += 0.5
-
-        semantic_score = cosine_similarity(
-            card.embedding or self.generate_embedding(card_text),
+        return embedding_support.score_model_card(
+            card,
+            query,
             query_embedding,
+            tokenize_text=self._tokenize_text,
+            generate_embedding_fn=self.generate_embedding,
         )
-        return (lexical_score * 0.7) + (max(semantic_score, 0.0) * 0.3)
 
     def score_problem(self, problem, query: str, query_embedding: List[float]) -> float:
-        problem_text = self.build_problem_embedding_text(
-            title=problem.title,
-            description=problem.description,
-            associated_concepts=problem.associated_concepts,
-        )
-        lexical_score = self._score_text_match(problem_text, query)
-        semantic_score = cosine_similarity(
-            problem.embedding or self.generate_embedding(problem_text),
+        return embedding_support.score_problem(
+            problem,
+            query,
             query_embedding,
+            tokenize_text=self._tokenize_text,
+            generate_embedding_fn=self.generate_embedding,
         )
-        return (lexical_score * 0.7) + (max(semantic_score, 0.0) * 0.3)
 
     def score_resource(self, resource, query: str, query_embedding: List[float]) -> float:
-        resource_text = self.build_resource_embedding_text(
-            title=resource.title,
-            url=resource.url,
-            link_type=resource.link_type,
-            ai_summary=resource.ai_summary,
-            status=resource.status,
-        )
-        lexical_score = self._score_text_match(resource_text, query)
-        semantic_score = cosine_similarity(
-            resource.embedding or self.generate_embedding(resource_text),
+        return embedding_support.score_resource(
+            resource,
+            query,
             query_embedding,
+            tokenize_text=self._tokenize_text,
+            generate_embedding_fn=self.generate_embedding,
         )
-        return (lexical_score * 0.7) + (max(semantic_score, 0.0) * 0.3)
 
     def rank_model_cards(self, cards: List[Any], query: str) -> List[Any]:
-        query = query.strip()
-        if not query:
-            return cards
-
-        query_embedding = self.generate_embedding(query)
-        scored_cards = []
-        for card in cards:
-            score = self.score_model_card(card, query, query_embedding)
-            if score >= 0.15:
-                scored_cards.append((score, card))
-
-        scored_cards.sort(
-            key=lambda item: (
-                item[0],
-                getattr(item[1], "updated_at", None) or getattr(item[1], "created_at", None),
-            ),
-            reverse=True,
+        return embedding_support.rank_model_cards(
+            cards,
+            query,
+            tokenize_text=self._tokenize_text,
+            generate_embedding_fn=self.generate_embedding,
         )
-        return [card for _, card in scored_cards]
 
     def rank_problems(self, problems: List[Any], query: str) -> List[Any]:
-        query = query.strip()
-        if not query:
-            return problems
-
-        query_embedding = self.generate_embedding(query)
-        scored_problems = []
-        for problem in problems:
-            score = self.score_problem(problem, query, query_embedding)
-            if score >= 0.15:
-                scored_problems.append((score, problem))
-
-        scored_problems.sort(
-            key=lambda item: (
-                item[0],
-                getattr(item[1], "updated_at", None) or getattr(item[1], "created_at", None),
-            ),
-            reverse=True,
+        return embedding_support.rank_problems(
+            problems,
+            query,
+            tokenize_text=self._tokenize_text,
+            generate_embedding_fn=self.generate_embedding,
         )
-        return [problem for _, problem in scored_problems]
 
     def rank_resources(self, resources: List[Any], query: str) -> List[Any]:
-        query = query.strip()
-        if not query:
-            return resources
-
-        query_embedding = self.generate_embedding(query)
-        scored_resources = []
-        for resource in resources:
-            score = self.score_resource(resource, query, query_embedding)
-            if score >= 0.15:
-                scored_resources.append((score, resource))
-
-        scored_resources.sort(
-            key=lambda item: (
-                item[0],
-                getattr(item[1], "updated_at", None) or getattr(item[1], "created_at", None),
-            ),
-            reverse=True,
+        return embedding_support.rank_resources(
+            resources,
+            query,
+            tokenize_text=self._tokenize_text,
+            generate_embedding_fn=self.generate_embedding,
         )
-        return [resource for _, resource in scored_resources]
 
     def _score_text_match(self, text: str, query: str) -> float:
-        haystack = set(self._tokenize_text(text))
-        query_tokens = self._tokenize_text(query)
-        if not query_tokens:
-            return 0.0
-        token_hits = sum(1 for token in query_tokens if token in haystack)
-        substring_bonus = 0.5 if query.lower() in text.lower() else 0.0
-        return (token_hits / len(query_tokens)) + substring_bonus
+        return embedding_support.score_text_match(
+            text,
+            query,
+            tokenize_text=self._tokenize_text,
+        )
 
     def _build_retrieval_item(
         self,
@@ -1019,6 +1383,7 @@ Return ONLY a JSON array of strings, e.g.:
     def build_model_snapshot(self, card) -> Dict[str, Any]:
         return {
             "title": card.title,
+            "lifecycle_stage": getattr(card, "lifecycle_stage", "active"),
             "user_notes": card.user_notes,
             "examples": card.examples or [],
             "counter_examples": card.counter_examples or [],
@@ -1064,20 +1429,28 @@ Return the response as a JSON object with the following structure:
 }}
 
 {language_instruction}"""
-        
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._model_card_schema(),
+                schema_name="model_card",
+            )
+        except Exception:
+            structured_result = None
+
+        normalized_structured = self.normalize_model_card_payload(structured_result)
+        if normalized_structured != self._default_model_card_payload():
+            return normalized_structured
+
         result = await self.llm.generate(prompt)
-        
+
         try:
             model_data = json.loads(_clean_json_str(result))
         except json.JSONDecodeError:
-            model_data = {
-                "concept_maps": {"nodes": [], "edges": []},
-                "core_principles": [],
-                "examples": [],
-                "limitations": []
-            }
-        
-        return model_data
+            model_data = {}
+
+        return self.normalize_model_card_payload(model_data)
     
     async def generate_counter_examples(
         self,
@@ -1105,15 +1478,28 @@ Generate 2-3 counter-examples or challenging questions that:
 Format as a JSON array of strings, each being a counter-example or challenging question.
 
 {language_instruction}"""
-        
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._counter_examples_schema(),
+                schema_name="counter_examples",
+            )
+        except Exception:
+            structured_result = None
+
+        normalized_structured = self._normalize_string_items(structured_result, limit=5)
+        if normalized_structured:
+            return normalized_structured
+
         result = await self.llm.generate(prompt)
-        
+
         try:
             counter_examples = json.loads(_clean_json_str(result))
         except json.JSONDecodeError:
             counter_examples = []
-        
-        return counter_examples
+
+        return self._normalize_string_items(counter_examples, limit=5)
     
     async def suggest_migration(
         self,
@@ -1138,15 +1524,28 @@ Return as JSON array:
 ]
 
 {language_instruction}"""
-        
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._migration_schema(),
+                schema_name="migrations",
+            )
+        except Exception:
+            structured_result = None
+
+        normalized_structured = self.normalize_migration_payload(structured_result)
+        if normalized_structured:
+            return normalized_structured
+
         result = await self.llm.generate(prompt)
-        
+
         try:
             migrations = json.loads(_clean_json_str(result))
         except json.JSONDecodeError:
             migrations = []
-        
-        return migrations
+
+        return self.normalize_migration_payload(migrations)
     
     async def generate_learning_path(
         self,
@@ -1185,9 +1584,22 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
 ]
 
 {language_instruction}"""
-        
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._learning_path_schema(),
+                schema_name="learning_path",
+            )
+        except Exception:
+            structured_result = None
+
+        normalized_structured = self.normalize_learning_path_payload(structured_result)
+        if normalized_structured:
+            return normalized_structured
+
         result = await self.llm.generate(prompt)
-        
+
         try:
             path = json.loads(_clean_json_str(result))
         except json.JSONDecodeError as e:
@@ -1195,8 +1607,8 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
                 f.write(f"JSON ERROR: {e}\\nRAW:\\n{result}\\n---\\n")
             print(f"Failed to parse path json. Error: {e}")
             path = []
-        
-        return path
+
+        return self.normalize_learning_path_payload(path)
 
     async def generate_learning_path_resilient(
         self,
@@ -1323,65 +1735,42 @@ Constraints:
 
 {language_instruction}"""
 
+        cjk_context = self._contains_cjk(
+            problem_title + problem_description + step_concept + step_description
+        )
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._step_hint_schema(),
+                schema_name="step_hint",
+            )
+        except Exception:
+            structured_result = None
+
+        if isinstance(structured_result, dict):
+            return self._normalize_step_hint_structured(
+                structured_result,
+                previous_hint_texts=previous_hint_texts,
+                cjk_context=cjk_context,
+            )
+
         result = await self.llm.generate(prompt)
         try:
             parsed = json.loads(_clean_json_str(result))
             if not isinstance(parsed, dict):
                 raise ValueError("Step hint is not a JSON object")
-            actions = parsed.get("next_actions", [])
-            if not isinstance(actions, list):
-                actions = []
-            normalized_actions = [
-                str(item).strip()
-                for item in actions
-                if str(item).strip()
-            ][:3]
-            deduped_actions = self._dedupe_hint_actions(
-                actions=normalized_actions,
-                previous_texts=previous_hint_texts,
-                cjk_context=self._contains_cjk(
-                    problem_title + problem_description + step_concept + step_description
-                ),
+            return self._normalize_step_hint_structured(
+                parsed,
+                previous_hint_texts=previous_hint_texts,
+                cjk_context=cjk_context,
             )
-            return {
-                "focus": str(parsed.get("focus", "")).strip(),
-                "next_actions": deduped_actions,
-                "starter": str(parsed.get("starter", "")).strip(),
-            }
         except (json.JSONDecodeError, ValueError, TypeError):
-            fallback_focus = (
-                f"Focus on clarifying your understanding of '{step_concept}' in this step."
-                if not self._contains_cjk(problem_title + problem_description + step_concept)
-                else f"先聚焦澄清你对“{step_concept}”这一步的理解。"
+            return self._build_fallback_step_hint(
+                step_concept=step_concept,
+                previous_hint_texts=previous_hint_texts,
+                cjk_context=cjk_context,
             )
-            fallback_actions = (
-                [
-                    "State what you already understand in 2-3 sentences.",
-                    "Add one concrete example or mini attempt.",
-                    "List one uncertainty you want feedback on.",
-                ]
-                if not self._contains_cjk(problem_title + problem_description + step_concept)
-                else [
-                    "先用 2-3 句话写出你已经理解的内容。",
-                    "补一个具体例子或你的一次尝试。",
-                    "写出一个最不确定的点，便于获得针对性反馈。",
-                ]
-            )
-            fallback_actions = self._dedupe_hint_actions(
-                actions=fallback_actions,
-                previous_texts=previous_hint_texts,
-                cjk_context=self._contains_cjk(problem_title + problem_description + step_concept),
-            )
-            fallback_starter = (
-                f"My current understanding of {step_concept} is:"
-                if not self._contains_cjk(problem_title + problem_description + step_concept)
-                else f"我目前对“{step_concept}”的理解是："
-            )
-            return {
-                "focus": fallback_focus,
-                "next_actions": fallback_actions,
-                "starter": fallback_starter,
-            }
 
     def format_step_hint_text(self, structured_hint: Dict[str, Any]) -> str:
         focus = str(structured_hint.get("focus", "")).strip()
@@ -1413,6 +1802,25 @@ Constraints:
             retrieval_context=retrieval_context,
             provider_type=provider_type,
         )
+
+    async def stream_generate_with_context(
+        self,
+        prompt: str,
+        context: List[Dict[str, Any]],
+        retrieval_context: Optional[str] = None,
+        provider_type: Optional[str] = None,
+        model_id: Optional[str] = None,
+        temperature: float = 0.7,
+    ):
+        async for token in self.llm.stream_generate_with_context(
+            prompt=prompt,
+            context=context,
+            retrieval_context=retrieval_context,
+            provider_type=provider_type,
+            model_id=model_id,
+            temperature=temperature,
+        ):
+            yield token
 
     async def generate_feedback_structured(
         self,
@@ -1451,6 +1859,18 @@ Return this exact JSON shape:
 
 {language_instruction}
 """
+
+        try:
+            structured_result = await self.llm.generate_structured_json(
+                prompt,
+                self._feedback_structured_schema(),
+                schema_name="structured_feedback",
+            )
+        except Exception:
+            structured_result = None
+
+        if isinstance(structured_result, dict):
+            return self.normalize_feedback_structured(structured_result)
 
         result = await self.llm.generate(prompt)
 

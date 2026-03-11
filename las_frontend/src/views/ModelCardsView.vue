@@ -1,7 +1,10 @@
 <template>
   <div class="model-cards-page">
     <div class="page-header">
-      <h1>{{ t('modelCards.title') }}</h1>
+      <div>
+        <h1>{{ t('modelCards.title') }}</h1>
+        <p class="page-subtitle">{{ t('modelCards.subtitle') }}</p>
+      </div>
       <button class="btn btn-primary" @click="showCreateModal = true">
         {{ t('modelCards.newCard') }}
       </button>
@@ -12,6 +15,7 @@
         v-model="searchQuery"
         type="text"
         class="search-input"
+        data-testid="model-cards-search-input"
         :placeholder="t('modelCards.searchCards')"
       />
       <select v-model="filterMode" class="filter-select">
@@ -23,15 +27,28 @@
     
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
-    <div v-else-if="modelCards.length" class="cards-grid">
+    <template v-else-if="modelCards.length">
+      <div class="cards-grid" data-testid="model-cards-grid">
       <div
         v-for="card in modelCards"
         :key="card.id"
         class="model-card"
         :class="card.evolutionState ? `model-card-${card.evolutionState.tone}` : ''"
       >
-        <h3>{{ card.title }}</h3>
+        <div class="card-title-row">
+          <h3>{{ card.title }}</h3>
+          <span
+            class="lifecycle-pill"
+            :class="`stage-${card.lifecycle_stage || 'active'}`"
+            data-testid="model-card-lifecycle-badge"
+          >
+            {{ formatLifecycleStage(card.lifecycle_stage) }}
+          </span>
+        </div>
         <p v-if="card.user_notes">{{ card.user_notes }}</p>
+        <p v-else-if="isDraftCard(card)" class="draft-copy">
+          {{ t('modelCards.draftCardSummary') }}
+        </p>
         
         <div class="card-stats">
           <span>v{{ card.version }}</span>
@@ -63,20 +80,26 @@
           <strong>{{ t('modelCards.needsReinforcementBadge') }}:</strong>
           {{ formatReinforcementResume(card.reviewSchedule) }}
         </p>
+        <p v-if="isDraftCard(card)" class="draft-copy">
+          {{ t('modelCards.draftNeedsActivation') }}
+        </p>
         
         <div class="card-actions">
-          <button @click="viewCard(card)" class="btn btn-secondary">{{ t('modelCards.viewCard') }}</button>
+          <button @click="viewCard(card)" class="btn btn-secondary">
+            {{ isDraftCard(card) ? t('modelCards.openDraft') : t('modelCards.viewCard') }}
+          </button>
           <button
+            v-if="!isDraftCard(card)"
             @click="scheduleReview(card)"
             class="btn btn-secondary"
             :disabled="card.scheduling || card.isScheduled"
           >
             {{ card.isScheduled ? t('modelCards.scheduled') : t('modelCards.addToReview') }}
           </button>
-          <button @click="generateCounterExamples(card)" class="btn btn-secondary">
+          <button v-if="!isDraftCard(card)" @click="generateCounterExamples(card)" class="btn btn-secondary">
             {{ t('modelCards.counterExamples') }}
           </button>
-          <button @click="suggestMigration(card)" class="btn btn-secondary">
+          <button v-if="!isDraftCard(card)" @click="suggestMigration(card)" class="btn btn-secondary">
             {{ t('modelCards.suggestTransfer') }}
           </button>
         </div>
@@ -97,25 +120,43 @@
           </ul>
         </div>
       </div>
-    </div>
+      </div>
+      <div v-if="hasMoreCards" class="load-more-row">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loadingMore"
+          data-testid="model-cards-load-more"
+          @click="loadMoreCards"
+        >
+          {{ loadingMore ? t('common.loading') : t('common.loadMore') }}
+        </button>
+      </div>
+    </template>
     
-    <p v-else class="empty">{{ modelCards.length ? t('modelCards.noCards') : t('modelCards.createFirst') }}</p>
+    <p v-else class="empty">{{ emptyCardsMessage }}</p>
     
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
-        <h2>{{ t('modelCards.newCard') }}</h2>
-        <form @submit.prevent="createCard">
+        <h2>{{ t('modelCards.newDraft') }}</h2>
+        <p class="draft-copy">{{ t('modelCards.newDraftHelper') }}</p>
+        <form data-testid="model-card-draft-form" @submit.prevent="createCard">
           <div class="form-group">
-            <label>{{ t('problemDetail.title') }}</label>
-            <input v-model="newCard.title" type="text" required />
+            <label for="new-model-card-draft-title">{{ t('modelCards.draftTitleLabel') }}</label>
+            <input id="new-model-card-draft-title" v-model="newCard.title" type="text" required />
           </div>
           <div class="form-group">
-            <label>{{ t('modelCards.notes') }}</label>
-            <textarea v-model="newCard.user_notes" rows="4"></textarea>
+            <label for="new-model-card-draft-notes">{{ t('modelCards.draftNotesLabel') }}</label>
+            <textarea id="new-model-card-draft-notes" v-model="newCard.user_notes" rows="4"></textarea>
           </div>
           <div class="form-group">
-            <label>{{ t('modelCards.examples') }}</label>
-            <input v-model="newCard.examples" type="text" placeholder="e.g., example1, example2" />
+            <label for="new-model-card-draft-examples">{{ t('modelCards.draftExamplesLabel') }}</label>
+            <input
+              id="new-model-card-draft-examples"
+              v-model="newCard.examples"
+              type="text"
+              :placeholder="t('modelCards.draftExamplesPlaceholder')"
+            />
           </div>
           <p v-if="error" class="error">{{ error }}</p>
           <div class="modal-actions">
@@ -123,7 +164,7 @@
               {{ t('common.cancel') }}
             </button>
             <button type="submit" class="btn btn-primary" :disabled="creating">
-              {{ creating ? t('common.loading') : t('common.add') }}
+              {{ creating ? t('common.loading') : t('modelCards.createDraft') }}
             </button>
           </div>
         </form>
@@ -133,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -141,15 +182,24 @@ import { deriveModelCardEvolutionState, type ModelCardEvolutionState } from '@/u
 
 const { t } = useI18n()
 const router = useRouter()
+const PAGE_SIZE = 12
 
 const modelCards = ref<any[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const hasMoreCards = ref(false)
 const showCreateModal = ref(false)
 const creating = ref(false)
 const error = ref('')
-const scheduledCardIds = ref<Set<string>>(new Set())
 const searchQuery = ref('')
 const filterMode = ref('all')
+const trimmedSearchQuery = computed(() => searchQuery.value.trim())
+const hasActiveFilters = computed(() => Boolean(trimmedSearchQuery.value) || filterMode.value !== 'all')
+const emptyCardsMessage = computed(() => (
+  hasActiveFilters.value ? t('modelCards.noCards') : t('modelCards.createFirst')
+))
+let latestFetchId = 0
+let searchDebounceId: number | null = null
 
 const newCard = ref({
   title: '',
@@ -157,38 +207,66 @@ const newCard = ref({
   examples: '',
 })
 
-const fetchCards = async () => {
+const isDraftCard = (card: any) => String(card?.lifecycle_stage || 'active') === 'draft'
+
+const fetchCards = async ({ append = false }: { append?: boolean } = {}) => {
+  const fetchId = ++latestFetchId
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
   try {
-    const [cardsRes, schedulesRes] = await Promise.all([
-      api.get('/model-cards/', {
-        params: {
-          q: searchQuery.value.trim() || undefined,
-          scheduled:
-            filterMode.value === 'all'
-              ? undefined
-              : filterMode.value === 'scheduled',
-        },
-      }),
-      api.get('/srs/schedules').catch(() => ({ data: [] })),
-    ])
-    const schedulesByCardId = Object.fromEntries(
-      (schedulesRes.data || []).map((schedule: any) => [String(schedule.model_card_id), schedule])
-    )
-    scheduledCardIds.value = new Set(Object.keys(schedulesByCardId))
-    modelCards.value = cardsRes.data.map((c: any) => ({
+    const cardsRes = await api.get('/model-cards/', {
+      params: {
+        q: trimmedSearchQuery.value || undefined,
+        scheduled:
+          filterMode.value === 'all'
+            ? undefined
+            : filterMode.value === 'scheduled',
+        limit: PAGE_SIZE,
+        offset: append ? modelCards.value.length : 0,
+      },
+    })
+    if (fetchId !== latestFetchId) return
+    const nextCards = (cardsRes.data || []).map((c: any) => ({
       ...c,
-      isScheduled: scheduledCardIds.value.has(c.id),
-      reviewSchedule: schedulesByCardId[String(c.id)] || null,
-      evolutionState: deriveModelCardEvolutionState(schedulesByCardId[String(c.id)] || null),
+      isScheduled: Boolean(c.is_scheduled),
+      reviewSchedule: c.review_schedule || null,
+      evolutionState: deriveModelCardEvolutionState(c.review_schedule || null),
       scheduling: false,
       showCounterExamples: false,
       showMigrations: false,
     }))
+    modelCards.value = append ? [...modelCards.value, ...nextCards] : nextCards
+    hasMoreCards.value = nextCards.length === PAGE_SIZE
   } catch (e) {
+    if (fetchId !== latestFetchId) return
     console.error('Failed to fetch model cards:', e)
+    if (!append) {
+      modelCards.value = []
+    }
+    hasMoreCards.value = false
   } finally {
+    if (fetchId !== latestFetchId) return
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+const queueCardRefresh = () => {
+  if (searchDebounceId !== null) {
+    window.clearTimeout(searchDebounceId)
+  }
+  searchDebounceId = window.setTimeout(() => {
+    searchDebounceId = null
+    fetchCards()
+  }, 250)
+}
+
+const loadMoreCards = async () => {
+  if (loading.value || loadingMore.value || !hasMoreCards.value) return
+  await fetchCards({ append: true })
 }
 
 const createCard = async () => {
@@ -200,7 +278,7 @@ const createCard = async () => {
       ? newCard.value.examples.split(',').map(e => e.trim()).filter(Boolean)
       : []
     
-    await api.post('/model-cards/', {
+    const response = await api.post('/model-cards/', {
       title: newCard.value.title,
       user_notes: newCard.value.user_notes,
       examples,
@@ -209,6 +287,7 @@ const createCard = async () => {
     showCreateModal.value = false
     newCard.value = { title: '', user_notes: '', examples: '' }
     await fetchCards()
+    router.push(`/model-cards/${response.data.id}`)
   } catch (e: any) {
     error.value = e.response?.data?.detail || 'Failed to create model card'
   } finally {
@@ -281,6 +360,11 @@ const formatRecallState = (state: string | undefined | null) => {
   if (state === 'reinforcing') return t('modelCards.recallStateReinforcing')
   if (state === 'stable') return t('modelCards.recallStateStable')
   return t('modelCards.recallStateScheduled')
+}
+
+const formatLifecycleStage = (stage: string | undefined | null) => {
+  if (stage === 'draft') return t('modelCards.lifecycleDraft')
+  return t('modelCards.lifecycleActive')
 }
 
 const formatRecentOutcome = (outcome: string | undefined | null) => {
@@ -390,8 +474,14 @@ onMounted(() => {
   fetchCards()
 })
 
-watch([searchQuery, filterMode], () => {
-  fetchCards()
+onBeforeUnmount(() => {
+  if (searchDebounceId !== null) {
+    window.clearTimeout(searchDebounceId)
+  }
+})
+
+watch([trimmedSearchQuery, filterMode], () => {
+  queueCardRefresh()
 })
 </script>
 
@@ -400,7 +490,14 @@ watch([searchQuery, filterMode], () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   margin-bottom: 2rem;
+}
+
+.page-subtitle {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  max-width: 48rem;
 }
 
 .filters-bar {
@@ -428,6 +525,12 @@ watch([searchQuery, filterMode], () => {
   gap: 1rem;
 }
 
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
+
 .model-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -451,10 +554,43 @@ watch([searchQuery, filterMode], () => {
   margin-bottom: 0.5rem;
 }
 
+.card-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.lifecycle-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+
+.lifecycle-pill.stage-draft {
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+}
+
+.lifecycle-pill.stage-active {
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #86efac;
+}
+
 .model-card p {
   color: var(--text-muted);
   font-size: 0.875rem;
   margin-bottom: 1rem;
+}
+
+.draft-copy {
+  color: var(--text-muted);
+  font-size: 0.84rem;
 }
 
 .card-stats {

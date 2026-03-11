@@ -294,6 +294,11 @@ async def schedule_card(
     card = await db.get(ModelCard, card_id)
     if not card or card.user_id != str(current_user.id):
         raise HTTPException(status_code=404, detail="Model card not found")
+    if str(card.lifecycle_stage or "active") != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Draft model card must be marked ready before it can be scheduled",
+        )
 
     existing = await db.execute(
         select(ReviewSchedule).where(

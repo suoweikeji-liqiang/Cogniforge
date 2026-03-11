@@ -3,33 +3,88 @@
     <div class="page-header">
       <button class="btn btn-secondary" @click="$router.back()">{{ t('common.back') }}</button>
       <h1>{{ card?.title }}</h1>
+      <span
+        v-if="card"
+        class="lifecycle-pill"
+        :class="`stage-${card.lifecycle_stage || 'active'}`"
+        data-testid="model-card-lifecycle-badge"
+      >
+        {{ formatLifecycleStage(card?.lifecycle_stage) }}
+      </span>
     </div>
 
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
 
     <template v-else-if="card">
       <div class="card-info">
-        <div class="info-section">
-          <h3>{{ t('modelCards.notes') }}</h3>
-          <p>{{ card.user_notes || '-' }}</p>
+        <div v-if="isDraftCard" class="draft-panel" data-testid="model-card-draft-panel">
+          <div class="draft-panel-head">
+            <div>
+              <span class="recall-eyebrow">{{ t('modelCards.lifecycleDraft') }}</span>
+              <h2>{{ t('modelCards.draftWorkspaceTitle') }}</h2>
+            </div>
+          </div>
+          <p>{{ t('modelCards.draftDetailSummary') }}</p>
+          <form class="draft-form" @submit.prevent="saveDraft">
+            <div class="form-group">
+              <label for="model-card-draft-title">{{ t('modelCards.draftTitleLabel') }}</label>
+              <input id="model-card-draft-title" v-model="draftForm.title" type="text" required />
+            </div>
+            <div class="form-group">
+              <label for="model-card-draft-notes">{{ t('modelCards.draftNotesLabel') }}</label>
+              <textarea id="model-card-draft-notes" v-model="draftForm.user_notes" rows="5"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="model-card-draft-examples">{{ t('modelCards.draftExamplesLabel') }}</label>
+              <input
+                id="model-card-draft-examples"
+                v-model="draftForm.examples"
+                type="text"
+                :placeholder="t('modelCards.draftExamplesPlaceholder')"
+              />
+            </div>
+            <p class="draft-copy">{{ t('modelCards.draftNeedsActivation') }}</p>
+            <p v-if="draftError" class="error">{{ draftError }}</p>
+            <div class="review-actions">
+              <button type="submit" class="btn btn-secondary" :disabled="savingDraft || activatingDraft">
+                {{ savingDraft ? t('common.loading') : t('modelCards.saveDraft') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                :disabled="savingDraft || activatingDraft"
+                data-testid="model-card-mark-ready"
+                @click="activateDraft"
+              >
+                {{ activatingDraft ? t('common.loading') : t('modelCards.markReady') }}
+              </button>
+            </div>
+          </form>
         </div>
 
-        <div class="info-row">
+        <template v-else>
           <div class="info-section">
-            <h3>{{ t('modelCards.examples') }}</h3>
-            <ul v-if="card.examples?.length">
-              <li v-for="(ex, i) in card.examples" :key="i">{{ ex }}</li>
-            </ul>
-            <p v-else>-</p>
+            <h3>{{ t('modelCards.notes') }}</h3>
+            <p>{{ card.user_notes || '-' }}</p>
           </div>
-          <div class="info-section">
-            <h3>{{ t('modelCards.counterExamples') }}</h3>
-            <ul v-if="card.counter_examples?.length">
-              <li v-for="(ex, i) in card.counter_examples" :key="i">{{ ex }}</li>
-            </ul>
-            <p v-else>-</p>
+
+          <div class="info-row">
+            <div class="info-section">
+              <h3>{{ t('modelCards.examples') }}</h3>
+              <ul v-if="card.examples?.length">
+                <li v-for="(ex, i) in card.examples" :key="i">{{ ex }}</li>
+              </ul>
+              <p v-else>-</p>
+            </div>
+            <div class="info-section">
+              <h3>{{ t('modelCards.counterExamples') }}</h3>
+              <ul v-if="card.counter_examples?.length">
+                <li v-for="(ex, i) in card.counter_examples" :key="i">{{ ex }}</li>
+              </ul>
+              <p v-else>-</p>
+            </div>
           </div>
-        </div>
+        </template>
 
         <div class="card-meta">
           <span>{{ t('modelCards.version') }}: v{{ card.version }}</span>
@@ -38,7 +93,8 @@
         <div class="review-actions">
           <button
             class="btn btn-secondary"
-            :disabled="schedulingReview || isScheduled"
+            :disabled="isDraftCard || schedulingReview || isScheduled"
+            data-testid="model-card-schedule-review"
             @click="scheduleReview"
           >
             {{ isScheduled ? t('modelCards.scheduled') : t('modelCards.addToReview') }}
@@ -48,7 +104,7 @@
           </router-link>
         </div>
         <div
-          v-if="reviewSchedule"
+          v-if="reviewSchedule && !isDraftCard"
           class="recall-status-card"
           :class="evolutionState ? `recall-status-${evolutionState.tone}` : ''"
           data-testid="model-card-recall-status"
@@ -76,6 +132,54 @@
             <p v-if="revisionFocus.cue" class="evolution-state-meta">
               {{ t('modelCards.revisionFocusCue', { cue: revisionFocus.cue }) }}
             </p>
+            <div class="revision-actions" data-testid="model-card-revision-actions">
+              <button class="btn btn-secondary" @click="toggleRevisionEditor">
+                {{ showRevisionEditor ? t('common.cancel') : t('modelCards.reviseNow') }}
+              </button>
+              <router-link
+                v-if="reviewSchedule?.origin?.problem_id"
+                :to="buildWorkspaceRoute(reviewSchedule)"
+                class="btn btn-secondary review-hub-link"
+              >
+                {{ t('modelCards.reopenWorkspace') }}
+              </router-link>
+            </div>
+            <form
+              v-if="showRevisionEditor"
+              class="revision-editor"
+              data-testid="model-card-revision-editor"
+              @submit.prevent="saveRevision"
+            >
+              <div class="form-group">
+                <label for="model-card-revision-notes">{{ t('modelCards.revisionNotesLabel') }}</label>
+                <textarea id="model-card-revision-notes" v-model="revisionForm.user_notes" rows="4"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="model-card-revision-examples">{{ t('modelCards.revisionExamplesLabel') }}</label>
+                <input
+                  id="model-card-revision-examples"
+                  v-model="revisionForm.examples"
+                  type="text"
+                  :placeholder="t('modelCards.draftExamplesPlaceholder')"
+                />
+              </div>
+              <div class="form-group">
+                <label for="model-card-revision-counter-examples">{{ t('modelCards.revisionCounterExamplesLabel') }}</label>
+                <input
+                  id="model-card-revision-counter-examples"
+                  v-model="revisionForm.counter_examples"
+                  type="text"
+                  :placeholder="t('modelCards.revisionCounterExamplesPlaceholder')"
+                />
+              </div>
+              <p class="draft-copy">{{ t('modelCards.revisionSaveHint', { focus: formatRevisionFocusLabel(revisionFocus) }) }}</p>
+              <p v-if="revisionError" class="error">{{ revisionError }}</p>
+              <div class="revision-actions">
+                <button type="submit" class="btn btn-primary" :disabled="savingRevision">
+                  {{ savingRevision ? t('common.loading') : t('modelCards.saveRevision') }}
+                </button>
+              </div>
+            </form>
           </div>
           <div class="recall-status-head">
             <div>
@@ -109,7 +213,7 @@
             </p>
           </div>
         </div>
-        <div class="cog-test-action">
+        <div v-if="!isDraftCard" class="cog-test-action">
           <button class="btn btn-secondary" @click="startCogTest">
             {{ t('modelCards.runDiagnostic') }}
           </button>
@@ -201,8 +305,25 @@ const evolutionCompare = ref<any>(null)
 const similarCards = ref<any[]>([])
 const loading = ref(true)
 const schedulingReview = ref(false)
+const savingDraft = ref(false)
+const activatingDraft = ref(false)
+const draftError = ref('')
+const savingRevision = ref(false)
+const revisionError = ref('')
+const showRevisionEditor = ref(false)
 const isScheduled = ref(false)
 const reviewSchedule = ref<any | null>(null)
+const draftForm = ref({
+  title: '',
+  user_notes: '',
+  examples: '',
+})
+const revisionForm = ref({
+  user_notes: '',
+  examples: '',
+  counter_examples: '',
+})
+const isDraftCard = computed(() => String(card.value?.lifecycle_stage || 'active') === 'draft')
 const evolutionState = computed(() => deriveModelCardEvolutionState(reviewSchedule.value, evolutionLogs.value))
 const revisionFocus = computed(() => deriveModelCardRevisionFocus({
   schedule: reviewSchedule.value,
@@ -219,6 +340,11 @@ const formatRecallState = (state: string | undefined | null) => {
   if (state === 'reinforcing') return t('modelCards.recallStateReinforcing')
   if (state === 'stable') return t('modelCards.recallStateStable')
   return t('modelCards.recallStateScheduled')
+}
+
+const formatLifecycleStage = (stage: string | undefined | null) => {
+  if (stage === 'draft') return t('modelCards.lifecycleDraft')
+  return t('modelCards.lifecycleActive')
 }
 
 const formatRecentOutcome = (outcome: string | undefined | null) => {
@@ -375,6 +501,104 @@ const buildWorkspaceRoute = (entry: any) => {
   }
 }
 
+const parseExamples = (value: string) => {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const syncDraftForm = (nextCard: any) => {
+  draftForm.value = {
+    title: nextCard?.title || '',
+    user_notes: nextCard?.user_notes || '',
+    examples: Array.isArray(nextCard?.examples) ? nextCard.examples.join(', ') : '',
+  }
+}
+
+const syncRevisionForm = (nextCard: any) => {
+  revisionForm.value = {
+    user_notes: nextCard?.user_notes || '',
+    examples: Array.isArray(nextCard?.examples) ? nextCard.examples.join(', ') : '',
+    counter_examples: Array.isArray(nextCard?.counter_examples) ? nextCard.counter_examples.join(', ') : '',
+  }
+}
+
+const saveDraft = async () => {
+  if (!card.value || !isDraftCard.value || savingDraft.value) return
+
+  draftError.value = ''
+  savingDraft.value = true
+
+  try {
+    const response = await api.put(`/model-cards/${card.value.id}`, {
+      title: draftForm.value.title,
+      user_notes: draftForm.value.user_notes,
+      examples: parseExamples(draftForm.value.examples),
+    })
+    card.value = response.data
+    syncDraftForm(response.data)
+  } catch (e: any) {
+    draftError.value = e.response?.data?.detail || 'Failed to save draft'
+  } finally {
+    savingDraft.value = false
+  }
+}
+
+const activateDraft = async () => {
+  if (!card.value || !isDraftCard.value || activatingDraft.value) return
+
+  await saveDraft()
+  if (draftError.value) return
+
+  draftError.value = ''
+  activatingDraft.value = true
+
+  try {
+    const response = await api.post(`/model-cards/${card.value.id}/activate`)
+    card.value = response.data
+    syncDraftForm(response.data)
+  } catch (e: any) {
+    draftError.value = e.response?.data?.detail || 'Failed to mark draft ready'
+  } finally {
+    activatingDraft.value = false
+  }
+}
+
+const buildRevisionReason = (focus: ModelCardRevisionFocus | null) => {
+  if (!focus) return 'Revision workflow: revise card'
+  return `Revision workflow: ${focus.key}`
+}
+
+const toggleRevisionEditor = () => {
+  revisionError.value = ''
+  showRevisionEditor.value = !showRevisionEditor.value
+}
+
+const saveRevision = async () => {
+  if (!card.value || !revisionFocus.value || savingRevision.value) return
+
+  revisionError.value = ''
+  savingRevision.value = true
+
+  try {
+    const response = await api.put(`/model-cards/${card.value.id}`, {
+      user_notes: revisionForm.value.user_notes,
+      examples: parseExamples(revisionForm.value.examples),
+      counter_examples: parseExamples(revisionForm.value.counter_examples),
+      change_reason: buildRevisionReason(revisionFocus.value),
+    })
+    card.value = response.data
+    syncRevisionForm(response.data)
+    showRevisionEditor.value = false
+    await fetchCard()
+  } catch (e: any) {
+    revisionError.value = e.response?.data?.detail || 'Failed to save revision'
+  } finally {
+    savingRevision.value = false
+  }
+}
+
 const fetchCard = async () => {
   try {
     const id = route.params.id
@@ -386,6 +610,8 @@ const fetchCard = async () => {
       api.get(`/model-cards/${id}/similar`).catch(() => ({ data: [] })),
     ])
     card.value = cardRes.data
+    syncDraftForm(cardRes.data)
+    syncRevisionForm(cardRes.data)
     evolutionLogs.value = logsRes.data
     evolutionCompare.value = compareRes.data
     similarCards.value = similarRes.data
@@ -399,7 +625,7 @@ const fetchCard = async () => {
 }
 
 const scheduleReview = async () => {
-  if (!card.value || isScheduled.value || schedulingReview.value) return
+  if (!card.value || isDraftCard.value || isScheduled.value || schedulingReview.value) return
 
   schedulingReview.value = true
 
@@ -431,7 +657,29 @@ onMounted(fetchCard)
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
   margin-bottom: 2rem;
+}
+
+.lifecycle-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+
+.lifecycle-pill.stage-draft {
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+}
+
+.lifecycle-pill.stage-active {
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #86efac;
 }
 
 .card-info {
@@ -440,6 +688,45 @@ onMounted(fetchCard)
   border-radius: 12px;
   padding: 1.5rem;
   margin-bottom: 2rem;
+}
+
+.draft-panel {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.draft-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.draft-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.draft-copy {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.form-group {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.form-group input,
+.form-group textarea {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.8rem 0.95rem;
 }
 
 .info-section { margin-bottom: 1rem; }
@@ -510,6 +797,19 @@ onMounted(fetchCard)
   margin-bottom: 0.95rem;
   padding-bottom: 0.95rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.revision-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.revision-editor {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
 }
 
 .evolution-state-head {

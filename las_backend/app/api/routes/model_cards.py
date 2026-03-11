@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.entities.user import User, ModelCard, EvolutionLog, ReviewSchedule
 from app.schemas.model_card import (
     ModelCardCreate,
+    ModelCardListResponse,
     ModelCardUpdate,
     ModelCardResponse,
     CounterExampleInput,
@@ -16,6 +17,7 @@ from app.schemas.model_card import (
     EvolutionLogResponse,
 )
 from app.api.routes.auth import get_current_user
+from app.api.routes.srs import _load_review_origins, _serialize_schedule
 from app.services.model_os_service import model_os_service
 
 router = APIRouter(prefix="/model-cards", tags=["Model Cards"])
@@ -94,6 +96,9 @@ async def create_model_card(
     db_card = ModelCard(
         user_id=current_user.id,
         title=card_data.title,
+        lifecycle_stage="draft",
+        origin_type="manual",
+        origin_stage="manual_creation",
         concept_maps=model_data.get("concept_maps"),
         user_notes=card_data.user_notes,
         examples=examples,
@@ -122,10 +127,12 @@ async def create_model_card(
     return db_card
 
 
-@router.get("/", response_model=List[ModelCardResponse])
+@router.get("/", response_model=List[ModelCardListResponse])
 async def list_model_cards(
     q: Optional[str] = Query(default=None),
     scheduled: Optional[bool] = Query(default=None),
+    limit: int = Query(default=12, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -151,7 +158,45 @@ async def list_model_cards(
     if q:
         cards = await rank_model_cards_with_backend(db, current_user, cards, q)
 
-    return cards
+    page_cards = cards[offset:offset + limit]
+    card_ids = [str(card.id) for card in page_cards]
+    schedules_by_card_id: dict[str, dict] = {}
+
+    if card_ids:
+        schedules_result = await db.execute(
+            select(ReviewSchedule).where(
+                ReviewSchedule.user_id == str(current_user.id),
+                ReviewSchedule.model_card_id.in_(card_ids),
+            )
+        )
+        schedule_rows = list(schedules_result.scalars().all())
+        origins = await _load_review_origins(
+            db,
+            user_id=str(current_user.id),
+            model_card_ids=card_ids,
+        )
+        card_map = {str(card.id): card for card in page_cards}
+        schedules_by_card_id = {
+            str(schedule.model_card_id): _serialize_schedule(
+                schedule,
+                card_map.get(str(schedule.model_card_id)),
+                origins.get(str(schedule.model_card_id)),
+            )
+            for schedule in schedule_rows
+        }
+
+    payload: List[dict] = []
+    for card in page_cards:
+        card_body = ModelCardResponse.model_validate(card).model_dump()
+        review_schedule = schedules_by_card_id.get(str(card.id))
+        payload.append(
+            {
+                **card_body,
+                "is_scheduled": review_schedule is not None,
+                "review_schedule": review_schedule,
+            }
+        )
+    return payload
 
 
 @router.get("/{card_id}/similar", response_model=List[ModelCardResponse])
@@ -228,17 +273,17 @@ async def update_model_card(
     if not card:
         raise HTTPException(status_code=404, detail="Model card not found")
     
-    if card_data.title:
+    if card_data.title is not None:
         card.title = card_data.title
-    if card_data.concept_maps:
+    if card_data.concept_maps is not None:
         card.concept_maps = card_data.concept_maps
-    if card_data.user_notes:
+    if card_data.user_notes is not None:
         card.user_notes = card_data.user_notes
-    if card_data.examples:
+    if card_data.examples is not None:
         card.examples = card_data.examples
-    if card_data.counter_examples:
+    if card_data.counter_examples is not None:
         card.counter_examples = card_data.counter_examples
-    if card_data.migration_attempts:
+    if card_data.migration_attempts is not None:
         card.migration_attempts = card_data.migration_attempts
 
     card.version += 1
@@ -249,12 +294,57 @@ async def update_model_card(
         model_id=str(card.id),
         user_id=str(current_user.id),
         action="update",
-        reason="Model card updated",
+        reason=card_data.change_reason or "Model card updated",
         snapshot=model_os_service.build_model_snapshot(card),
     )
 
     await db.commit()
     await db.refresh(card)
+
+    return card
+
+
+@router.post("/{card_id}/activate", response_model=ModelCardResponse)
+async def activate_model_card(
+    card_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(ModelCard).where(
+            ModelCard.id == str(card_id),
+            ModelCard.user_id == str(current_user.id)
+        )
+    )
+    card = result.scalar_one_or_none()
+
+    if not card:
+        raise HTTPException(status_code=404, detail="Model card not found")
+
+    notes = str(card.user_notes or "").strip()
+    examples = [str(example).strip() for example in (card.examples or []) if str(example).strip()]
+    if not notes and not examples:
+        raise HTTPException(
+            status_code=400,
+            detail="Draft needs notes or examples before it can enter the review lifecycle",
+        )
+
+    if card.lifecycle_stage != "active":
+        card.lifecycle_stage = "active"
+        card.version += 1
+        model_os_service.refresh_card_embedding(card)
+
+        await model_os_service.log_evolution(
+            db=db,
+            model_id=str(card.id),
+            user_id=str(current_user.id),
+            action="activate",
+            reason="Manual draft marked ready for review",
+            snapshot=model_os_service.build_model_snapshot(card),
+        )
+
+        await db.commit()
+        await db.refresh(card)
 
     return card
 

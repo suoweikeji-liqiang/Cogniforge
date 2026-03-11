@@ -1,3 +1,4 @@
+import asyncio
 import atexit
 import os
 import tempfile
@@ -95,12 +96,36 @@ async def fake_generate_socratic_question(
     return f"Explain the core tradeoff inside '{step_concept}' in one concrete scenario."
 
 
+async def fake_stream_socratic_question(
+    problem_title: str,
+    problem_description: str,
+    step_concept: str,
+    step_description: str,
+    question_kind: str,
+    recent_responses: list[str],
+    latest_feedback: Optional[dict] = None,
+):
+    response = await fake_generate_socratic_question(
+        problem_title=problem_title,
+        problem_description=problem_description,
+        step_concept=step_concept,
+        step_description=step_description,
+        question_kind=question_kind,
+        recent_responses=recent_responses,
+        latest_feedback=latest_feedback,
+    )
+    for token in response.split(" "):
+        await asyncio.sleep(0.05)
+        yield f"{token} "
+
+
 async def fake_generate_feedback_structured(
     user_response: str,
     concept: str,
     model_examples: list[str],
     retrieval_context: Optional[str] = None,
 ):
+    await asyncio.sleep(0.08)
     lowered = (user_response or "").casefold()
     if "checkpoint" in lowered or "second" in lowered or "threshold" in lowered:
         return {
@@ -172,15 +197,37 @@ async def fake_generate_with_context(
     )
 
 
+async def fake_stream_generate_with_context(
+    prompt: str,
+    context: list[dict],
+    retrieval_context: Optional[str] = None,
+    provider_type: Optional[str] = None,
+    model_id: Optional[str] = None,
+    temperature: float = 0.7,
+):
+    response = await fake_generate_with_context(
+        prompt=prompt,
+        context=context,
+        retrieval_context=retrieval_context,
+        provider_type=provider_type,
+        model_id=model_id,
+    )
+    for token in response.split(" "):
+        await asyncio.sleep(0.03)
+        yield f"{token} "
+
+
 model_os_service.build_problem_concepts_resilient = fake_build_problem_concepts_resilient
 model_os_service.generate_learning_path = fake_generate_learning_path
 model_os_service.generate_learning_path_resilient = fake_generate_learning_path_resilient
 model_os_service.generate_socratic_question = fake_generate_socratic_question
+model_os_service.stream_socratic_question = fake_stream_socratic_question
 model_os_service.generate_feedback_structured = fake_generate_feedback_structured
 model_os_service.extract_related_concepts_resilient = fake_extract_related_concepts_resilient
 model_os_service.llm.generate = fake_generate
 model_os_service.llm.generate_with_context = fake_generate_with_context
 model_os_service.generate_with_context = fake_generate_with_context
+model_os_service.stream_generate_with_context = fake_stream_generate_with_context
 
 
 if __name__ == "__main__":

@@ -51,6 +51,29 @@ async function createModelCard(request: APIRequestContext, accessToken: string, 
     },
   })
   expect(response.ok()).toBeTruthy()
+  const card = await response.json()
+
+  const activateResponse = await request.post(`/api/model-cards/${card.id}/activate`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+  expect(activateResponse.ok()).toBeTruthy()
+  return activateResponse.json()
+}
+
+async function createProblem(request: APIRequestContext, accessToken: string, title: string) {
+  const response = await request.post('/api/problems/', {
+    data: {
+      title,
+      description: 'Problem detail framing context',
+      associated_concepts: ['threshold'],
+    },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+  expect(response.ok()).toBeTruthy()
   return response.json()
 }
 
@@ -61,6 +84,7 @@ async function scheduleReview(request: APIRequestContext, accessToken: string, m
     },
   })
   expect(response.ok()).toBeTruthy()
+  return response.json()
 }
 
 async function createReview(request: APIRequestContext, accessToken: string) {
@@ -164,6 +188,103 @@ test('reviews page centers model-card review and evolution work', async ({ page,
   await expect(page.getByTestId('review-archive-panel')).toContainText('Review archive summary')
 })
 
+test('manual model card creation stays draft-first before review scheduling', async ({ page, request }) => {
+  // Contract Assertions:
+  // - Critical Path: model card operations remain usable from draft creation to review-ready activation.
+  // - Base Button (.btn): draft create, save, and activate controls stay visible and operable.
+  // - Disabled State: review scheduling remains disabled while the asset is still a draft.
+  await authenticate(page, request)
+  const title = `Draft ${randomUUID().slice(0, 6)}`
+
+  await page.goto('/model-cards')
+  await page.getByRole('button', { name: /New Model Card/i }).click()
+  await page.getByTestId('model-card-draft-form').getByLabel(/Asset title/i).fill(title)
+  await page.getByTestId('model-card-draft-form').getByLabel(/Core note/i).fill('Draft note for durable review.')
+  await page.getByTestId('model-card-draft-form').getByLabel(/Example seeds/i).fill('threshold sweep, precision tradeoff')
+  await page.getByRole('button', { name: /Create Draft/i }).click()
+
+  await expect(page).toHaveURL(/\/model-cards\/.+/)
+  await expect(page.getByTestId('model-card-draft-panel')).toBeVisible()
+  await expect(page.getByTestId('model-card-lifecycle-badge')).toContainText(/Draft/i)
+  await expect(page.getByTestId('model-card-schedule-review')).toBeDisabled()
+
+  await page.getByTestId('model-card-mark-ready').click()
+  await expect(page.getByTestId('model-card-draft-panel')).toHaveCount(0)
+  await expect(page.getByTestId('model-card-lifecycle-badge')).toContainText(/Active/i)
+
+  await page.getByTestId('model-card-schedule-review').click()
+  await expect(page.getByTestId('model-card-schedule-review')).toBeDisabled()
+})
+
+test('problem and model card libraries scale with load-more and search reset', async ({ page, request }) => {
+  // Contract Assertions:
+  // - Critical Path: browsing larger problem and model-card libraries remains usable without blocking the learning loop.
+  // - Base Button (.btn): load-more controls remain visible and operable when a page has more results.
+  // - Disabled State: load-more controls stay deterministic while additional pages are loading.
+  const tokens = await authenticate(page, request)
+  const suffix = randomUUID().slice(0, 6)
+
+  for (let index = 1; index <= 13; index += 1) {
+    await createProblem(request, tokens.access_token, `Library Problem ${suffix}-${String(index).padStart(2, '0')}`)
+  }
+  for (let index = 1; index <= 13; index += 1) {
+    await createModelCard(request, tokens.access_token, `Library Card ${suffix}-${String(index).padStart(2, '0')}`)
+  }
+
+  await page.goto('/problems')
+  await expect(page.getByTestId('problems-grid')).toBeVisible()
+  await expect(page.getByTestId('problems-load-more')).toBeVisible()
+  await expect(page.getByText(`Library Problem ${suffix}-01`)).toHaveCount(0)
+  await page.getByTestId('problems-load-more').click()
+  await expect(page.getByText(`Library Problem ${suffix}-01`)).toBeVisible()
+  await page.getByTestId('problems-search-input').fill(`Library Problem ${suffix}-01`)
+  await expect(page.getByText(`Library Problem ${suffix}-01`)).toBeVisible()
+  await page.getByTestId('problems-search-input').fill('')
+  await expect(page.getByText(`Library Problem ${suffix}-01`)).toHaveCount(0)
+  await expect(page.getByTestId('problems-load-more')).toBeVisible()
+
+  await page.goto('/model-cards')
+  await expect(page.getByTestId('model-cards-grid')).toBeVisible()
+  await expect(page.getByTestId('model-cards-load-more')).toBeVisible()
+  await expect(page.getByText(`Library Card ${suffix}-01`)).toHaveCount(0)
+  await page.getByTestId('model-cards-load-more').click()
+  await expect(page.getByText(`Library Card ${suffix}-01`)).toBeVisible()
+  await page.getByTestId('model-cards-search-input').fill(`Library Card ${suffix}-01`)
+  await expect(page.getByText(`Library Card ${suffix}-01`)).toBeVisible()
+  await page.getByTestId('model-cards-search-input').fill('')
+  await expect(page.getByText(`Library Card ${suffix}-01`)).toHaveCount(0)
+  await expect(page.getByTestId('model-cards-load-more')).toBeVisible()
+})
+
+test('revision focus becomes an editable workflow on model card detail', async ({ page, request }) => {
+  // Contract Assertions:
+  // - Critical Path: model card operations support a direct revision loop after weak recall.
+  // - Base Button (.btn): revision actions remain visible and operable on the detail page.
+  // - Disabled State: save controls stay deterministic while revision updates are in flight.
+  const tokens = await authenticate(page, request)
+  const card = await createModelCard(request, tokens.access_token, `Revision ${randomUUID().slice(0, 6)}`)
+  const schedule = await scheduleReview(request, tokens.access_token, card.id)
+
+  const reviewResponse = await request.post(`/api/srs/review/${schedule.id}?quality=0`, {
+    headers: {
+      Authorization: `Bearer ${tokens.access_token}`,
+    },
+  })
+  expect(reviewResponse.ok()).toBeTruthy()
+
+  await page.goto(`/model-cards/${card.id}`)
+  await expect(page.getByTestId('model-card-revision-focus')).toBeVisible()
+  await page.getByRole('button', { name: /Revise Card Now/i }).click()
+  await expect(page.getByTestId('model-card-revision-editor')).toBeVisible()
+  await page.getByLabel(/Revised note/i).fill('Tightened after weak recall.')
+  await page.getByLabel(/Counter-examples/i).fill('Fails when the threshold is fixed too early.')
+  await page.getByRole('button', { name: /Save Revision/i }).click()
+
+  await expect(page.getByTestId('model-card-revision-editor')).toHaveCount(0)
+  await expect(page.getByText('Tightened after weak recall.')).toBeVisible()
+  await expect(page.getByText(/Revision workflow:/i)).toBeVisible()
+})
+
 test('notes and references are framed as supporting archives', async ({ page, request }) => {
   await authenticate(page, request)
 
@@ -199,6 +320,25 @@ test('practice and srs review are framed as supporting subflows', async ({ page,
   await page.goto('/srs-review')
   await expect(page.getByTestId('srs-secondary-banner')).toBeVisible()
   await expect(page.getByTestId('srs-secondary-banner')).toContainText(/review subflow/i)
+})
+
+test('core pages explain their role in the learning loop', async ({ page, request }) => {
+  // Contract Assertions:
+  // - Critical Path: Problems, ProblemDetail, and Model Cards must explain how they connect in the learning loop.
+  // - Base Button (.btn): primary entry actions remain visible while framing copy is present.
+  const tokens = await authenticate(page, request)
+  const problem = await createProblem(request, tokens.access_token, `Problem ${randomUUID().slice(0, 6)}`)
+
+  await page.goto('/problems')
+  await expect(page.getByText(/entry point into the learning loop/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /New Problem/i })).toBeVisible()
+
+  await page.goto(`/problems/${problem.id}`)
+  await expect(page.getByText(/evaluated learning turn|exploration turn/i)).toBeVisible()
+
+  await page.goto('/model-cards')
+  await expect(page.getByText(/durable knowledge assets/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /New Model Card/i })).toBeVisible()
 })
 
 test('graph, challenges, and cog test are framed as secondary surfaces', async ({ page, request }) => {

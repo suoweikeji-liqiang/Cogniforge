@@ -91,21 +91,26 @@ test.describe('ProblemDetail main workflow', () => {
     await openWorkspace(page, session.problemId)
 
     await page.getByTestId('mode-switch-socratic').click()
+    await expect(page.getByTestId('socratic-question-stream-preview')).toBeVisible()
     await expect(page.getByTestId('socratic-question-panel')).toContainText(/Probe/i)
 
     await page.getByTestId('socratic-response-input').fill(
       'First probe answer: precision matters when false positives are expensive, but I still need to sharpen the threshold tradeoff.',
     )
     await page.getByTestId('submit-socratic-response').click()
+    await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
+    await expect(page.getByTestId('socratic-response-stream-preview')).toContainText(/Assessing|Mastery preview/i)
 
     await expect(latestTurnOutcome(page)).toContainText(/Mastery Score/i)
     await expect(latestTurnOutcome(page)).toContainText(/Progression skipped/i)
+    await expect(page.getByTestId('socratic-question-stream-preview')).toBeVisible()
     await expect(page.getByTestId('socratic-question-panel')).toContainText(/Checkpoint/i)
 
     await page.getByTestId('socratic-response-input').fill(
       'Checkpoint answer: lowering the threshold improves recall, raising it improves precision, and the choice depends on the cost of missing positives.',
     )
     await page.getByTestId('submit-socratic-response').click()
+    await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
 
     await expect(latestTurnOutcome(page)).toContainText(/Advance/i)
     await expect(latestTurnOutcome(page)).toContainText(/Progression checked/i)
@@ -124,8 +129,11 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('exploration-question-input').fill('What is the difference between precision and recall?')
     await page.getByTestId('submit-exploration-question').click()
 
+    await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
+    await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Precision|Recall/i)
     await expect(latestTurnOutcome(page)).toContainText(/Comparison/i)
     await expect(latestTurnOutcome(page)).toContainText(/Precision measures/i)
+    await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
     await page.getByTestId('workspace-note-input').fill('Capture the precision and recall tradeoff before branching.')
     await page.getByTestId('save-workspace-note').click()
@@ -145,7 +153,11 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('submit-exploration-question').click()
     await expect(latestTurnOutcome(page)).toContainText(/Comparison|Concept explanation/i)
 
-    await page.getByTestId('accept-derived-concept').first().click()
+    const branchCandidate = page.getByTestId('derived-concept-card').filter({
+      hasText: /threshold moves|false negatives/i,
+    }).first()
+    await expect(branchCandidate).toBeVisible()
+    await branchCandidate.getByTestId('accept-derived-concept').click()
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
     await page.getByTestId('promote-derived-concept').first().click()
     await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()

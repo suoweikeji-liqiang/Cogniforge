@@ -1,7 +1,10 @@
 <template>
   <div class="problems-page">
     <div class="page-header">
-      <h1>{{ t('problems.title') }}</h1>
+      <div>
+        <h1>{{ t('problems.title') }}</h1>
+        <p class="page-subtitle">{{ t('problems.subtitle') }}</p>
+      </div>
       <button class="btn btn-primary" @click="showCreateModal = true">
         {{ t('problems.newProblem') }}
       </button>
@@ -12,13 +15,15 @@
         v-model="searchQuery"
         type="text"
         class="search-input"
+        data-testid="problems-search-input"
         :placeholder="t('problems.searchProblems')"
       />
     </div>
     
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     
-    <div v-else-if="problems.length" class="problems-grid">
+    <template v-else-if="problems.length">
+      <div class="problems-grid" data-testid="problems-grid">
       <router-link 
         v-for="problem in problems" 
         :key="problem.id" 
@@ -38,9 +43,21 @@
         </div>
         <div class="problem-cta">{{ t('problems.openWorkspace') }} →</div>
       </router-link>
-    </div>
+      </div>
+      <div v-if="hasMoreProblems" class="load-more-row">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loadingMore"
+          data-testid="problems-load-more"
+          @click="loadMoreProblems"
+        >
+          {{ loadingMore ? t('common.loading') : t('common.loadMore') }}
+        </button>
+      </div>
+    </template>
     
-    <p v-else class="empty">{{ t('problems.createFirst') }}</p>
+    <p v-else class="empty">{{ emptyProblemsMessage }}</p>
     
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal">
@@ -74,20 +91,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import api from '@/api'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const router = useRouter()
+const PAGE_SIZE = 12
 
 const problems = ref<any[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const hasMoreProblems = ref(false)
 const showCreateModal = ref(false)
 const creating = ref(false)
 const error = ref('')
 const searchQuery = ref('')
+const trimmedSearchQuery = computed(() => searchQuery.value.trim())
+const emptyProblemsMessage = computed(() => (
+  trimmedSearchQuery.value ? t('problems.noProblems') : t('problems.createFirst')
+))
+let latestFetchId = 0
+let searchDebounceId: number | null = null
 
 const newProblem = ref({
   title: '',
@@ -95,19 +121,53 @@ const newProblem = ref({
   concepts: '',
 })
 
-const fetchProblems = async () => {
+const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
+  const fetchId = ++latestFetchId
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
+
   try {
     const response = await api.get('/problems/', {
       params: {
-        q: searchQuery.value.trim() || undefined,
+        q: trimmedSearchQuery.value || undefined,
+        limit: PAGE_SIZE,
+        offset: append ? problems.value.length : 0,
       },
     })
-    problems.value = response.data
+    if (fetchId !== latestFetchId) return
+    const nextProblems = response.data || []
+    problems.value = append ? [...problems.value, ...nextProblems] : nextProblems
+    hasMoreProblems.value = nextProblems.length === PAGE_SIZE
   } catch (e) {
+    if (fetchId !== latestFetchId) return
     console.error('Failed to fetch problems:', e)
+    if (!append) {
+      problems.value = []
+    }
+    hasMoreProblems.value = false
   } finally {
+    if (fetchId !== latestFetchId) return
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+const queueProblemSearch = () => {
+  if (searchDebounceId !== null) {
+    window.clearTimeout(searchDebounceId)
+  }
+  searchDebounceId = window.setTimeout(() => {
+    searchDebounceId = null
+    fetchProblems()
+  }, 250)
+}
+
+const loadMoreProblems = async () => {
+  if (loading.value || loadingMore.value || !hasMoreProblems.value) return
+  await fetchProblems({ append: true })
 }
 
 const createProblem = async () => {
@@ -144,8 +204,14 @@ onMounted(() => {
   fetchProblems()
 })
 
-watch(searchQuery, () => {
-  fetchProblems()
+onBeforeUnmount(() => {
+  if (searchDebounceId !== null) {
+    window.clearTimeout(searchDebounceId)
+  }
+})
+
+watch(trimmedSearchQuery, () => {
+  queueProblemSearch()
 })
 </script>
 
@@ -154,7 +220,14 @@ watch(searchQuery, () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   margin-bottom: 2rem;
+}
+
+.page-subtitle {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  max-width: 48rem;
 }
 
 .filters-bar {
@@ -174,6 +247,12 @@ watch(searchQuery, () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1rem;
+}
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.25rem;
 }
 
 .problem-card {

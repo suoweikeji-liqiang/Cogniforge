@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import openai
 from sqlalchemy import select
@@ -40,6 +41,30 @@ class LLMService:
             )
         )
         return result.scalar_one_or_none()
+
+    async def _resolve_provider_and_model(
+        self,
+        db: AsyncSession,
+        provider_type: Optional[str] = None,
+        model_id: Optional[str] = None,
+    ) -> tuple[Optional[LLMProvider], str]:
+        provider = await self._get_active_provider(db, provider_type)
+        if not provider:
+            return None, ""
+
+        resolved_model_id = model_id
+        if not resolved_model_id:
+            default_model = await self._get_default_model(db, provider.id)
+            if default_model:
+                resolved_model_id = default_model.model_id
+
+        fallbacks = {
+            "openai": "gpt-4o-mini",
+            "qwen": "qwen-plus",
+            "anthropic": "claude-3-5-sonnet-20241022",
+            "ollama": "llama2",
+        }
+        return provider, resolved_model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
     
     async def generate(
         self,
@@ -49,23 +74,13 @@ class LLMService:
         **kwargs
     ) -> str:
         async with AsyncSessionLocal() as db:
-            provider = await self._get_active_provider(db, provider_type)
+            provider, resolved_model = await self._resolve_provider_and_model(
+                db,
+                provider_type=provider_type,
+                model_id=model_id,
+            )
             if not provider:
                 return "Error: No active LLM provider configured"
-
-            # Use caller-specified model, or DB-configured default, or hardcoded fallback
-            if not model_id:
-                default_model = await self._get_default_model(db, provider.id)
-                if default_model:
-                    model_id = default_model.model_id
-
-            fallbacks = {
-                "openai": "gpt-4o-mini",
-                "qwen": "qwen-plus",
-                "anthropic": "claude-3-5-sonnet-20241022",
-                "ollama": "llama2",
-            }
-            resolved_model = model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
 
             if provider.provider_type in OPENAI_COMPATIBLE_PROVIDERS:
                 return await self._generate_openai_compatible(prompt, provider, resolved_model)
@@ -75,6 +90,35 @@ class LLMService:
                 return await self._generate_ollama(prompt, provider, resolved_model)
             else:
                 return f"Error: Unsupported provider type: {provider.provider_type}"
+
+    async def generate_structured_json(
+        self,
+        prompt: str,
+        json_schema: Dict[str, Any],
+        *,
+        schema_name: str = "structured_response",
+        provider_type: Optional[str] = None,
+        model_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any] | List[Any]]:
+        async with AsyncSessionLocal() as db:
+            provider, resolved_model = await self._resolve_provider_and_model(
+                db,
+                provider_type=provider_type,
+                model_id=model_id,
+            )
+            if not provider:
+                return None
+
+            if provider.provider_type not in OPENAI_COMPATIBLE_PROVIDERS:
+                return None
+
+            return await self._generate_openai_compatible_structured(
+                prompt=prompt,
+                provider=provider,
+                model=resolved_model,
+                json_schema=json_schema,
+                schema_name=schema_name,
+            )
     
     async def _generate_openai_compatible(self, prompt: str, provider: LLMProvider, model: str) -> str:
         try:
@@ -96,6 +140,47 @@ class LLMService:
             raise
         except Exception as e:
             return f"Error generating response: {str(e)}"
+
+    async def _generate_openai_compatible_structured(
+        self,
+        *,
+        prompt: str,
+        provider: LLMProvider,
+        model: str,
+        json_schema: Dict[str, Any],
+        schema_name: str,
+    ) -> Optional[Dict[str, Any] | List[Any]]:
+        try:
+            def _call() -> Optional[Dict[str, Any] | List[Any]]:
+                client = openai.OpenAI(
+                    api_key=provider.api_key,
+                    base_url=provider.base_url or DEFAULT_BASE_URLS.get(provider.provider_type) or None,
+                )
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": schema_name,
+                            "schema": json_schema,
+                            "strict": True,
+                        },
+                    },
+                    timeout=self.settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                )
+                message = response.choices[0].message if response.choices else None
+                content = getattr(message, "content", None) if message else None
+                if not content:
+                    return None
+                return json.loads(content)
+
+            return await asyncio.to_thread(_call)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return None
     
     async def _generate_anthropic(self, prompt: str, provider: LLMProvider, model: str) -> str:
         try:
@@ -149,23 +234,14 @@ class LLMService:
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
         async with AsyncSessionLocal() as db:
-            provider = await self._get_active_provider(db, provider_type)
+            provider, resolved_model = await self._resolve_provider_and_model(
+                db,
+                provider_type=provider_type,
+                model_id=model_id,
+            )
             if not provider:
                 yield "Error: No active LLM provider configured"
                 return
-
-            if not model_id:
-                default_model = await self._get_default_model(db, provider.id)
-                if default_model:
-                    model_id = default_model.model_id
-
-            fallbacks = {
-                "openai": "gpt-4o-mini",
-                "qwen": "qwen-plus",
-                "anthropic": "claude-3-5-sonnet-20241022",
-                "ollama": "llama2",
-            }
-            resolved_model = model_id or fallbacks.get(provider.provider_type, "gpt-4o-mini")
 
             if provider.provider_type in OPENAI_COMPATIBLE_PROVIDERS:
                 async for token in self._stream_openai_compatible(messages, system_prompt, provider, resolved_model, temperature):
@@ -237,12 +313,11 @@ class LLMService:
         except Exception as e:
             yield f"Error: {str(e)}"
 
-    async def generate_with_context(
+    def _build_context_prompt(
         self,
         prompt: str,
         context: List[Dict[str, Any]],
         retrieval_context: Optional[str] = None,
-        provider_type: Optional[str] = None,
     ) -> str:
         context_str = "\n".join([
             f"{msg.get('role', 'user')}: {msg.get('content', '')}"
@@ -253,16 +328,50 @@ class LLMService:
             "Language requirement: Respond in the same language as the current question. "
             "If the question contains Chinese, respond in Simplified Chinese."
         )
-        
-        full_prompt = f"""Context:
+
+        return f"""Context:
 {context_str}
 {retrieval_block}
 
 Current question: {prompt}
 
 {language_instruction}"""
-        
+
+    async def generate_with_context(
+        self,
+        prompt: str,
+        context: List[Dict[str, Any]],
+        retrieval_context: Optional[str] = None,
+        provider_type: Optional[str] = None,
+    ) -> str:
+        full_prompt = self._build_context_prompt(
+            prompt=prompt,
+            context=context,
+            retrieval_context=retrieval_context,
+        )
         return await self.generate(full_prompt, provider_type)
+
+    async def stream_generate_with_context(
+        self,
+        prompt: str,
+        context: List[Dict[str, Any]],
+        retrieval_context: Optional[str] = None,
+        provider_type: Optional[str] = None,
+        model_id: Optional[str] = None,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        full_prompt = self._build_context_prompt(
+            prompt=prompt,
+            context=context,
+            retrieval_context=retrieval_context,
+        )
+        async for token in self.stream_generate(
+            messages=[{"role": "user", "content": full_prompt}],
+            provider_type=provider_type,
+            model_id=model_id,
+            temperature=temperature,
+        ):
+            yield token
 
 
 llm_service = LLMService()

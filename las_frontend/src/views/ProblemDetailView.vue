@@ -5,8 +5,12 @@
     <template v-else-if="problem">
       <div class="problem-header">
         <router-link to="/problems" class="back-link">&larr; {{ t('common.back') }}</router-link>
+        <p class="problem-kicker">{{ t('problemDetail.workspaceKicker') }}</p>
         <h1>{{ problem.title }}</h1>
         <p>{{ problem.description }}</p>
+        <p class="problem-frame-copy">
+          {{ learningMode === 'exploration' ? t('problemDetail.workspaceFrameExploration') : t('problemDetail.workspaceFrameSocratic') }}
+        </p>
         <div class="problem-meta">
           <span class="status" :class="problem.status">{{ problem.status }}</span>
           <span class="mode-badge">{{ t('problemDetail.currentMode') }}: {{ formatLearningMode(learningMode) }}</span>
@@ -344,6 +348,19 @@
                 </div>
                 <p class="question-copy">{{ socraticQuestion.question }}</p>
               </div>
+              <div
+                v-else-if="fetchingSocraticQuestion && streamingSocraticQuestion"
+                class="socratic-question-panel"
+                data-testid="socratic-question-panel"
+              >
+                <div class="question-head">
+                  <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
+                  <span class="question-kind-badge">{{ t('common.loading') }}</span>
+                </div>
+                <p class="question-copy" data-testid="socratic-question-stream-preview">
+                  {{ streamingSocraticQuestion }}<span class="streaming-cursor">|</span>
+                </p>
+              </div>
 
               <form @submit.prevent="submitResponse" class="response-form">
                 <div class="form-group">
@@ -365,6 +382,17 @@
                   </button>
                 </div>
               </form>
+              <div
+                v-if="submitting && (streamingSocraticStatus || streamingSocraticPreview)"
+                class="streaming-answer-panel"
+                data-testid="socratic-response-stream-preview"
+              >
+                <strong>{{ t('problemDetail.socraticStreamTitle') }}</strong>
+                <p class="section-subtitle">{{ streamingSocraticStatus || t('common.loading') }}</p>
+                <p v-if="streamingSocraticPreview" class="streaming-answer-copy">
+                  {{ streamingSocraticPreview }}<span class="streaming-cursor">|</span>
+                </p>
+              </div>
               <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
               <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
                 <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
@@ -473,6 +501,18 @@
                 </button>
               </form>
 
+              <div
+                v-if="askingQuestion && streamingExplorationAnswer"
+                class="streaming-answer-panel"
+                data-testid="exploration-stream-preview"
+              >
+                <strong>{{ t('problemDetail.askStreamingTitle') }}</strong>
+                <p class="section-subtitle">{{ t('problemDetail.askStreamingHint') }}</p>
+                <p class="streaming-answer-copy">
+                  {{ streamingExplorationAnswer }}<span class="streaming-cursor">|</span>
+                </p>
+              </div>
+
               <details v-if="qaHistory.length" class="history-panel">
                 <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
                 <div class="responses-list">
@@ -559,15 +599,30 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import ProblemTurnOutcomePanel from '@/components/problem-workspace/ProblemTurnOutcomePanel.vue'
 import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemDerivedConceptsPanel.vue'
 import ProblemDerivedPathsPanel from '@/components/problem-workspace/ProblemDerivedPathsPanel.vue'
 import ProblemWorkspaceNotesPanel from '@/components/problem-workspace/ProblemWorkspaceNotesPanel.vue'
 import ProblemWorkspaceResourcesPanel from '@/components/problem-workspace/ProblemWorkspaceResourcesPanel.vue'
+import {
+  buildReinforcementActionTemplate,
+  buildReinforcementStarterContext,
+  deriveReinforcementErrorHint,
+  extractEvidenceCue,
+  normalizeInlineText,
+  uniqueContextConcepts,
+  type ReinforcementActionTemplate,
+  type ReinforcementErrorHint,
+  type ReinforcementStarterContext,
+} from '@/views/problem-detail/reinforcementSupport'
+import { createProblemDetailLearningActions } from '@/views/problem-detail/learningActions'
+import { streamSocraticQuestion } from '@/views/problem-detail/socraticQuestionStream'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const problem = ref<any>(null)
 const learningPath = ref<any>(null)
@@ -585,8 +640,14 @@ const canUndoAutoAdvance = ref(false)
 const undoTargetStep = ref<number | null>(null)
 const stepHint = ref<any | null>(null)
 const socraticQuestion = ref<any | null>(null)
+const fetchingSocraticQuestion = ref(false)
+const streamingSocraticQuestion = ref('')
+const streamingSocraticStatus = ref('')
+const streamingSocraticPreview = ref('')
 const learningQuestion = ref('')
 const askingQuestion = ref(false)
+const streamingExplorationAnswer = ref('')
+const latestExplorationTurnId = ref<string | null>(null)
 const answerMode = ref<'direct' | 'guided'>('direct')
 const qaHistory = ref<any[]>([])
 const conceptCandidates = ref<any[]>([])
@@ -603,7 +664,13 @@ const noteSaving = ref(false)
 const workspaceResources = ref<any[]>([])
 const resourceSaving = ref(false)
 const resourceInterpretingId = ref<string | null>(null)
-const latestQA = computed(() => qaHistory.value[0] || null)
+const latestQA = computed(() => {
+  if (latestExplorationTurnId.value) {
+    const exactTurn = qaHistory.value.find((turn: any) => String(turn.turn_id || '') === String(latestExplorationTurnId.value))
+    if (exactTurn) return exactTurn
+  }
+  return qaHistory.value[0] || null
+})
 
 const totalSteps = computed(() => learningPath.value?.path_data?.length || 0)
 const completedSteps = computed(() => learningPath.value?.current_step || 0)
@@ -626,7 +693,7 @@ const latestResponse = computed(() => responses.value[responses.value.length - 1
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
 const activeConceptTurnId = computed(() => {
   if (learningMode.value === 'exploration') {
-    return latestQA.value?.turn_id || null
+    return latestExplorationTurnId.value || latestQA.value?.turn_id || null
   }
   return latestResponse.value?.turn_id || null
 })
@@ -827,229 +894,6 @@ const workspaceReviewDescription = computed(() => {
     date: formatDateTime(latest.next_review_at),
   })
 })
-type ReinforcementActionTemplate = {
-  key: string
-  preferredMode: 'socratic' | 'exploration'
-  title: string
-  description: string
-  starter: string
-  sourceCue?: string
-  sourceClue?: string
-  likelyConfusion?: string
-  evidenceCue?: string
-}
-type ReinforcementStarterContext = {
-  questionCue: string
-  answerCue: string
-  comparisonCue: string
-  primaryCue: string
-}
-type ReinforcementErrorHint = {
-  kind: 'comparison' | 'boundary' | 'misconception'
-  text: string
-}
-
-const normalizeInlineText = (value: unknown) => String(value ?? '').replace(/\s+/g, ' ').trim()
-
-const clipInlineText = (value: string, max = 96) => {
-  const normalized = normalizeInlineText(value)
-  if (normalized.length <= max) return normalized
-  return `${normalized.slice(0, Math.max(0, max - 1)).trimEnd()}…`
-}
-
-const stripTrailingPunctuation = (value: string) => normalizeInlineText(value).replace(/[.?!,:;]+$/g, '').trim()
-const stripQuestionLead = (value: string) => normalizeInlineText(value).replace(
-  /^(what is|what's|what are|how should i|how do i|how can i|why does|why do|why is|when should i|when does|can you explain|could you explain|explain|tell me about|is it true that|is|are)\s+/i,
-  '',
-)
-const isQuestionLike = (value: string) => /\?$/.test(normalizeInlineText(value))
-
-const uniqueContextConcepts = (values: unknown[], exclude: string[] = []) => {
-  const excluded = new Set(exclude.map((value) => normalizeInlineText(value).toLowerCase()).filter(Boolean))
-  const seen = new Set<string>()
-  return values
-    .map((value) => normalizeInlineText(value))
-    .filter((value) => {
-      const normalized = value.toLowerCase()
-      if (!value || excluded.has(normalized) || seen.has(normalized)) return false
-      seen.add(normalized)
-      return true
-    })
-}
-
-const extractQuestionCue = (question: string, answerType: string, contextConcepts: string[]) => {
-  const normalized = normalizeInlineText(question)
-  if (!normalized) return ''
-
-  if (answerType === 'comparison') {
-    const betweenMatch = normalized.match(/\bdifference between\s+(.+?)\s+and\s+(.+?)(?:[?.!,]|$)/i)
-    if (betweenMatch) {
-      return clipInlineText(`${stripTrailingPunctuation(betweenMatch[1])} vs ${stripTrailingPunctuation(betweenMatch[2])}`)
-    }
-    const compareMatch = normalized.match(/\bcompare\s+(.+?)(?:[?.!,]|$)/i)
-    if (compareMatch) {
-      return clipInlineText(stripTrailingPunctuation(compareMatch[1]))
-    }
-    const versusMatch = normalized.match(/\b(.+?)\s+(?:vs\.?|versus)\s+(.+?)(?:[?.!,]|$)/i)
-    if (versusMatch) {
-      return clipInlineText(`${stripTrailingPunctuation(versusMatch[1])} vs ${stripTrailingPunctuation(versusMatch[2])}`)
-    }
-    if (contextConcepts.length >= 2) {
-      return clipInlineText(`${contextConcepts[0]} vs ${contextConcepts[1]}`)
-    }
-  }
-
-  const stripped = stripQuestionLead(normalized)
-  return clipInlineText(stripTrailingPunctuation(stripped || normalized))
-}
-
-const extractAnswerCue = (answer: string) => {
-  const sentences = normalizeInlineText(answer)
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => clipInlineText(sentence, 120))
-    .filter(Boolean)
-  if (!sentences.length) return ''
-  const preferred = sentences.find((sentence) => /example|because|instead|raises|lowers|depends|tradeoff|boundary|fails|applies/i.test(sentence))
-  return preferred || sentences[0]
-}
-
-const isLowSignalAnswerCue = (value: string) => {
-  const normalized = normalizeInlineText(value).toLowerCase()
-  return !normalized || /start from the current step concept|define it briefly|test it with one concrete example/.test(normalized)
-}
-
-const extractSentenceWithPattern = (value: string, pattern: RegExp) => {
-  const sentence = normalizeInlineText(value)
-    .split(/(?<=[.!?])\s+/)
-    .find((item) => pattern.test(item))
-  return sentence ? clipInlineText(sentence, 120) : ''
-}
-
-const splitEvidenceChunks = (value: string) => {
-  const normalized = String(value || '').trim()
-  if (!normalized) return []
-
-  const chunks = normalized
-    .split(/\n+/)
-    .flatMap((line) => normalizeInlineText(line).split(/(?<=[.!?])\s+/))
-    .map((chunk) => clipInlineText(chunk, 140))
-    .filter(Boolean)
-
-  return uniqueContextConcepts(chunks)
-}
-
-const extractBoundaryCue = (question: string, answer: string) => {
-  const explicitQuestionCue = extractSentenceWithPattern(question, /\b(always|never|only|every|all|whenever|must|cannot|can't)\b/i)
-  if (explicitQuestionCue) return stripTrailingPunctuation(explicitQuestionCue)
-  const explicitAnswerCue = extractSentenceWithPattern(answer, /\b(always|never|only|every|all|whenever|must|cannot|can't|fails|breaks|edge case)\b/i)
-  if (explicitAnswerCue) return stripTrailingPunctuation(explicitAnswerCue)
-  return ''
-}
-
-const extractMisconceptionCue = (question: string, answer: string) => {
-  const normalizedQuestion = normalizeInlineText(question)
-  if (/\b(same as|equivalent to|means|just|only|always|never)\b/i.test(normalizedQuestion)) {
-    return clipInlineText(stripTrailingPunctuation(stripQuestionLead(normalizedQuestion)), 110)
-  }
-
-  const correctiveSentence = extractSentenceWithPattern(answer, /\bnot\b.+\bbut\b|\brather than\b|\binstead of\b/i)
-  if (correctiveSentence) return stripTrailingPunctuation(correctiveSentence)
-
-  return ''
-}
-
-const deriveReinforcementErrorHint = ({
-  answerType,
-  question,
-  answer,
-  questionCue,
-  comparisonCue,
-}: {
-  answerType: string
-  question: string
-  answer: string
-  questionCue: string
-  comparisonCue: string
-}): ReinforcementErrorHint | null => {
-  if (answerType === 'comparison' && /\b(compare|difference between|vs\.?|versus)\b/i.test(question)) {
-    const cue = comparisonCue || questionCue
-    if (!cue) return null
-    return {
-      kind: 'comparison',
-      text: t('problemDetail.reinforcementComparisonLikelyConfusion', { cue }),
-    }
-  }
-
-  if (answerType === 'boundary_clarification') {
-    const cue = extractBoundaryCue(question, answer)
-    if (!cue) return null
-    return {
-      kind: 'boundary',
-      text: t('problemDetail.reinforcementBoundaryLikelyConfusion', { cue }),
-    }
-  }
-
-  if (answerType === 'misconception_correction') {
-    const cue = extractMisconceptionCue(question, answer)
-    if (!cue) return null
-    return {
-      kind: 'misconception',
-      text: t('problemDetail.reinforcementMisconceptionLikelyConfusion', { cue }),
-    }
-  }
-
-  return null
-}
-
-const extractEvidenceCue = ({
-  evidenceSnippet,
-  concept,
-  sourceCue,
-  sourceClue,
-  likelyConfusion,
-  anchor,
-}: {
-  evidenceSnippet: string
-  concept: string
-  sourceCue: string
-  sourceClue: string
-  likelyConfusion: string
-  anchor: string
-}) => {
-  const conceptKey = normalizeInlineText(concept).toLowerCase()
-  const anchorKey = normalizeInlineText(anchor).toLowerCase()
-  const seen = new Set<string>()
-  const chunks = splitEvidenceChunks(evidenceSnippet).filter((chunk) => {
-    const normalized = normalizeInlineText(chunk)
-    const key = normalized.toLowerCase()
-    if (!normalized || seen.has(key)) return false
-    seen.add(key)
-    if (isLowSignalAnswerCue(normalized)) return false
-    if (key === normalizeInlineText(sourceCue).toLowerCase()) return false
-    if (key === normalizeInlineText(sourceClue).toLowerCase()) return false
-    if (key === normalizeInlineText(likelyConfusion).toLowerCase()) return false
-    if (key === conceptKey || key === anchorKey) return false
-    return true
-  })
-
-  if (!chunks.length) return ''
-
-  const statementChunks = chunks.filter((chunk) => !isQuestionLike(chunk))
-  const candidates = statementChunks.length ? statementChunks : chunks
-
-  const conceptSpecific = candidates.find((chunk) => conceptKey && chunk.toLowerCase().includes(conceptKey))
-  if (conceptSpecific) return conceptSpecific
-
-  const evidenceSpecific = candidates.find((chunk) => /because|raises|lowers|drop|drops|rise|rises|tradeoff|instead|rather than|not|but|applies|fails|edge case|example|predicted positives|actual positives|false positives|false negatives/i.test(chunk))
-  if (evidenceSpecific) return evidenceSpecific
-
-  return ''
-}
-
-const buildEvidenceAwareStarter = (starter: string, evidenceCue: string) => {
-  if (!evidenceCue) return starter
-  return `${t('problemDetail.reinforcementStarterEvidencePrefix', { evidence: evidenceCue })}\n${starter}`
-}
 const focusedReinforcementCandidate = computed(() => {
   if (reinforcementFocusCandidateId.value) {
     const exactCandidate = conceptCandidates.value.find(
@@ -1112,9 +956,6 @@ const reinforcementFocusTurnPreview = computed(() => {
 })
 const reinforcementStarterContext = computed<ReinforcementStarterContext>(() => {
   const concept = reinforcementFocusTitle.value
-  const sourceQuestion = normalizeInlineText(focusedReinforcementTurn.value?.question || '')
-  const sourceAnswer = normalizeInlineText(focusedReinforcementTurn.value?.answer || '')
-  const answerType = String(focusedReinforcementTurn.value?.answer_type || '').trim()
   const contextConcepts = uniqueContextConcepts([
     ...(focusedReinforcementTurn.value?.answered_concepts || []),
     ...(focusedReinforcementTurn.value?.related_concepts || []),
@@ -1124,22 +965,13 @@ const reinforcementStarterContext = computed<ReinforcementStarterContext>(() => 
     currentStep.value?.concept,
     problem.value?.title,
   ], [concept])
-  const questionCue = extractQuestionCue(sourceQuestion, answerType, contextConcepts)
-  const answerCue = extractAnswerCue(sourceAnswer)
-  const comparisonCue = answerType === 'comparison'
-    ? questionCue || clipInlineText(contextConcepts.slice(0, 2).join(' vs '))
-    : ''
-  const primaryCue = questionCue
-    || clipInlineText(reinforcementFocusTurnPreview.value, 110)
-    || answerCue
-    || clipInlineText(contextConcepts.join(', '), 90)
-
-  return {
-    questionCue,
-    answerCue,
-    comparisonCue,
-    primaryCue,
-  }
+  return buildReinforcementStarterContext({
+    question: normalizeInlineText(focusedReinforcementTurn.value?.question || ''),
+    answer: normalizeInlineText(focusedReinforcementTurn.value?.answer || ''),
+    answerType: String(focusedReinforcementTurn.value?.answer_type || '').trim(),
+    turnPreview: reinforcementFocusTurnPreview.value,
+    contextConcepts,
+  })
 })
 const reinforcementErrorHint = computed<ReinforcementErrorHint | null>(() => {
   if (!focusedReinforcementTurn.value) return null
@@ -1149,6 +981,7 @@ const reinforcementErrorHint = computed<ReinforcementErrorHint | null>(() => {
     answer: normalizeInlineText(focusedReinforcementTurn.value.answer || ''),
     questionCue: reinforcementStarterContext.value.questionCue,
     comparisonCue: reinforcementStarterContext.value.comparisonCue,
+    t,
   })
 })
 const reinforcementEvidenceCue = computed(() => {
@@ -1177,8 +1010,6 @@ const reinforcementEvidenceCue = computed(() => {
   })
 })
 const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>(() => {
-  if (!activeReinforcementEntry.value || !activeReinforcementTarget.value) return null
-
   const concept = reinforcementFocusTitle.value
   const anchor = String(
     activeReinforcementTarget.value?.resume_step_concept
@@ -1186,128 +1017,22 @@ const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>
       || problem.value?.title
       || concept
   ).trim()
-  const answerType = String(focusedReinforcementTurn.value?.answer_type || '').trim()
   const originMode = String(activeReinforcementEntry.value?.origin?.learning_mode || learningMode.value || 'socratic').trim()
   const sourceCue = reinforcementStarterContext.value.primaryCue
-  const sourceClue = !isLowSignalAnswerCue(reinforcementStarterContext.value.answerCue)
-    && reinforcementStarterContext.value.answerCue
-    && reinforcementStarterContext.value.answerCue !== sourceCue
-      ? reinforcementStarterContext.value.answerCue
-      : ''
-  const likelyConfusion = reinforcementErrorHint.value?.text || ''
-  const evidenceCue = reinforcementEvidenceCue.value
-  const withEvidence = (starter: string) => buildEvidenceAwareStarter(starter, evidenceCue)
-
-  if (answerType === 'comparison' || activeReinforcementTarget.value?.resume_path_kind === 'comparison') {
-    const comparisonCue = reinforcementStarterContext.value.comparisonCue || sourceCue
-    return {
-      key: 'compare',
-      preferredMode: 'socratic',
-      title: t('problemDetail.reinforcementTemplateCompareTitle'),
-      description: t('problemDetail.reinforcementTemplateCompareBody', { concept, anchor }),
-      starter: withEvidence(likelyConfusion
-        ? t('problemDetail.reinforcementTemplateCompareErrorStarter', { concept, error: likelyConfusion })
-        : comparisonCue
-        ? t('problemDetail.reinforcementTemplateCompareSourceStarter', { concept, cue: comparisonCue })
-        : t('problemDetail.reinforcementTemplateCompareStarter', { concept, anchor })),
-      sourceCue: comparisonCue || sourceCue,
-      sourceClue,
-      likelyConfusion,
-      evidenceCue,
-    }
-  }
-  if (answerType === 'misconception_correction') {
-    return {
-      key: 'correct',
-      preferredMode: 'socratic',
-      title: t('problemDetail.reinforcementTemplateCorrectTitle'),
-      description: t('problemDetail.reinforcementTemplateCorrectBody', { concept, anchor }),
-      starter: withEvidence(likelyConfusion
-        ? t('problemDetail.reinforcementTemplateCorrectErrorStarter', { concept, error: likelyConfusion })
-        : sourceCue
-        ? t('problemDetail.reinforcementTemplateCorrectSourceStarter', { concept, cue: sourceCue })
-        : t('problemDetail.reinforcementTemplateCorrectStarter', { concept, anchor })),
-      sourceCue,
-      sourceClue,
-      likelyConfusion,
-      evidenceCue,
-    }
-  }
-  if (answerType === 'worked_example') {
-    return {
-      key: 'example',
-      preferredMode: 'socratic',
-      title: t('problemDetail.reinforcementTemplateExampleTitle'),
-      description: t('problemDetail.reinforcementTemplateExampleBody', { concept, anchor }),
-      starter: withEvidence(sourceCue
-        ? t('problemDetail.reinforcementTemplateExampleSourceStarter', { concept, cue: sourceCue })
-        : t('problemDetail.reinforcementTemplateExampleStarter', { concept, anchor })),
-      sourceCue,
-      sourceClue,
-      likelyConfusion,
-      evidenceCue,
-    }
-  }
-  if (answerType === 'boundary_clarification') {
-    return {
-      key: 'boundary',
-      preferredMode: 'socratic',
-      title: t('problemDetail.reinforcementTemplateBoundaryTitle'),
-      description: t('problemDetail.reinforcementTemplateBoundaryBody', { concept, anchor }),
-      starter: withEvidence(likelyConfusion
-        ? t('problemDetail.reinforcementTemplateBoundaryErrorStarter', { concept, error: likelyConfusion })
-        : sourceCue
-        ? t('problemDetail.reinforcementTemplateBoundarySourceStarter', { concept, cue: sourceCue })
-        : t('problemDetail.reinforcementTemplateBoundaryStarter', { concept, anchor })),
-      sourceCue,
-      sourceClue,
-      likelyConfusion,
-      evidenceCue,
-    }
-  }
-  if (answerType === 'prerequisite_explanation') {
-    return {
-      key: 'prerequisite',
-      preferredMode: 'socratic',
-      title: t('problemDetail.reinforcementTemplatePrerequisiteTitle'),
-      description: t('problemDetail.reinforcementTemplatePrerequisiteBody', { concept, anchor }),
-      starter: withEvidence(sourceCue
-        ? t('problemDetail.reinforcementTemplatePrerequisiteSourceStarter', { concept, cue: sourceCue })
-        : t('problemDetail.reinforcementTemplatePrerequisiteStarter', { concept, anchor })),
-      sourceCue,
-      sourceClue,
-      likelyConfusion,
-      evidenceCue,
-    }
-  }
-  if (originMode === 'socratic') {
-    return {
-      key: 'probe',
-      preferredMode: 'socratic',
-      title: t('problemDetail.reinforcementTemplateProbeTitle'),
-      description: t('problemDetail.reinforcementTemplateProbeBody', { concept, anchor }),
-      starter: withEvidence(sourceCue
-        ? t('problemDetail.reinforcementTemplateProbeSourceStarter', { concept, cue: sourceCue })
-        : t('problemDetail.reinforcementTemplateProbeStarter', { concept, anchor })),
-      sourceCue,
-      sourceClue,
-      likelyConfusion,
-      evidenceCue,
-    }
-  }
-  return {
-    key: 'restate',
-    preferredMode: 'socratic',
-    title: t('problemDetail.reinforcementTemplateRestateTitle'),
-    description: t('problemDetail.reinforcementTemplateRestateBody', { concept, anchor }),
-    starter: withEvidence(sourceCue
-      ? t('problemDetail.reinforcementTemplateRestateSourceStarter', { concept, cue: sourceCue })
-      : t('problemDetail.reinforcementTemplateRestateStarter', { concept, anchor })),
+  return buildReinforcementActionTemplate({
+    activeReinforcementEntry: activeReinforcementEntry.value,
+    activeReinforcementTarget: activeReinforcementTarget.value,
+    focusedTurnAnswerType: String(focusedReinforcementTurn.value?.answer_type || '').trim(),
+    originMode,
+    concept,
+    anchor,
+    comparisonCue: reinforcementStarterContext.value.comparisonCue,
     sourceCue,
-    sourceClue,
-    likelyConfusion,
-    evidenceCue,
-  }
+    sourceClue: reinforcementStarterContext.value.answerCue,
+    likelyConfusion: reinforcementErrorHint.value?.text || '',
+    evidenceCue: reinforcementEvidenceCue.value,
+    t,
+  })
 })
 
 const formatConfidence = (value: number | string | undefined | null) => {
@@ -1466,12 +1191,60 @@ const fetchExplorationTurns = async () => {
 }
 
 const fetchSocraticQuestion = async () => {
+  fetchingSocraticQuestion.value = true
+  streamingSocraticQuestion.value = ''
+  socraticQuestion.value = null
   try {
-    const response = await api.get(`/problems/${route.params.id}/socratic-question`)
-    socraticQuestion.value = response.data || null
+    let usedStream = false
+    const token = await authStore.ensureFreshToken() || authStore.token
+
+    if (token) {
+      try {
+        let finalPayload: Record<string, unknown> | null = null
+        let streamError: string | null = null
+
+        await streamSocraticQuestion({
+          problemId: String(route.params.id),
+          token,
+          onEvent: (event) => {
+            if (event.event === 'token') {
+              streamingSocraticQuestion.value += event.data
+              return
+            }
+            if (event.event === 'final') {
+              finalPayload = event.data
+              return
+            }
+            if (event.event === 'error') {
+              streamError = event.data?.message?.trim() || 'stream-error'
+            }
+          },
+        })
+
+        if (streamError) {
+          throw new Error(streamError)
+        }
+        if (!finalPayload) {
+          throw new Error('stream-finished-without-final-payload')
+        }
+        socraticQuestion.value = finalPayload
+        usedStream = true
+      } catch (e) {
+        console.error('Failed to stream socratic question, falling back to standard request:', e)
+        streamingSocraticQuestion.value = ''
+      }
+    }
+
+    if (!usedStream) {
+      const response = await api.get(`/problems/${route.params.id}/socratic-question`)
+      socraticQuestion.value = response.data || null
+    }
   } catch (e) {
     console.error('Failed to fetch socratic question:', e)
     socraticQuestion.value = null
+  } finally {
+    streamingSocraticQuestion.value = ''
+    fetchingSocraticQuestion.value = false
   }
 }
 
@@ -1553,7 +1326,7 @@ const fetchLearningPaths = async () => {
 
 const fetchProblem = async () => {
   try {
-    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, socraticRes, schedulesRes, notesRes, resourcesRes] = await Promise.all([
+    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, schedulesRes, notesRes, resourcesRes] = await Promise.all([
       api.get(`/problems/${route.params.id}`),
       api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
       api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
@@ -1563,7 +1336,6 @@ const fetchProblem = async () => {
       api.get(`/problems/${route.params.id}/turns`, {
         params: { learning_mode: 'exploration' },
       }).catch(() => ({ data: [] })),
-      api.get(`/problems/${route.params.id}/socratic-question`).catch(() => ({ data: null })),
       api.get('/srs/schedules').catch(() => ({ data: [] })),
       api.get('/notes/', {
         params: { problem_id: route.params.id },
@@ -1581,11 +1353,16 @@ const fetchProblem = async () => {
     conceptCandidates.value = candidatesRes.data || []
     pathCandidates.value = pathCandidatesRes.data || []
     qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
-    socraticQuestion.value = socraticRes.data || null
     scheduledReviews.value = schedulesRes.data || []
     scheduledModelCardIds.value = scheduledReviews.value.map((schedule: any) => String(schedule.model_card_id))
     workspaceNotes.value = notesRes.data || []
     workspaceResources.value = resourcesRes.data || []
+    loading.value = false
+    if (learningMode.value === 'socratic') {
+      await fetchSocraticQuestion()
+    } else {
+      socraticQuestion.value = null
+    }
   } catch (e) {
     console.error('Failed to fetch problem:', e)
   } finally {
@@ -1593,78 +1370,44 @@ const fetchProblem = async () => {
   }
 }
 
-const setLearningMode = async (mode: 'socratic' | 'exploration') => {
-  if (switchingMode.value || learningMode.value === mode) return
-
-  const previousMode = learningMode.value
-  learningMode.value = mode
-  if (problem.value) {
-    problem.value.learning_mode = mode
-  }
-
-  switchingMode.value = true
-  try {
-    await api.put(`/problems/${route.params.id}`, { learning_mode: mode })
-    if (mode === 'socratic') {
-      await fetchSocraticQuestion()
-    }
-  } catch (e) {
-    console.error('Failed to switch learning mode:', e)
-    learningMode.value = previousMode
-    if (problem.value) {
-      problem.value.learning_mode = previousMode
-    }
-  } finally {
-    switchingMode.value = false
-  }
-}
-
-const submitResponse = async () => {
-  submitting.value = true
-
-  try {
-    const response = await api.post(`/problems/${route.params.id}/responses`, {
-      problem_id: route.params.id,
-      user_response: responseText.value,
-      learning_mode: learningMode.value,
-      question_kind: socraticQuestion.value?.question_kind,
-      socratic_question: socraticQuestion.value?.question,
-    })
-    responses.value.push(response.data)
-    await Promise.all([
-      fetchConceptCandidates(),
-      fetchPathCandidates(),
-      api.get(`/problems/${route.params.id}`).then((res) => {
-        problem.value = res.data
-        learningMode.value = res.data?.learning_mode || learningMode.value
-      }).catch(() => null),
-    ])
-    responseText.value = ''
-    if (response.data?.auto_advanced) {
-      await fetchLearningPath()
-      autoAdvanceMessage.value = t('problemDetail.autoAdvanced')
-      canUndoAutoAdvance.value = true
-      const suggestedUndo = Number(response.data?.new_current_step ?? 0) - 1
-      undoTargetStep.value = Number.isFinite(suggestedUndo) ? Math.max(0, suggestedUndo) : null
-      if (problem.value && problem.value.status === 'new') {
-        problem.value.status = 'in-progress'
-      }
-    } else {
-      autoAdvanceMessage.value = ''
-      canUndoAutoAdvance.value = false
-      undoTargetStep.value = null
-    }
-
-    if (problem.value?.status === 'new' && !response.data?.auto_advanced) {
-      problem.value.status = 'in-progress'
-    }
-    await fetchSocraticQuestion()
-  } catch (e) {
-    console.error('Failed to submit response:', e)
-  } finally {
-    submitting.value = false
-  }
-}
+const {
+  syncProblemSnapshot,
+  setLearningMode,
+  submitResponse,
+  prefillGuidedTemplate,
+  askLearningQuestion,
+} = createProblemDetailLearningActions({
+  api,
+  problemId: String(route.params.id),
+  t,
+  ensureFreshToken: () => authStore.ensureFreshToken(),
+  getToken: () => authStore.token,
+  problem,
+  learningMode,
+  switchingMode,
+  submitting,
+  hintLoading,
+  askingQuestion,
+  responses,
+  responseText,
+  learningQuestion,
+  answerMode,
+  socraticQuestion,
+  stepHint,
+  autoAdvanceMessage,
+  canUndoAutoAdvance,
+  undoTargetStep,
+  streamingSocraticStatus,
+  streamingSocraticPreview,
+  streamingExplorationAnswer,
+  latestExplorationTurnId,
+  currentStep,
+  fetchConceptCandidates,
+  fetchPathCandidates,
+  fetchExplorationTurns,
+  fetchLearningPath,
+  fetchSocraticQuestion,
+})
 
 const updateCurrentStep = async (nextStep: number) => {
   if (!learningPath.value) return
@@ -1696,37 +1439,6 @@ const updateCurrentStep = async (nextStep: number) => {
   }
 }
 
-const prefillGuidedTemplate = () => {
-  const buildLocalGuidedTemplate = () => {
-    const concept = currentStep.value?.concept || problem.value?.title || ''
-    return [
-      t('problemDetail.guidedLine1', { concept }),
-      t('problemDetail.guidedLine2'),
-      t('problemDetail.guidedLine3'),
-    ].join('\n')
-  }
-
-  hintLoading.value = true
-  api.get(`/problems/${route.params.id}/learning-path/hint`)
-    .then((response) => {
-      stepHint.value = response.data?.structured_hint || null
-      const starter = response.data?.structured_hint?.starter?.trim()
-      if (starter) {
-        responseText.value = `${starter}\n`
-      } else {
-        responseText.value = response.data?.hint?.trim() || buildLocalGuidedTemplate()
-      }
-    })
-    .catch((e) => {
-      console.error('Failed to fetch learning hint:', e)
-      stepHint.value = null
-      responseText.value = buildLocalGuidedTemplate()
-    })
-    .finally(() => {
-      hintLoading.value = false
-    })
-}
-
 const undoAutoAdvance = async () => {
   if (!learningPath.value) return
 
@@ -1738,43 +1450,13 @@ const undoAutoAdvance = async () => {
   undoTargetStep.value = null
 }
 
-const askLearningQuestion = async () => {
-  if (!learningQuestion.value.trim() || askingQuestion.value) return
-
-  askingQuestion.value = true
-  try {
-    await api.post(`/problems/${route.params.id}/ask`, {
-      question: learningQuestion.value.trim(),
-      learning_mode: learningMode.value,
-      answer_mode: answerMode.value,
-    })
-    await Promise.all([
-      fetchConceptCandidates(),
-      fetchPathCandidates(),
-      fetchExplorationTurns(),
-      api.get(`/problems/${route.params.id}`).then((res) => {
-        problem.value = res.data
-        learningMode.value = res.data?.learning_mode || learningMode.value
-      }).catch(() => null),
-    ])
-    learningQuestion.value = ''
-  } catch (e) {
-    console.error('Failed to ask learning question:', e)
-  } finally {
-    askingQuestion.value = false
-  }
-}
-
 const acceptCandidate = async (candidateId: string) => {
   candidateSubmittingId.value = candidateId
   try {
     await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/accept`)
     await Promise.all([
       fetchConceptCandidates(),
-      api.get(`/problems/${route.params.id}`).then((res) => {
-        problem.value = res.data
-        learningMode.value = res.data?.learning_mode || learningMode.value
-      }).catch(() => null),
+      syncProblemSnapshot(),
     ])
   } catch (e) {
     console.error('Failed to accept concept candidate:', e)
@@ -1815,10 +1497,7 @@ const mergeCandidate = async ({ candidateId, targetConcept }: { candidateId: str
     })
     await Promise.all([
       fetchConceptCandidates(),
-      api.get(`/problems/${route.params.id}`).then((res) => {
-        problem.value = res.data
-        learningMode.value = res.data?.learning_mode || learningMode.value
-      }).catch(() => null),
+      syncProblemSnapshot(),
     ])
   } catch (e) {
     console.error('Failed to merge concept candidate:', e)
@@ -1836,10 +1515,7 @@ const rollbackConcept = async ({ candidateId, conceptText }: { candidateId: stri
     })
     await Promise.all([
       fetchConceptCandidates(),
-      api.get(`/problems/${route.params.id}`).then((res) => {
-        problem.value = res.data
-        learningMode.value = res.data?.learning_mode || learningMode.value
-      }).catch(() => null),
+      syncProblemSnapshot(),
     ])
   } catch (e) {
     console.error('Failed to rollback concept:', e)
@@ -2087,6 +1763,19 @@ onMounted(async () => {
 
 .problem-header {
   margin-bottom: 2rem;
+}
+
+.problem-kicker {
+  margin-bottom: 0.35rem;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.problem-frame-copy {
+  color: var(--text-muted);
 }
 
 .problem-header h1 {
@@ -2471,6 +2160,37 @@ onMounted(async () => {
 
 .response-form {
   margin-bottom: 1rem;
+}
+
+.streaming-answer-panel {
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.streaming-answer-copy {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  margin-left: 0.12rem;
+  animation: blink-cursor 0.9s steps(1) infinite;
+}
+
+@keyframes blink-cursor {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .socratic-question-panel {

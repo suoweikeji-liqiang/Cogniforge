@@ -187,12 +187,30 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
     assert promote_data["model_card"]["title"] == "precision threshold"
     assert promote_data["created_model_card"] is True
     assert promote_data["review_scheduled"] is False
+    assert promote_data["model_card"]["lifecycle_stage"] == "active"
+    assert promote_data["model_card"]["origin_type"] == "problem_concept_candidate"
+    assert promote_data["model_card"]["origin_stage"] == "accepted_concept_candidate"
+    assert promote_data["model_card"]["origin_problem_id"] == str(problem.id)
+    assert promote_data["model_card"]["origin_problem_title"] == "Test Problem"
+    assert promote_data["model_card"]["origin_concept_candidate_id"] == str(candidate.id)
+    assert promote_data["model_card"]["origin_source_turn_id"] == str(turn.id)
+    assert promote_data["model_card"]["origin_learning_mode"] == "socratic"
+    assert promote_data["model_card"]["origin_concept_text"] == "precision threshold"
 
     model_card_result = await db_session.execute(
         select(ModelCard).where(ModelCard.id == promote_data["model_card"]["id"])
     )
     model_card = model_card_result.scalar_one_or_none()
     assert model_card is not None
+    assert model_card.lifecycle_stage == "active"
+    assert model_card.origin_type == "problem_concept_candidate"
+    assert model_card.origin_stage == "accepted_concept_candidate"
+    assert model_card.origin_problem_id == str(problem.id)
+    assert model_card.origin_problem_title == "Test Problem"
+    assert model_card.origin_concept_candidate_id == str(candidate.id)
+    assert model_card.origin_source_turn_id == str(turn.id)
+    assert model_card.origin_learning_mode == "socratic"
+    assert model_card.origin_concept_text == "precision threshold"
     assert "Promoted from problem: Test Problem" in (model_card.user_notes or "")
 
     schedule_response = await client.post(

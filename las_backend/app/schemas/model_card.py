@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List
+from typing import Any, Literal, Optional, List
 from uuid import UUID
 from datetime import datetime
 
@@ -39,6 +39,17 @@ class ModelCardUpdate(BaseModel):
     examples: Optional[List[str]] = None
     counter_examples: Optional[List[str]] = None
     migration_attempts: Optional[List[dict]] = None
+    change_reason: Optional[str] = Field(None, max_length=500)
+
+
+ModelCardOriginType = Literal["manual", "problem_concept_candidate"]
+ModelCardOriginStage = Literal[
+    "manual_creation",
+    "accepted_concept_candidate",
+    "merged_concept_candidate",
+]
+ModelCardLifecycleStage = Literal["draft", "active"]
+LearningMode = Literal["socratic", "exploration"]
 
 
 class ModelCardResponse(ModelCardBase):
@@ -46,12 +57,39 @@ class ModelCardResponse(ModelCardBase):
 
     id: UUID
     user_id: UUID
+    lifecycle_stage: ModelCardLifecycleStage
+    origin_type: ModelCardOriginType
+    origin_stage: ModelCardOriginStage
+    origin_problem_id: Optional[UUID] = None
+    origin_problem_title: Optional[str] = None
+    origin_concept_candidate_id: Optional[UUID] = None
+    origin_source_turn_id: Optional[UUID] = None
+    origin_learning_mode: Optional[LearningMode] = None
+    origin_concept_text: Optional[str] = None
     counter_examples: List[str]
     migration_attempts: List[dict]
     version: int
     parent_id: Optional[UUID]
     created_at: datetime
     updated_at: datetime
+
+
+class ModelCardReviewScheduleSummary(BaseModel):
+    schedule_id: UUID
+    model_card_id: UUID
+    next_review_at: datetime
+    last_reviewed_at: Optional[datetime] = None
+    recall_state: str
+    recent_outcome: str
+    recommended_action: str
+    needs_reinforcement: bool = False
+    reinforcement_target: Optional[dict[str, Any]] = None
+    origin: Optional[dict[str, Any]] = None
+
+
+class ModelCardListResponse(ModelCardResponse):
+    is_scheduled: bool = False
+    review_schedule: Optional[ModelCardReviewScheduleSummary] = None
 
 
 class CounterExampleInput(BaseModel):

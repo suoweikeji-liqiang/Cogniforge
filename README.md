@@ -15,13 +15,11 @@ This repository is not currently centered on generic chat, note-taking, or PKM-s
 
 ## Current Major Milestone
 
-### v1.2 Learning Asset Evolution
+### v1.3 Guided Knowledge Revision + Hardening
 
-This is the current major milestone for the repository.
+This is the active milestone for the repository. `P0` is complete and `P1` is in progress.
 
-It means the codebase now supports a stronger end-to-end learning loop where recall and reinforcement shape durable knowledge assets, not just review queues.
-
-The milestone is functionally complete enough to close out. It does not mean every adaptive or editing workflow is finished, but it does mean the main Milestone 2 chain is present in the repository.
+It means the codebase has already closed the first revision-oriented gap in the learning loop and is now hardening the main workflow before broader expansion.
 
 The current codebase now has all of the following:
 
@@ -35,12 +33,13 @@ The current codebase now has all of the following:
    - derived learning path candidates
    - review handoff signals
 4. Main path and branch path relationships are navigable and traceable.
-5. Accepted concepts can be promoted into model cards and scheduled into recall.
-6. Review items are traceable back to their problem and turn origins.
-7. Weak recall now produces durable reinforcement targets that point back to the right problem, path, and focus target.
-8. `ProblemDetail` can resume the learner into the right branch context and suggest a concrete first reinforcement action.
-9. Reinforcement starters are grounded by source-turn context, likely confusion, and focused candidate evidence when the signal is reliable.
-10. Model cards now reflect recall and reinforcement as explicit knowledge-asset state and lightweight revision-focus hints.
+5. Model cards now carry explicit provenance and lifecycle metadata, including manual vs problem-derived origins.
+6. Manual model-card creation now follows a draft-first path before activation and review scheduling.
+7. `ModelCardDetail` can turn revision-focus signals into a lightweight guided revision action.
+8. Provider-native structured outputs now back the core learning artifacts and the remaining major `ModelOSService` JSON chains.
+9. `ProblemDetail` now streams key AI interactions for exploration ask, Socratic question generation, and Socratic response evaluation while keeping blocking fallbacks.
+10. `Problems` and `Model Cards` now scale better for larger libraries through list pagination, debounced search, and lighter review-summary fetching.
+11. Core workflow modules have started to split into support files to reduce concentration risk, but that hardening work is still active.
 
 In practical terms, the current repo already contains:
 
@@ -48,11 +47,11 @@ In practical terms, the current repo already contains:
 - a unified `ProblemDetail` workspace
 - explicit domain entities such as `ProblemTurn`, `LearningPath`, `ProblemConceptCandidate`, `ProblemPathCandidate`, and `ReviewSchedule`
 - branch/return learning-path support
-- model-card handoff and review scheduling from problem outcomes
+- model-card handoff, provenance tracking, and review scheduling from problem outcomes
 - recall origin and recall consequence display in workspace and model-card surfaces
 - path-precise reinforcement resume targeting
 - target-precise reinforcement focus and starter guidance inside `ProblemDetail`
-- explicit model-card evolution state and revision focus hints
+- explicit model-card evolution state, revision focus hints, and lightweight guided revision
 
 What this milestone does not mean:
 
@@ -62,21 +61,18 @@ What this milestone does not mean:
 - the system contains a broad adaptive tutoring engine
 - the review system is fully mature or deeply adaptive
 
-## Next Milestone
+## Current Hardening Focus
 
-### v1.3 Guided Knowledge Revision
+The remaining work in this cycle is intentionally narrower than a new product-surface expansion:
 
-The next milestone should focus on turning the current guidance and state signals into lightweight, traceable revision workflows for durable knowledge assets.
+1. keep splitting oversized workflow files such as `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`
+2. expand regression coverage around the revised knowledge loop and streaming fallback paths
+3. keep multi-problem and multi-model-card improvements limited to core-loop ergonomics instead of graph navigation
 
-In scope for that milestone:
-
-1. make revision focus hints lead to small, explicit model-card revision actions
-2. keep revision changes traceable to learning, recall, and reinforcement evidence
-3. tighten the connection between revision outcomes and subsequent review / reinforcement behavior
-
-Out of scope for that milestone:
+Still out of scope while this hardening pass remains open:
 
 - broad new product surfaces
+- graph-oriented knowledge navigation
 - automatic model-card rewriting
 - generic analytics expansion
 - unrelated admin or tooling work

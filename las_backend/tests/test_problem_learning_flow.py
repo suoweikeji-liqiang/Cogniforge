@@ -1,3 +1,6 @@
+import json
+import asyncio
+
 import pytest
 from sqlalchemy import select
 
@@ -193,6 +196,63 @@ async def test_problem_learning_mode_switch_persists_and_turns_are_listed(client
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_stream_returns_incremental_answer_and_final_payload(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "Accept": "text/event-stream",
+    }
+    problem = await create_problem(client, headers, title="Streamed exploration")
+
+    async def fake_stream_generate_with_context(*args, **kwargs):
+        for token in [
+            "Precision measures correct predicted positives. ",
+            "Recall measures recovered positives.",
+        ]:
+            yield token
+
+    monkeypatch.setattr(model_os_service, "stream_generate_with_context", fake_stream_generate_with_context)
+
+    async with client.stream(
+        "POST",
+        f"/api/problems/{problem['id']}/ask/stream",
+        json={
+            "question": "What is the difference between precision and recall?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    ) as response:
+        assert response.status_code == 200
+        body = ""
+        async for chunk in response.aiter_text():
+            body += chunk
+
+    normalized = body.replace("\r\n", "\n")
+    assert "event: token" in normalized
+    assert "data: Precision measures correct predicted positives. " in normalized
+    assert "event: final" in normalized
+
+    final_blocks = [block for block in normalized.split("\n\n") if "event: final" in block]
+    assert final_blocks
+    final_data = "\n".join(
+        line.removeprefix("data: ")
+        for line in final_blocks[-1].splitlines()
+        if line.startswith("data: ")
+    )
+    payload = json.loads(final_data)
+
+    assert payload["learning_mode"] == "exploration"
+    assert payload["question"] == "What is the difference between precision and recall?"
+    assert payload["answer"].startswith("Precision measures correct predicted positives.")
+    assert payload["mode_metadata"]["turn_source"] == "ask"
+    assert payload["llm_calls"] >= 1
+    assert payload["trace_id"]
+
+
+@pytest.mark.asyncio
 async def test_socratic_question_endpoint_returns_probe_by_default(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
@@ -216,6 +276,142 @@ async def test_socratic_question_endpoint_returns_probe_by_default(client, monke
     assert body["question"] == "What mechanism explains the first step?"
     assert body["mode_metadata"]["step_index"] == 0
     assert body["llm_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_socratic_question_stream_returns_incremental_question_and_final_payload(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "Accept": "text/event-stream",
+    }
+    problem = await create_problem(client, headers, title="Streamed socratic question")
+
+    async def fake_stream_question(*args, **kwargs):
+        for token in ["Why ", "does thresholding matter?"]:
+            yield token
+
+    monkeypatch.setattr(model_os_service, "stream_socratic_question", fake_stream_question)
+
+    async with client.stream(
+        "GET",
+        f"/api/problems/{problem['id']}/socratic-question/stream",
+        headers=headers,
+    ) as response:
+        assert response.status_code == 200
+        body = ""
+        async for chunk in response.aiter_text():
+            body += chunk
+
+    normalized = body.replace("\r\n", "\n")
+    assert "event: token" in normalized
+    assert "data: Why " in normalized
+    assert "data: does thresholding matter?" in normalized
+    assert "event: final" in normalized
+    assert "event: done" in normalized
+
+    final_blocks = [block for block in normalized.split("\n\n") if "event: final" in block]
+    assert final_blocks
+    final_data = "\n".join(
+        line.removeprefix("data: ")
+        for line in final_blocks[-1].splitlines()
+        if line.startswith("data: ")
+    )
+    payload = json.loads(final_data)
+
+    assert payload["learning_mode"] == "socratic"
+    assert payload["question_kind"] == "probe"
+    assert payload["question"] == "Why does thresholding matter?"
+    assert payload["mode_metadata"]["step_index"] == 0
+    assert payload["llm_calls"] == 1
+    assert payload["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_socratic_response_stream_returns_status_preview_and_final_payload(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "Accept": "text/event-stream",
+    }
+    problem = await create_problem(client, headers, title="Streamed socratic response")
+
+    async def fake_feedback(*args, **kwargs):
+        await asyncio.sleep(0)
+        return {
+            "correctness": "mostly correct",
+            "misconceptions": ["State the threshold tradeoff more explicitly."],
+            "suggestions": ["Tie the threshold choice to one concrete cost tradeoff."],
+            "next_question": "What boundary case would make you pick a different threshold?",
+            "mastery_score": 74,
+            "dimension_scores": {"accuracy": 74, "transfer": 70},
+            "confidence": 0.78,
+            "pass_stage": False,
+            "decision_reason": "Still needs a tighter boundary explanation.",
+        }
+
+    async def fake_extract_concepts(*args, **kwargs):
+        return ["decision threshold", "precision"]
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract_concepts)
+
+    async with client.stream(
+        "POST",
+        f"/api/problems/{problem['id']}/responses/stream",
+        json={
+            "problem_id": problem["id"],
+            "user_response": "Threshold choice depends on whether false positives or misses are more costly.",
+            "learning_mode": "socratic",
+            "question_kind": "probe",
+            "socratic_question": "Explain the core tradeoff inside threshold choice.",
+        },
+        headers=headers,
+    ) as response:
+        assert response.status_code == 200
+        body = ""
+        async for chunk in response.aiter_text():
+            body += chunk
+
+    normalized = body.replace("\r\n", "\n")
+    assert "event: status" in normalized
+    assert '"phase": "evaluating_feedback"' in normalized
+    assert '"phase": "extracting_artifacts"' in normalized
+    assert '"phase": "saving_turn"' in normalized
+    assert "event: preview" in normalized
+    assert '"mastery_score": 74' in normalized
+    assert "event: final" in normalized
+    assert "event: done" in normalized
+
+    preview_blocks = [block for block in normalized.split("\n\n") if "event: preview" in block]
+    assert preview_blocks
+    preview_data = "\n".join(
+        line.removeprefix("data: ")
+        for line in preview_blocks[-1].splitlines()
+        if line.startswith("data: ")
+    )
+    preview = json.loads(preview_data)
+    assert preview["correctness"] == "mostly correct"
+    assert preview["mastery_score"] == 74
+
+    final_blocks = [block for block in normalized.split("\n\n") if "event: final" in block]
+    assert final_blocks
+    final_data = "\n".join(
+        line.removeprefix("data: ")
+        for line in final_blocks[-1].splitlines()
+        if line.startswith("data: ")
+    )
+    payload = json.loads(final_data)
+
+    assert payload["learning_mode"] == "socratic"
+    assert payload["question_kind"] == "probe"
+    assert payload["structured_feedback"]["mastery_score"] == 74
+    assert payload["follow_up"]["needed"] is True
+    assert payload["trace_id"]
 
 
 @pytest.mark.asyncio

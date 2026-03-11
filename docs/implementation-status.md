@@ -1,15 +1,14 @@
 # Implementation Status
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-11
 
-## Current Major Milestone
+## Active Milestone
 
-### v1.2 Learning Asset Evolution
+### v1.3 Guided Knowledge Revision + Hardening
 
-This is the current major milestone for the repository.
+Status: `P0 complete, P1 in progress`
 
-It reflects the codebase as it exists now, not an aspirational product description.
-The milestone is functionally complete enough to close out.
+This document reflects the codebase as it exists now, not an aspirational product description.
 
 ## What Is Implemented
 
@@ -32,19 +31,28 @@ The current learning flow can already produce:
 - derived concept candidates
 - derived learning path candidates
 - review handoff state
+- provider-native structured outputs across the core JSON learning artifacts and the remaining major `ModelOSService` chains
 
 ### 4. Path Structure
 
 - Main path and branch path relationships are modeled and navigable.
 - Branch creation, activation, and return-to-parent flow exist in the main workspace.
 
-### 5. Knowledge Asset Handoff
+### 5. Knowledge-Asset Provenance And Handoff
 
 - Accepted concepts can be promoted into model cards.
+- Model cards now distinguish manual creation from problem-derived promotion.
+- Where available, provenance stays linked to the originating problem, turn, and candidate.
+- Manual-origin cards now follow a draft-first lifecycle before activation and review scheduling.
 - Model cards can be scheduled into review.
 - Review items are traceable back to the originating problem and learning turn.
 
-### 6. Reinforcement Routing
+### 6. Guided Revision Workflow
+
+- `ModelCardDetail` no longer stops at advisory revision-focus text.
+- The current repo can open a lightweight revision workflow and record revision intent against recent recall / reinforcement context.
+
+### 7. Reinforcement Routing
 
 - Weak recall now creates durable reinforcement targets.
 - Those targets can return the learner to:
@@ -53,7 +61,7 @@ The current learning flow can already produce:
   - the right focused concept / turn
 - `ProblemDetail` can show a concrete first reinforcement action.
 
-### 7. Source / Error / Evidence Grounding
+### 8. Source / Error / Evidence Grounding
 
 - Reinforcement starters are no longer generic.
 - The current repo can ground them by:
@@ -61,7 +69,7 @@ The current learning flow can already produce:
   - likely confusion / error assertions
   - focused candidate evidence when the signal is reliable
 
-### 8. Model-Card Evolution State
+### 9. Model-Card Evolution State
 
 - Model cards no longer show only review presence and timeline events.
 - The current repo now surfaces model-card state such as:
@@ -72,42 +80,35 @@ The current learning flow can already produce:
   - first recall queued
   - repeated confusion
 
-### 9. Revision Direction Hints
+### 10. Responsiveness In The Main Workspace
 
-- `ModelCardDetail` now shows a lightweight revision focus hint.
-- The hint uses current recall / reinforcement / evolution signals to point toward a first revision direction without rewriting the card automatically.
+- Exploration `/ask` now has a streaming answer preview plus final structured payload.
+- Socratic question generation now streams into the workspace before the final payload lands.
+- Socratic response evaluation now streams status and preview state before the final structured feedback lands.
+- The blocking endpoints remain as fallbacks instead of being removed outright.
 
-### 10. Runtime Hardening For Real Providers
+### 11. Problems And Model-Card Library Scaling
 
-- Real-provider timeout behavior has been tightened in the highest-value production paths:
-  - admin provider test
-  - create-problem concept extraction
-  - create-problem learning-path generation
-- These paths now degrade under bounded budgets instead of hanging indefinitely or surfacing inconsistent 500s.
-- Local fallback concept extraction has been improved so degraded create-problem output stays concept-oriented instead of collapsing to title-only output.
+- The main list APIs now support `limit` / `offset`.
+- `Problems` and `Model Cards` use debounced search plus `Load More` instead of assuming tiny libraries.
+- `ModelCardsView` no longer fetches a second full `/srs/schedules` payload just to render review state for the current page.
 
-### 11. Auth Entry Layout Hardening
+### 12. Ongoing Maintainability Hardening
 
-- Login and register entry layouts were tightened to fit the current app shell more reliably.
-- This was a UI hardening pass, not a new product surface.
+- Support modules have started to come out of `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`.
+- This reduces local concentration risk, but the hardening pass is still underway rather than complete.
 
 ## What Is Still Thin
 
 These areas are still intentionally limited:
 
-1. recall does not automatically rewrite model-card content
-2. revision focus hints are not yet a full revision workflow
+1. concentration risk is still high in `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`
+2. streaming fallback and auth / token-refresh boundary coverage is not yet fully closed
 3. review prioritization is still lightweight
-4. legacy / secondary surfaces still exist in the codebase
+4. graph-oriented navigation and broader secondary surfaces remain deferred
 
-## Next Milestone
+## Current P1 Closeout Focus
 
-### v1.3 Guided Knowledge Revision
-
-The next milestone should focus on turning the current state and revision-focus hints into lightweight, traceable knowledge-revision actions.
-
-The expected center of gravity for that milestone is:
-
-- turning revision focus hints into explicit edit intent
-- keeping revisions traceable to learning / recall evidence
-- feeding revision outcomes back into the learning loop without broadening the product surface
+- finish reducing concentration risk in the main workflow files (`#23`)
+- expand regression coverage around the revised knowledge loop and streaming fallback paths
+- keep multi-problem and multi-model-card optimizations limited to core-loop ergonomics rather than graph surfaces

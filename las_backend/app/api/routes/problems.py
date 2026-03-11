@@ -1,14 +1,17 @@
 import asyncio
+import json
 import re
 import time
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, desc, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional
 
 from app.core.config import get_settings
 from app.core.database import get_db
@@ -56,6 +59,29 @@ from app.schemas.problem import (
     ProblemConceptRollbackResponse,
 )
 from app.api.routes.auth import get_current_user
+from app.api.routes.problem_exploration_support import (
+    _build_exploration_next_actions,
+    _build_exploration_path_suggestions,
+    _derive_question_concepts,
+    _filter_grounded_ask_concepts,
+    _infer_exploration_answer_type,
+    _normalize_exploration_answer_type,
+    _select_answered_concepts,
+    _select_related_concepts,
+)
+from app.api.routes.problem_learning_path_support import (
+    _build_path_steps_from_candidate,
+    _default_path_insertion,
+    _load_active_learning_path,
+    _load_main_learning_path,
+    _map_candidate_type_to_learning_path_kind,
+    _normalize_learning_path_kind,
+    _normalize_path_insertion,
+    _normalize_path_suggestion_type,
+    _renumber_learning_path_steps,
+    _resolve_current_step,
+    _set_active_learning_path,
+)
 from app.services.model_os_service import model_os_service
 from app.services.srs_service import srs_service
 
@@ -69,199 +95,6 @@ def _problem_create_concept_timeout_seconds() -> float:
 
 def _problem_create_path_timeout_seconds() -> float:
     return float(max(4, min(int(settings.LEARNING_PATH_TIMEOUT_SECONDS), 7)))
-
-
-def _resolve_current_step(learning_path: Optional[LearningPath]) -> tuple[int, Optional[dict]]:
-    if not learning_path or not isinstance(learning_path.path_data, list) or not learning_path.path_data:
-        return 0, None
-
-    current_step_index = min(
-        max(int(learning_path.current_step or 0), 0),
-        len(learning_path.path_data) - 1,
-    )
-    step_candidate = learning_path.path_data[current_step_index]
-    if not isinstance(step_candidate, dict):
-        return current_step_index, None
-    return current_step_index, step_candidate
-
-
-def _normalize_learning_path_kind(raw_kind: Optional[str], default: str = "main") -> str:
-    kind = str(raw_kind or default).strip().lower()
-    if kind not in {"main", "branch", "prerequisite", "comparison"}:
-        return default
-    return kind
-
-
-async def _load_active_learning_path(db: AsyncSession, *, problem_id: str) -> Optional[LearningPath]:
-    active_result = await db.execute(
-        select(LearningPath)
-        .where(
-            LearningPath.problem_id == problem_id,
-            LearningPath.is_active.is_(True),
-        )
-        .order_by(desc(LearningPath.updated_at), desc(LearningPath.created_at))
-        .limit(1)
-    )
-    active_path = active_result.scalar_one_or_none()
-    if active_path:
-        return active_path
-
-    main_path = await _load_main_learning_path(db, problem_id=problem_id)
-    if main_path:
-        main_path.is_active = True
-        await db.flush()
-    return main_path
-
-
-async def _load_main_learning_path(db: AsyncSession, *, problem_id: str) -> Optional[LearningPath]:
-    result = await db.execute(
-        select(LearningPath)
-        .where(
-            LearningPath.problem_id == problem_id,
-            LearningPath.kind == "main",
-        )
-        .order_by(LearningPath.created_at.asc())
-        .limit(1)
-    )
-    return result.scalar_one_or_none()
-
-
-async def _set_active_learning_path(
-    db: AsyncSession,
-    *,
-    problem_id: str,
-    target_path_id: str,
-) -> Optional[LearningPath]:
-    result = await db.execute(
-        select(LearningPath).where(LearningPath.problem_id == problem_id)
-    )
-    target_path = None
-    for path in result.scalars().all():
-        is_target = path.id == target_path_id
-        path.is_active = is_target
-        if is_target:
-            target_path = path
-    if target_path is None:
-        return None
-    await db.flush()
-    return target_path
-
-
-def _renumber_learning_path_steps(path_data: List[dict]) -> List[dict]:
-    normalized_steps: List[dict] = []
-    for index, step in enumerate(path_data or []):
-        if not isinstance(step, dict):
-            continue
-        normalized_steps.append(
-            {
-                "step": index + 1,
-                "concept": str(step.get("concept") or f"Step {index + 1}").strip(),
-                "description": str(step.get("description") or "").strip(),
-                "resources": [
-                    str(resource).strip()
-                    for resource in (step.get("resources") or [])
-                    if str(resource).strip()
-                ],
-            }
-        )
-    return normalized_steps
-
-
-def _map_candidate_type_to_learning_path_kind(path_type: str) -> str:
-    normalized = _normalize_path_suggestion_type(path_type)
-    if normalized == "prerequisite":
-        return "prerequisite"
-    if normalized == "comparison_path":
-        return "comparison"
-    return "branch"
-
-
-def _build_path_steps_from_candidate(
-    candidate: ProblemPathCandidate,
-    *,
-    anchor_concept: str,
-) -> List[dict]:
-    cjk = _contains_cjk_text(candidate.title, candidate.reason, anchor_concept)
-    title = str(candidate.title or anchor_concept).strip()
-    reason = str(candidate.reason or "").strip()
-    path_type = _normalize_path_suggestion_type(candidate.path_type)
-
-    if path_type == "prerequisite":
-        steps = [
-            {
-                "concept": title,
-                "description": reason or (
-                    f"Build the missing foundation for '{anchor_concept}' before returning."
-                    if not cjk
-                    else f"先补足“{anchor_concept}”所缺的前置基础，再返回主线。"
-                ),
-                "resources": [anchor_concept],
-            },
-            {
-                "concept": (
-                    f"Reconnect {title} to {anchor_concept}"
-                    if not cjk
-                    else f"把“{title}”重新接回“{anchor_concept}”"
-                ),
-                "description": (
-                    f"Explain how '{title}' supports the original step '{anchor_concept}'."
-                    if not cjk
-                    else f"说明“{title}”如何支撑原主线步骤“{anchor_concept}”。"
-                ),
-                "resources": [title, anchor_concept],
-            },
-        ]
-    elif path_type == "comparison_path":
-        steps = [
-            {
-                "concept": title,
-                "description": reason or (
-                    f"Clarify the comparison target around '{anchor_concept}'."
-                    if not cjk
-                    else f"先澄清与“{anchor_concept}”相关的对比对象。"
-                ),
-                "resources": [anchor_concept],
-            },
-            {
-                "concept": (
-                    f"Compare {title} with {anchor_concept}"
-                    if not cjk
-                    else f"对比“{title}”与“{anchor_concept}”"
-                ),
-                "description": (
-                    f"Write side-by-side boundaries, tradeoffs, and decision cues."
-                    if not cjk
-                    else "并列写出两者的边界、取舍和使用判断信号。"
-                ),
-                "resources": [title, anchor_concept],
-            },
-        ]
-    else:
-        steps = [
-            {
-                "concept": title,
-                "description": reason or (
-                    f"Deepen the current understanding of '{anchor_concept}' with one focused branch."
-                    if not cjk
-                    else f"围绕“{anchor_concept}”开一条聚焦深挖支线。"
-                ),
-                "resources": [anchor_concept],
-            },
-            {
-                "concept": (
-                    f"Stress-test {anchor_concept}"
-                    if not cjk
-                    else f"用边界案例检验“{anchor_concept}”"
-                ),
-                "description": (
-                    f"Use one example or edge case to consolidate the branch and prepare to return."
-                    if not cjk
-                    else "用一个例子或边界案例巩固理解，并准备返回主线。"
-                ),
-                "resources": [title, anchor_concept],
-            },
-        ]
-    return _renumber_learning_path_steps(steps)
 
 
 def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
@@ -330,376 +163,6 @@ def _normalize_question_kind(raw_kind: Optional[str], default: str = "probe") ->
 
 def _contains_cjk_text(*texts: Optional[str]) -> bool:
     return any(bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", str(text or ""))) for text in texts)
-
-
-def _normalize_exploration_answer_type(
-    raw_type: Optional[str],
-    default: str = "concept_explanation",
-) -> str:
-    answer_type = str(raw_type or default).strip().lower().replace(" ", "_")
-    if answer_type not in {
-        "concept_explanation",
-        "boundary_clarification",
-        "misconception_correction",
-        "comparison",
-        "prerequisite_explanation",
-        "worked_example",
-    }:
-        return default
-    return answer_type
-
-
-def _normalize_path_suggestion_type(
-    raw_type: Optional[str],
-    default: str = "branch_deep_dive",
-) -> str:
-    path_type = str(raw_type or default).strip().lower().replace(" ", "_")
-    if path_type not in {"prerequisite", "branch_deep_dive", "comparison_path"}:
-        return default
-    return path_type
-
-
-def _infer_exploration_answer_type(question: str) -> str:
-    text = str(question or "").strip().casefold()
-    if any(marker in text for marker in ["difference between", "compare", "versus", " vs ", "区别", "对比"]):
-        return "comparison"
-    if any(marker in text for marker in ["before", "prerequisite", "prereq", "先学", "前置", "基础"]):
-        return "prerequisite_explanation"
-    if any(marker in text for marker in ["example", "walk through", "worked example", "举例", "例子", "演示"]):
-        return "worked_example"
-    if any(marker in text for marker in ["misconception", "wrong", "误解", "错误", "confused", "是不是"]):
-        return "misconception_correction"
-    if any(marker in text for marker in ["boundary", "edge case", "when should", "when not", "边界", "什么时候不"]):
-        return "boundary_clarification"
-    return "concept_explanation"
-
-
-def _sanitize_question_concept_phrase(raw: Optional[str]) -> str:
-    phrase = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n,.;:!?\"'()[]{}")
-    phrase = re.sub(r"^(the|a|an)\s+", "", phrase, flags=re.IGNORECASE)
-    return phrase.strip()
-
-
-def _extract_comparison_targets_from_question(question: str) -> List[str]:
-    text = str(question or "").strip()
-    if not text:
-        return []
-
-    patterns = [
-        r"(?:difference between|compare)\s+(?P<left>.+?)\s+(?:and|with|to|vs\.?|versus)\s+(?P<right>.+?)(?:\s+when\b|\s+if\b|\s+under\b|\s+for\b|[?.!,]|$)",
-        r"(?P<left>.+?)\s+(?:vs\.?|versus)\s+(?P<right>.+?)(?:\s+when\b|\s+if\b|\s+under\b|\s+for\b|[?.!,]|$)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if not match:
-            continue
-        left = _sanitize_question_concept_phrase(match.group("left"))
-        right = _sanitize_question_concept_phrase(match.group("right"))
-        concepts = model_os_service.normalize_concepts([left, right], limit=2)
-        if len(concepts) >= 2:
-            return concepts
-    return []
-
-
-def _find_question_concept_mentions(question: str, candidate_concepts: List[str]) -> List[str]:
-    question_key = model_os_service.normalize_concept_key(question)
-    question_text = str(question or "")
-    matches: List[tuple[int, int, str]] = []
-    for concept in model_os_service.normalize_concepts(candidate_concepts, limit=10):
-        concept_key = model_os_service.normalize_concept_key(concept)
-        if not concept_key or concept_key not in question_key:
-            continue
-        position = question_text.casefold().find(str(concept).casefold())
-        matches.append((position if position >= 0 else 10_000, -len(concept), concept))
-    matches.sort(key=lambda item: (item[0], item[1]))
-    return [concept for _position, _neg_len, concept in matches]
-
-
-def _derive_question_concepts(
-    *,
-    question: str,
-    answer_type: str,
-    candidate_concepts: List[str],
-) -> List[str]:
-    if answer_type == "comparison":
-        extracted = _extract_comparison_targets_from_question(question)
-        if extracted:
-            return extracted
-
-    mentioned = _find_question_concept_mentions(question, candidate_concepts)
-    if answer_type == "comparison" and len(mentioned) >= 2:
-        return model_os_service.normalize_concepts(mentioned[:2], limit=2)
-    if answer_type != "comparison" and mentioned:
-        return model_os_service.normalize_concepts(mentioned[:1], limit=1)
-    return []
-
-
-def _filter_grounded_ask_concepts(
-    *,
-    question: str,
-    answer: str,
-    ask_concepts: List[str],
-    question_concepts: List[str],
-    step_concept: str,
-) -> List[str]:
-    concepts = model_os_service.normalize_concepts(ask_concepts, limit=8)
-    if not question_concepts:
-        return concepts
-
-    grounded_text = model_os_service.normalize_concept_key(f"{question}\n{answer}")
-    step_key = model_os_service.normalize_concept_key(step_concept)
-    filtered: List[str] = []
-    for concept in concepts:
-        concept_key = model_os_service.normalize_concept_key(concept)
-        if not concept_key:
-            continue
-        if concept_key == step_key:
-            continue
-        if concept_key in grounded_text:
-            filtered.append(concept)
-    return filtered
-
-
-def _pick_secondary_concept(
-    *,
-    primary: str,
-    answered_concepts: List[str],
-    related_concepts: List[str],
-    step_concept: str,
-) -> str:
-    primary_key = model_os_service.normalize_concept_key(primary)
-    for concept in [*answered_concepts[1:], *related_concepts, step_concept]:
-        concept_key = model_os_service.normalize_concept_key(concept)
-        if concept_key and concept_key != primary_key:
-            return concept
-    return step_concept or primary
-
-
-def _select_answered_concepts(
-    *,
-    question: str,
-    step_concept: str,
-    inferred_concepts: List[str],
-    answer_type: str,
-    question_concepts: Optional[List[str]] = None,
-) -> List[str]:
-    prioritized = model_os_service.normalize_concepts(question_concepts or [], limit=2)
-    if answer_type == "comparison" and len(prioritized) >= 2:
-        return prioritized[:2]
-    if answer_type != "comparison" and prioritized:
-        return prioritized[:1]
-
-    concept_pool = model_os_service.normalize_concepts(
-        [*inferred_concepts, step_concept],
-        limit=6,
-    )
-    if not concept_pool:
-        return model_os_service.normalize_concepts([step_concept], limit=1)
-
-    question_key = model_os_service.normalize_concept_key(question)
-    mentioned = []
-    for concept in concept_pool:
-        concept_key = model_os_service.normalize_concept_key(concept)
-        if concept_key and concept_key in question_key:
-            mentioned.append(concept)
-
-    if answer_type == "comparison":
-        selected = mentioned[:2] or concept_pool[:2]
-    else:
-        selected = mentioned[:1] or concept_pool[:1]
-    return model_os_service.normalize_concepts(selected or [step_concept], limit=2)
-
-
-def _select_related_concepts(
-    *,
-    answered_concepts: List[str],
-    step_concept: str,
-    inferred_concepts: List[str],
-) -> List[str]:
-    concept_pool = model_os_service.normalize_concepts(
-        [*inferred_concepts, step_concept],
-        limit=8,
-    )
-    answered_keys = {
-        model_os_service.normalize_concept_key(item)
-        for item in answered_concepts
-        if model_os_service.normalize_concept_key(item)
-    }
-    return [
-        concept
-        for concept in concept_pool
-        if model_os_service.normalize_concept_key(concept) not in answered_keys
-    ][:4]
-
-
-def _build_exploration_next_actions(
-    *,
-    answer_type: str,
-    question: str,
-    step_concept: str,
-    answered_concepts: List[str],
-    related_concepts: List[str],
-) -> List[str]:
-    cjk = _contains_cjk_text(question, step_concept, *answered_concepts, *related_concepts)
-    primary = answered_concepts[0] if answered_concepts else step_concept or "this concept"
-    secondary = _pick_secondary_concept(
-        primary=primary,
-        answered_concepts=answered_concepts,
-        related_concepts=related_concepts,
-        step_concept=step_concept or primary,
-    )
-
-    if cjk:
-        if answer_type == "comparison":
-            return [
-                f"用 2-3 句话对比“{primary}”和“{secondary}”的关键区别。",
-                f"分别写一个场景，说明什么时候该用“{primary}”或“{secondary}”。",
-                "回到当前主线步骤，判断现在真正需要哪个概念。",
-            ]
-        if answer_type == "prerequisite_explanation":
-            return [
-                f"先补“{secondary}”的基础定义和一个最小例子。",
-                f"再重述“{primary}”与当前学习步骤的关系。",
-                "确认补完前置后是否可以回到主线继续推进。",
-            ]
-        if answer_type == "worked_example":
-            return [
-                f"围绕“{primary}”手写一个最小 worked example。",
-                "标出每一步为什么成立，而不是只写结论。",
-                f"再把这个例子映射回当前步骤“{step_concept}”。",
-            ]
-        if answer_type == "misconception_correction":
-            return [
-                f"先写出你之前对“{primary}”最容易混淆的一点。",
-                "用一个反例说明错误理解为什么会失败。",
-                "回到当前步骤，重写一版更准确的表述。",
-            ]
-        if answer_type == "boundary_clarification":
-            return [
-                f"列出“{primary}”成立与不成立的边界条件。",
-                f"补一个“{primary}”失效的反例。",
-                "确认这些边界会如何影响当前主线步骤。",
-            ]
-        return [
-            f"先用你自己的话重新解释“{primary}”。",
-            f"再把它和“{secondary}”做一个简短区分。",
-            f"最后说明它在当前步骤“{step_concept}”里起什么作用。",
-        ]
-
-    if answer_type == "comparison":
-        return [
-            f"Write a 2-3 sentence comparison between '{primary}' and '{secondary}'.",
-            f"Give one case where '{primary}' is the better fit and one for '{secondary}'.",
-            "Return to the current step and decide which concept matters now.",
-        ]
-    if answer_type == "prerequisite_explanation":
-        return [
-            f"Review the basic definition of '{secondary}' and one minimal example.",
-            f"Restate how '{primary}' depends on that prerequisite.",
-            "Decide whether you can return to the main path after that review.",
-        ]
-    if answer_type == "worked_example":
-        return [
-            f"Work through one minimal example for '{primary}'.",
-            "Annotate why each step is valid instead of only writing the result.",
-            f"Map that example back to the current step '{step_concept}'.",
-        ]
-    if answer_type == "misconception_correction":
-        return [
-            f"Write down the misconception you had about '{primary}'.",
-            "Add one counter-example that breaks the incorrect version.",
-            "Rewrite your explanation using the corrected framing.",
-        ]
-    if answer_type == "boundary_clarification":
-        return [
-            f"List the conditions where '{primary}' applies and where it does not.",
-            f"Add one edge case that exposes the boundary of '{primary}'.",
-            f"Check how that boundary affects the current step '{step_concept}'.",
-        ]
-    return [
-        f"Restate '{primary}' in your own words.",
-        f"Contrast it briefly with '{secondary}'.",
-        f"Explain how it helps with the current step '{step_concept}'.",
-    ]
-
-
-def _build_exploration_path_suggestions(
-    *,
-    answer_type: str,
-    question: str,
-    step_concept: str,
-    answered_concepts: List[str],
-    related_concepts: List[str],
-) -> List[dict]:
-    cjk = _contains_cjk_text(question, step_concept, *answered_concepts, *related_concepts)
-    primary = answered_concepts[0] if answered_concepts else step_concept or "this concept"
-    secondary = _pick_secondary_concept(
-        primary=primary,
-        answered_concepts=answered_concepts,
-        related_concepts=related_concepts,
-        step_concept=step_concept or primary,
-    )
-
-    suggestions: List[dict] = []
-    if answer_type == "prerequisite_explanation":
-        suggestions.append(
-            {
-                "type": "prerequisite",
-                "title": (
-                    f"先补“{secondary}”，再回到“{primary}”"
-                    if cjk
-                    else f"Study '{secondary}' before returning to '{primary}'"
-                ),
-                "reason": (
-                    f"这个问题暴露了对“{primary}”前置知识的依赖。"
-                    if cjk
-                    else f"This question suggests '{primary}' depends on prerequisite knowledge first."
-                ),
-            }
-        )
-    elif answer_type == "comparison":
-        suggestions.append(
-            {
-                "type": "comparison_path",
-                "title": (
-                    f"开一条“{primary} vs {secondary}”对比支线"
-                    if cjk
-                    else f"Open a comparison path for '{primary}' vs '{secondary}'"
-                ),
-                "reason": (
-                    "这类问题更适合通过并列比较来稳定边界。"
-                    if cjk
-                    else "A short comparison branch will make the boundary between the two concepts clearer."
-                ),
-            }
-        )
-    elif answer_type == "worked_example":
-        suggestions.append(
-            {
-                "type": "branch_deep_dive",
-                "title": (
-                    f"围绕“{primary}”做一个例题深挖"
-                    if cjk
-                    else f"Open a worked-example deep dive for '{primary}'"
-                ),
-                "reason": (
-                    "这个问题更适合通过具体例子固化理解。"
-                    if cjk
-                    else "A worked-example branch would likely consolidate this explanation faster."
-                ),
-            }
-        )
-
-    normalized_suggestions = []
-    for suggestion in suggestions:
-        normalized_suggestions.append(
-            {
-                "type": _normalize_path_suggestion_type(suggestion.get("type")),
-                "title": str(suggestion.get("title") or "").strip(),
-                "reason": str(suggestion.get("reason") or "").strip() or None,
-            }
-        )
-    return normalized_suggestions
 
 
 async def _list_turn_concept_candidates(
@@ -965,6 +428,215 @@ async def _resolve_fallback_value(fallback):
     return value
 
 
+async def _complete_exploration_learning_turn(
+    *,
+    db: AsyncSession,
+    current_user: User,
+    problem: Problem,
+    payload: LearningQuestionRequest,
+    learning_path: Optional[LearningPath],
+    learning_mode: str,
+    mode: str,
+    step_index: int,
+    step_concept: str,
+    step_description: str,
+    answer: str,
+    retrieval_context: Optional[str],
+    trace_id: str,
+    llm_metrics: dict,
+    fallback_reasons: List[str],
+    guarded_llm_call,
+):
+    mode_metadata = {
+        "turn_source": "ask",
+        "step_index": step_index,
+        "step_concept": step_concept,
+        "step_description": step_description,
+        "answer_mode": mode,
+    }
+    ask_concepts = await guarded_llm_call(
+        label="ask_concept_extraction",
+        call_factory=lambda: model_os_service.extract_related_concepts_resilient(
+            problem_title=problem.title,
+            problem_description=(
+                f"Question: {payload.question}\n"
+                f"Answer: {answer}\n"
+                f"Current step concept: {step_concept}\n"
+                f"Current step description: {step_description}"
+            ),
+            limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
+        ),
+        fallback=lambda: [step_concept],
+        low_priority=True,
+    )
+
+    db_turn = ProblemTurn(
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        path_id=str(learning_path.id) if learning_path else None,
+        learning_mode=learning_mode,
+        step_index=step_index,
+        user_text=payload.question,
+        assistant_text=answer,
+        mode_metadata=mode_metadata,
+    )
+    db.add(db_turn)
+    await db.flush()
+
+    evidence_snippet = _build_concept_evidence_snippet(payload.question, answer)
+    answer_type = _normalize_exploration_answer_type(_infer_exploration_answer_type(payload.question))
+    question_concepts = _derive_question_concepts(
+        question=payload.question,
+        answer_type=answer_type,
+        candidate_concepts=[*(problem.associated_concepts or []), *ask_concepts, step_concept],
+    )
+    filtered_ask_concepts = _filter_grounded_ask_concepts(
+        question=payload.question,
+        answer=answer,
+        ask_concepts=ask_concepts,
+        question_concepts=question_concepts,
+        step_concept=step_concept,
+    )
+    # Candidate artifacts should prefer concepts grounded in the answer itself,
+    # then backfill with question targets when there is remaining budget.
+    candidate_concepts = model_os_service.normalize_concepts(
+        [*filtered_ask_concepts, *question_concepts],
+        limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
+    ) or [step_concept]
+    accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
+        db=db,
+        user_id=str(current_user.id),
+        problem=problem,
+        learning_mode=learning_mode,
+        source_turn_id=str(db_turn.id),
+        source_path_id=str(learning_path.id) if learning_path else None,
+        inferred_concepts=candidate_concepts,
+        source="ask",
+        anchor_concept=step_concept,
+        user_text=f"{payload.question}\n{answer}",
+        retrieval_context=retrieval_context,
+        evidence_snippet=evidence_snippet,
+    )
+    await db.flush()
+    concept_pool = model_os_service.normalize_concepts(
+        [*question_concepts, *filtered_ask_concepts, *accepted_concepts, *pending_concepts],
+        limit=8,
+    )
+    answered_concepts = _select_answered_concepts(
+        question=payload.question,
+        step_concept=step_concept,
+        inferred_concepts=concept_pool,
+        answer_type=answer_type,
+        question_concepts=question_concepts,
+    )
+    related_concepts = _select_related_concepts(
+        answered_concepts=answered_concepts,
+        step_concept=step_concept,
+        inferred_concepts=concept_pool,
+    )
+    derived_candidates = await _list_turn_concept_candidates(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        source_turn_id=str(db_turn.id),
+    )
+    next_learning_actions = _build_exploration_next_actions(
+        answer_type=answer_type,
+        question=payload.question,
+        step_concept=step_concept,
+        answered_concepts=answered_concepts,
+        related_concepts=related_concepts,
+    )
+    path_suggestions = _build_exploration_path_suggestions(
+        answer_type=answer_type,
+        question=payload.question,
+        step_concept=step_concept,
+        answered_concepts=answered_concepts,
+        related_concepts=related_concepts,
+    )
+    derived_path_candidates = await _register_problem_path_candidates(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        learning_mode=learning_mode,
+        source_turn_id=str(db_turn.id),
+        step_index=step_index,
+        candidate_specs=[
+            {
+                "type": suggestion.get("type"),
+                "title": suggestion.get("title"),
+                "reason": suggestion.get("reason"),
+                "recommended_insertion": _default_path_insertion(str(suggestion.get("type") or "")),
+            }
+            for suggestion in path_suggestions
+        ],
+        evidence_snippet=payload.question,
+    )
+    return_to_main_path_hint = not bool(path_suggestions)
+    suggested_next_focus = next_learning_actions[0] if next_learning_actions else f"Use your question to refine one boundary of '{step_concept}'."
+    mode_metadata = {
+        **mode_metadata,
+        "answer_type": answer_type,
+        "answered_concepts": answered_concepts,
+        "related_concepts": related_concepts,
+        "derived_candidates": derived_candidates,
+        "derived_path_candidates": derived_path_candidates,
+        "next_learning_actions": next_learning_actions,
+        "path_suggestions": path_suggestions,
+        "return_to_main_path_hint": return_to_main_path_hint,
+        "accepted_concepts": accepted_concepts,
+        "pending_concepts": pending_concepts,
+        "suggested_next_focus": suggested_next_focus,
+    }
+    db_turn.mode_metadata = mode_metadata
+
+    fallback_reason = _format_fallback_reason(fallback_reasons)
+    await _log_learning_event(
+        db=db,
+        user_id=str(current_user.id),
+        problem_id=str(problem.id),
+        event_type="problem_inline_qa",
+        learning_mode=learning_mode,
+        trace_id=trace_id,
+        payload={
+            "step_index": step_index,
+            "answer_mode": mode,
+            "accepted_concepts": accepted_concepts,
+            "pending_concepts": pending_concepts,
+            "llm_calls": llm_metrics["llm_calls"],
+            "llm_latency_ms": llm_metrics["llm_latency_ms"],
+            "fallback_reason": fallback_reason,
+        },
+    )
+    await db.commit()
+
+    return {
+        "turn_id": db_turn.id,
+        "learning_mode": learning_mode,
+        "mode_metadata": mode_metadata,
+        "question": payload.question,
+        "answer": answer,
+        "answer_mode": mode,
+        "answer_type": answer_type,
+        "answered_concepts": answered_concepts,
+        "related_concepts": related_concepts,
+        "derived_candidates": derived_candidates,
+        "derived_path_candidates": derived_path_candidates,
+        "next_learning_actions": next_learning_actions,
+        "path_suggestions": path_suggestions,
+        "return_to_main_path_hint": return_to_main_path_hint,
+        "step_index": step_index,
+        "step_concept": step_concept,
+        "suggested_next_focus": suggested_next_focus,
+        "accepted_concepts": accepted_concepts,
+        "pending_concepts": pending_concepts,
+        "trace_id": trace_id,
+        "llm_calls": llm_metrics["llm_calls"],
+        "llm_latency_ms": llm_metrics["llm_latency_ms"],
+        "fallback_reason": fallback_reason,
+    }
+
+
 async def _ensure_concept_record(
     db: AsyncSession,
     *,
@@ -1203,22 +875,6 @@ async def _register_problem_concept_candidates(
     return accepted_concepts, pending_concepts
 
 
-def _default_path_insertion(path_type: str) -> str:
-    normalized = _normalize_path_suggestion_type(path_type)
-    if normalized == "prerequisite":
-        return "insert_before_current_main"
-    if normalized in {"branch_deep_dive", "comparison_path"}:
-        return "save_as_side_branch"
-    return "bookmark_for_later"
-
-
-def _normalize_path_insertion(action: Optional[str], default: str = "bookmark_for_later") -> str:
-    normalized = str(action or default).strip().lower()
-    if normalized not in {"insert_before_current_main", "save_as_side_branch", "bookmark_for_later"}:
-        return default
-    return normalized
-
-
 def _normalize_concept_candidate_status(status: Optional[str]) -> str:
     normalized = str(status or "pending").strip().lower()
     if normalized not in {"pending", "accepted", "rejected", "reverted", "postponed", "merged"}:
@@ -1284,6 +940,12 @@ def _candidate_model_card_title(candidate: ProblemConceptCandidate) -> str:
     return str(candidate.merged_into_concept or candidate.concept_text or "").strip()
 
 
+def _candidate_model_card_origin_stage(candidate: ProblemConceptCandidate) -> str:
+    if str(candidate.status or "").strip() == "merged":
+        return "merged_concept_candidate"
+    return "accepted_concept_candidate"
+
+
 def _candidate_model_card_notes(problem: Problem, candidate: ProblemConceptCandidate) -> str:
     title = _candidate_model_card_title(candidate)
     source_turn_preview = _build_turn_preview(getattr(candidate, "source_turn", None))
@@ -1338,6 +1000,8 @@ async def _ensure_model_card_for_candidate(
     )
     existing_card = existing_result.scalar_one_or_none()
     if existing_card:
+        if existing_card.lifecycle_stage != "active":
+            existing_card.lifecycle_stage = "active"
         candidate.linked_model_card_id = str(existing_card.id)
         await db.flush()
         return existing_card, False
@@ -1350,6 +1014,15 @@ async def _ensure_model_card_for_candidate(
     model_card = ModelCard(
         user_id=user_id,
         title=target_title,
+        lifecycle_stage="active",
+        origin_type="problem_concept_candidate",
+        origin_stage=_candidate_model_card_origin_stage(candidate),
+        origin_problem_id=str(problem.id),
+        origin_problem_title=problem.title,
+        origin_concept_candidate_id=str(candidate.id),
+        origin_source_turn_id=str(candidate.source_turn_id) if candidate.source_turn_id else None,
+        origin_learning_mode=_normalize_learning_mode(candidate.learning_mode, "socratic"),
+        origin_concept_text=candidate.concept_text,
         user_notes=notes,
         examples=examples,
         counter_examples=[],
@@ -1676,6 +1349,8 @@ async def create_problem(
 @router.get("/", response_model=List[ProblemResponse])
 async def list_problems(
     q: Optional[str] = Query(default=None),
+    limit: int = Query(default=12, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1726,7 +1401,7 @@ async def list_problems(
             problems = merged
         else:
             problems = fallback_ranked
-    return problems
+    return list(problems)[offset:offset + limit]
 
 
 @router.get("/{problem_id}", response_model=ProblemResponse)
@@ -1863,26 +1538,120 @@ async def get_socratic_question(
     }
 
 
-@router.post("/{problem_id}/responses", response_model=ProblemResponseResponse)
-async def create_response(
+@router.get("/{problem_id}/socratic-question/stream")
+async def stream_socratic_question(
     problem_id: UUID,
-    response_data: ProblemResponseCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    problem_result = await db.execute(
         select(Problem).where(
             Problem.id == str(problem_id),
             Problem.user_id == str(current_user.id),
         )
     )
-    problem = result.scalar_one_or_none()
+    problem = problem_result.scalar_one_or_none()
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
+
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
+    current_step_index, current_step_data = _resolve_current_step(learning_path)
+    step_concept = (current_step_data or {}).get("concept") or problem.title
+    step_description = (current_step_data or {}).get("description") or (problem.description or "")
+    trace_id = str(uuid.uuid4())
+
+    latest_feedback, latest_mastery, recent_answers = await _load_latest_step_feedback(
+        db=db,
+        problem_id=str(problem.id),
+        user_id=str(current_user.id),
+        step_index=current_step_index,
+    )
+    question_kind = _normalize_question_kind(
+        None,
+        _select_socratic_question_kind(
+            latest_feedback=latest_feedback,
+            latest_mastery=latest_mastery,
+        ),
+    )
+    fallback_question = model_os_service.build_socratic_question_fallback(
+        step_concept=step_concept,
+        question_kind=question_kind,
+        latest_feedback=latest_feedback,
+    )
+
+    async def event_generator():
+        fallback_reason = None
+        question_chunks: List[str] = []
+        llm_calls = 1
+        llm_started = time.monotonic()
+
+        try:
+            async for token in model_os_service.stream_socratic_question(
+                problem_title=problem.title,
+                problem_description=problem.description or "",
+                step_concept=step_concept,
+                step_description=step_description,
+                question_kind=question_kind,
+                recent_responses=recent_answers,
+                latest_feedback=latest_feedback,
+            ):
+                if not question_chunks and token.startswith("Error:"):
+                    raise RuntimeError(token)
+                question_chunks.append(token)
+                yield {"event": "token", "data": token}
+        except Exception:
+            fallback_reason = "error:socratic_question"
+
+        llm_latency_ms = int((time.monotonic() - llm_started) * 1000)
+        question = "".join(question_chunks).strip()
+        if not question:
+            fallback_reason = fallback_reason or "empty:socratic_question"
+            question = fallback_question
+            if question:
+                yield {"event": "token", "data": question}
+
+        mode_metadata = {
+            "step_index": current_step_index,
+            "step_concept": step_concept,
+            "latest_mastery_score": int(getattr(latest_mastery, "mastery_score", 0) or 0),
+            "latest_pass_stage": bool(getattr(latest_mastery, "pass_stage", False)) if latest_mastery else False,
+            "latest_correctness": str((latest_feedback or {}).get("correctness") or ""),
+        }
+        payload = {
+            "learning_mode": "socratic",
+            "step_index": current_step_index,
+            "step_concept": step_concept,
+            "question_kind": question_kind,
+            "question": question,
+            "mode_metadata": mode_metadata,
+            "trace_id": trace_id,
+            "llm_calls": llm_calls,
+            "llm_latency_ms": llm_latency_ms,
+            "fallback_reason": fallback_reason,
+        }
+        yield {"event": "final", "data": json.dumps(jsonable_encoder(payload))}
+        yield {"event": "done", "data": ""}
+
+    return EventSourceResponse(event_generator())
+
+
+async def _complete_socratic_response(
+    *,
+    problem_id: UUID,
+    response_data: ProblemResponseCreate,
+    current_user: User,
+    db: AsyncSession,
+    problem: Problem,
+    on_progress: Optional[Callable[[str, dict], Awaitable[None]]] = None,
+):
     learning_mode = _normalize_learning_mode(response_data.learning_mode, problem.learning_mode or "socratic")
     if learning_mode != "socratic":
         raise HTTPException(status_code=400, detail="The /responses route only supports socratic mode")
     problem.learning_mode = learning_mode
+
+    async def emit_progress(event: str, payload: Optional[dict] = None):
+        if on_progress:
+            await on_progress(event, payload or {})
 
     learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
     current_step_index, current_step_data = _resolve_current_step(learning_path)
@@ -1943,6 +1712,7 @@ async def create_response(
         finally:
             llm_latency_ms += int((time.monotonic() - llm_started) * 1000)
 
+    await emit_progress("status", {"phase": "evaluating_feedback"})
     retrieval_context = await model_os_service.build_retrieval_context(
         db=db,
         user_id=str(current_user.id),
@@ -1973,6 +1743,16 @@ async def create_response(
         ),
     )
     structured_feedback = model_os_service.normalize_feedback_structured(structured_feedback)
+    await emit_progress(
+        "preview",
+        {
+            "phase": "feedback_ready",
+            "correctness": str(structured_feedback.get("correctness") or ""),
+            "mastery_score": int(structured_feedback.get("mastery_score") or 0),
+            "confidence": float(structured_feedback.get("confidence") or 0.0),
+            "question_kind": question_kind,
+        },
+    )
 
     misconceptions = [
         str(item).strip()
@@ -2003,6 +1783,7 @@ async def create_response(
         concept_context_parts.append(f"Next question:\n{next_question}")
 
     max_concepts = max(6, int(settings.PROBLEM_MAX_ASSOCIATED_CONCEPTS))
+    await emit_progress("status", {"phase": "extracting_artifacts"})
     inferred_concepts = await guarded_llm_call(
         label="concept_extraction",
         call_factory=lambda: model_os_service.extract_related_concepts_resilient(
@@ -2133,6 +1914,8 @@ async def create_response(
         question=follow_up_question,
         question_kind=next_question_kind if follow_up_needed else None,
     )
+
+    await emit_progress("status", {"phase": "saving_turn"})
     derived_path_candidates = await _register_problem_path_candidates(
         db=db,
         user_id=str(current_user.id),
@@ -2241,6 +2024,90 @@ async def create_response(
         ),
         "created_at": db_response.created_at,
     }
+
+
+@router.post("/{problem_id}/responses/stream")
+async def stream_response(
+    problem_id: UUID,
+    response_data: ProblemResponseCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    async def event_generator():
+        queue: asyncio.Queue[tuple[str, object] | None] = asyncio.Queue()
+
+        async def on_progress(event: str, payload: dict):
+            await queue.put((event, payload))
+
+        async def worker():
+            try:
+                response = await _complete_socratic_response(
+                    problem_id=problem_id,
+                    response_data=response_data,
+                    current_user=current_user,
+                    db=db,
+                    problem=problem,
+                    on_progress=on_progress,
+                )
+                await queue.put(("final", jsonable_encoder(response)))
+                await queue.put(("done", ""))
+            except Exception:
+                await db.rollback()
+                await queue.put(("error", {"message": "Failed to complete streamed Socratic evaluation."}))
+            finally:
+                await queue.put(None)
+
+        worker_task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                event_name, payload = item
+                if event_name == "done":
+                    yield {"event": "done", "data": ""}
+                    continue
+                yield {"event": event_name, "data": json.dumps(payload)}
+        finally:
+            await worker_task
+
+    return EventSourceResponse(event_generator())
+
+
+@router.post("/{problem_id}/responses", response_model=ProblemResponseResponse)
+async def create_response(
+    problem_id: UUID,
+    response_data: ProblemResponseCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    return await _complete_socratic_response(
+        problem_id=problem_id,
+        response_data=response_data,
+        current_user=current_user,
+        db=db,
+        problem=problem,
+    )
 
 
 @router.get("/{problem_id}/responses", response_model=List[ProblemResponseResponse])
@@ -3240,14 +3107,15 @@ async def ask_learning_question(
     mode = _normalize_answer_mode(payload.answer_mode)
     trace_id = str(uuid.uuid4())
     started_at = time.monotonic()
-    llm_calls = 0
-    llm_latency_ms = 0
+    llm_metrics = {
+        "llm_calls": 0,
+        "llm_latency_ms": 0,
+    }
     fallback_reasons: List[str] = []
     max_llm_calls = max(1, int(settings.PROBLEM_MAX_LLM_CALLS_PER_REQUEST))
     response_timeout = max(4, int(settings.PROBLEM_RESPONSE_TIMEOUT_SECONDS))
 
     async def guarded_llm_call(label: str, call_factory, fallback, low_priority: bool = False):
-        nonlocal llm_calls, llm_latency_ms
         elapsed = time.monotonic() - started_at
         remaining = response_timeout - elapsed
         if remaining <= 0:
@@ -3256,11 +3124,11 @@ async def ask_learning_question(
         if low_priority and remaining <= 2:
             fallback_reasons.append(f"skip_low_priority:{label}")
             return await _resolve_fallback_value(fallback)
-        if llm_calls >= max_llm_calls:
+        if llm_metrics["llm_calls"] >= max_llm_calls:
             fallback_reasons.append(f"budget_exceeded:{label}")
             return await _resolve_fallback_value(fallback)
 
-        llm_calls += 1
+        llm_metrics["llm_calls"] += 1
         llm_started = time.monotonic()
         try:
             return await asyncio.wait_for(call_factory(), timeout=max(1, int(remaining)))
@@ -3271,7 +3139,7 @@ async def ask_learning_question(
             fallback_reasons.append(f"error:{label}")
             return await _resolve_fallback_value(fallback)
         finally:
-            llm_latency_ms += int((time.monotonic() - llm_started) * 1000)
+            llm_metrics["llm_latency_ms"] += int((time.monotonic() - llm_started) * 1000)
 
     retrieval_context = await model_os_service.build_retrieval_context(
         db=db,
@@ -3321,192 +3189,191 @@ Learner question: {payload.question}
             mode=mode,
         ),
     )
-
-    ask_concepts = await guarded_llm_call(
-        label="ask_concept_extraction",
-        call_factory=lambda: model_os_service.extract_related_concepts_resilient(
-            problem_title=problem.title,
-            problem_description=(
-                f"Question: {payload.question}\n"
-                f"Answer: {answer}\n"
-                f"Current step concept: {step_concept}\n"
-                f"Current step description: {step_description}"
-            ),
-            limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
-        ),
-        fallback=lambda: [step_concept],
-        low_priority=True,
-    )
-
-    mode_metadata = {
-        "turn_source": "ask",
-        "step_index": step_index,
-        "step_concept": step_concept,
-        "step_description": step_description,
-        "answer_mode": mode,
-    }
-    db_turn = ProblemTurn(
-        user_id=str(current_user.id),
-        problem_id=str(problem.id),
-        path_id=str(learning_path.id) if learning_path else None,
-        learning_mode=learning_mode,
-        step_index=step_index,
-        user_text=payload.question,
-        assistant_text=answer,
-        mode_metadata=mode_metadata,
-    )
-    db.add(db_turn)
-    await db.flush()
-
-    evidence_snippet = _build_concept_evidence_snippet(payload.question, answer)
-    answer_type = _normalize_exploration_answer_type(_infer_exploration_answer_type(payload.question))
-    question_concepts = _derive_question_concepts(
-        question=payload.question,
-        answer_type=answer_type,
-        candidate_concepts=[*(problem.associated_concepts or []), *ask_concepts, step_concept],
-    )
-    filtered_ask_concepts = _filter_grounded_ask_concepts(
-        question=payload.question,
-        answer=answer,
-        ask_concepts=ask_concepts,
-        question_concepts=question_concepts,
-        step_concept=step_concept,
-    )
-    candidate_concepts = model_os_service.normalize_concepts(
-        [*question_concepts, *filtered_ask_concepts],
-        limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
-    ) or [step_concept]
-    accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
+    return await _complete_exploration_learning_turn(
         db=db,
-        user_id=str(current_user.id),
+        current_user=current_user,
         problem=problem,
+        payload=payload,
+        learning_path=learning_path,
         learning_mode=learning_mode,
-        source_turn_id=str(db_turn.id),
-        source_path_id=str(learning_path.id) if learning_path else None,
-        inferred_concepts=candidate_concepts,
-        source="ask",
-        anchor_concept=step_concept,
-        user_text=f"{payload.question}\n{answer}",
-        retrieval_context=retrieval_context,
-        evidence_snippet=evidence_snippet,
-    )
-    await db.flush()
-    concept_pool = model_os_service.normalize_concepts(
-        [*question_concepts, *filtered_ask_concepts, *accepted_concepts, *pending_concepts],
-        limit=8,
-    )
-    answered_concepts = _select_answered_concepts(
-        question=payload.question,
-        step_concept=step_concept,
-        inferred_concepts=concept_pool,
-        answer_type=answer_type,
-        question_concepts=question_concepts,
-    )
-    related_concepts = _select_related_concepts(
-        answered_concepts=answered_concepts,
-        step_concept=step_concept,
-        inferred_concepts=concept_pool,
-    )
-    derived_candidates = await _list_turn_concept_candidates(
-        db=db,
-        user_id=str(current_user.id),
-        problem_id=str(problem.id),
-        source_turn_id=str(db_turn.id),
-    )
-    next_learning_actions = _build_exploration_next_actions(
-        answer_type=answer_type,
-        question=payload.question,
-        step_concept=step_concept,
-        answered_concepts=answered_concepts,
-        related_concepts=related_concepts,
-    )
-    path_suggestions = _build_exploration_path_suggestions(
-        answer_type=answer_type,
-        question=payload.question,
-        step_concept=step_concept,
-        answered_concepts=answered_concepts,
-        related_concepts=related_concepts,
-    )
-    derived_path_candidates = await _register_problem_path_candidates(
-        db=db,
-        user_id=str(current_user.id),
-        problem_id=str(problem.id),
-        learning_mode=learning_mode,
-        source_turn_id=str(db_turn.id),
+        mode=mode,
         step_index=step_index,
-        candidate_specs=[
-            {
-                "type": suggestion.get("type"),
-                "title": suggestion.get("title"),
-                "reason": suggestion.get("reason"),
-                "recommended_insertion": _default_path_insertion(str(suggestion.get("type") or "")),
-            }
-            for suggestion in path_suggestions
-        ],
-        evidence_snippet=payload.question,
+        step_concept=step_concept,
+        step_description=step_description,
+        answer=answer,
+        retrieval_context=retrieval_context,
+        trace_id=trace_id,
+        llm_metrics=llm_metrics,
+        fallback_reasons=fallback_reasons,
+        guarded_llm_call=guarded_llm_call,
     )
-    return_to_main_path_hint = not bool(path_suggestions)
-    suggested_next_focus = next_learning_actions[0] if next_learning_actions else f"Use your question to refine one boundary of '{step_concept}'."
-    mode_metadata = {
-        **mode_metadata,
-        "answer_type": answer_type,
-        "answered_concepts": answered_concepts,
-        "related_concepts": related_concepts,
-        "derived_candidates": derived_candidates,
-        "derived_path_candidates": derived_path_candidates,
-        "next_learning_actions": next_learning_actions,
-        "path_suggestions": path_suggestions,
-        "return_to_main_path_hint": return_to_main_path_hint,
-        "accepted_concepts": accepted_concepts,
-        "pending_concepts": pending_concepts,
-        "suggested_next_focus": suggested_next_focus,
-    }
-    db_turn.mode_metadata = mode_metadata
 
-    await _log_learning_event(
+
+@router.post("/{problem_id}/ask/stream")
+async def stream_learning_question(
+    problem_id: UUID,
+    payload: LearningQuestionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id)
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+    learning_mode = _normalize_learning_mode(payload.learning_mode, problem.learning_mode or "exploration")
+    if learning_mode != "exploration":
+        raise HTTPException(status_code=400, detail="The /ask route only supports exploration mode")
+    problem.learning_mode = learning_mode
+
+    learning_path = await _load_active_learning_path(db, problem_id=str(problem_id))
+    step_index, step_data = _resolve_current_step(learning_path)
+    step_concept = (step_data or {}).get("concept") or problem.title
+    step_description = (step_data or {}).get("description") or (problem.description or "")
+    mode = _normalize_answer_mode(payload.answer_mode)
+    trace_id = str(uuid.uuid4())
+    started_at = time.monotonic()
+    llm_metrics = {
+        "llm_calls": 0,
+        "llm_latency_ms": 0,
+    }
+    fallback_reasons: List[str] = []
+    max_llm_calls = max(1, int(settings.PROBLEM_MAX_LLM_CALLS_PER_REQUEST))
+    response_timeout = max(4, int(settings.PROBLEM_RESPONSE_TIMEOUT_SECONDS))
+
+    async def guarded_llm_call(label: str, call_factory, fallback, low_priority: bool = False):
+        elapsed = time.monotonic() - started_at
+        remaining = response_timeout - elapsed
+        if remaining <= 0:
+            fallback_reasons.append(f"timeout_budget:{label}")
+            return await _resolve_fallback_value(fallback)
+        if low_priority and remaining <= 2:
+            fallback_reasons.append(f"skip_low_priority:{label}")
+            return await _resolve_fallback_value(fallback)
+        if llm_metrics["llm_calls"] >= max_llm_calls:
+            fallback_reasons.append(f"budget_exceeded:{label}")
+            return await _resolve_fallback_value(fallback)
+
+        llm_metrics["llm_calls"] += 1
+        llm_started = time.monotonic()
+        try:
+            return await asyncio.wait_for(call_factory(), timeout=max(1, int(remaining)))
+        except asyncio.TimeoutError:
+            fallback_reasons.append(f"timeout:{label}")
+            return await _resolve_fallback_value(fallback)
+        except Exception:
+            fallback_reasons.append(f"error:{label}")
+            return await _resolve_fallback_value(fallback)
+        finally:
+            llm_metrics["llm_latency_ms"] += int((time.monotonic() - llm_started) * 1000)
+
+    retrieval_context = await model_os_service.build_retrieval_context(
         db=db,
         user_id=str(current_user.id),
-        problem_id=str(problem.id),
-        event_type="problem_inline_qa",
-        learning_mode=learning_mode,
-        trace_id=trace_id,
-        payload={
-            "step_index": step_index,
-            "answer_mode": mode,
-            "accepted_concepts": accepted_concepts,
-            "pending_concepts": pending_concepts,
-            "llm_calls": llm_calls,
-            "llm_latency_ms": llm_latency_ms,
-            "fallback_reason": _format_fallback_reason(fallback_reasons),
-        },
+        query=(
+            f"{problem.title}\n"
+            f"Current step: {step_concept}\n"
+            f"Question: {payload.question}"
+        ),
+        source="problem_inline_qa",
     )
-    await db.commit()
 
-    return {
-        "turn_id": db_turn.id,
-        "learning_mode": learning_mode,
-        "mode_metadata": mode_metadata,
-        "question": payload.question,
-        "answer": answer,
-        "answer_mode": mode,
-        "answer_type": answer_type,
-        "answered_concepts": answered_concepts,
-        "related_concepts": related_concepts,
-        "derived_candidates": derived_candidates,
-        "derived_path_candidates": derived_path_candidates,
-        "next_learning_actions": next_learning_actions,
-        "path_suggestions": path_suggestions,
-        "return_to_main_path_hint": return_to_main_path_hint,
-        "step_index": step_index,
-        "step_concept": step_concept,
-        "suggested_next_focus": suggested_next_focus,
-        "accepted_concepts": accepted_concepts,
-        "pending_concepts": pending_concepts,
-        "trace_id": trace_id,
-        "llm_calls": llm_calls,
-        "llm_latency_ms": llm_latency_ms,
-        "fallback_reason": _format_fallback_reason(fallback_reasons),
-    }
+    if mode == "direct":
+        style_instruction = (
+            "Answer directly and accurately. Keep structure: "
+            "1) concise definition, 2) key distinction, 3) one concrete example, "
+            "4) one common pitfall."
+        )
+    else:
+        style_instruction = (
+            "Use guided style. First give a short hint, then one mini-example, "
+            "and end with one focused check question."
+        )
+
+    prompt = f"""The learner asked a question during a step-by-step learning flow.
+
+Problem: {problem.title}
+Problem description: {problem.description or "N/A"}
+Current step concept: {step_concept}
+Current step description: {step_description}
+
+Learner question: {payload.question}
+
+{style_instruction}
+"""
+
+    async def event_generator():
+        answer_chunks: List[str] = []
+        answer = ""
+        if llm_metrics["llm_calls"] >= max_llm_calls:
+            fallback_reasons.append("budget_exceeded:ask_answer")
+        else:
+            llm_metrics["llm_calls"] += 1
+            llm_started = time.monotonic()
+            try:
+                async for token in model_os_service.stream_generate_with_context(
+                    prompt=prompt,
+                    context=[{"role": "user", "content": payload.question}],
+                    retrieval_context=retrieval_context,
+                ):
+                    if not answer_chunks and token.startswith("Error:"):
+                        raise RuntimeError(token)
+                    answer_chunks.append(token)
+                    yield {"event": "token", "data": token}
+            except Exception:
+                fallback_reasons.append("error:ask_answer")
+            finally:
+                llm_metrics["llm_latency_ms"] += int((time.monotonic() - llm_started) * 1000)
+
+        if answer_chunks:
+            answer = "".join(answer_chunks).strip()
+
+        if not answer:
+            if not any(reason.startswith(("error:ask_answer", "budget_exceeded:ask_answer")) for reason in fallback_reasons):
+                fallback_reasons.append("timeout_budget:ask_answer")
+            answer = await _resolve_fallback_value(
+                lambda: model_os_service.build_learning_answer_fallback(
+                    question=payload.question,
+                    step_concept=step_concept,
+                    mode=mode,
+                )
+            )
+            if answer:
+                yield {"event": "token", "data": answer}
+
+        try:
+            response = await _complete_exploration_learning_turn(
+                db=db,
+                current_user=current_user,
+                problem=problem,
+                payload=payload,
+                learning_path=learning_path,
+                learning_mode=learning_mode,
+                mode=mode,
+                step_index=step_index,
+                step_concept=step_concept,
+                step_description=step_description,
+                answer=answer,
+                retrieval_context=retrieval_context,
+                trace_id=trace_id,
+                llm_metrics=llm_metrics,
+                fallback_reasons=fallback_reasons,
+                guarded_llm_call=guarded_llm_call,
+            )
+            yield {"event": "final", "data": json.dumps(jsonable_encoder(response))}
+            yield {"event": "done", "data": ""}
+        except Exception:
+            await db.rollback()
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": "Failed to complete streamed learning answer."}),
+            }
+
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/{problem_id}/learning-paths", response_model=List[LearningPathResponse])

@@ -1,5 +1,9 @@
 # Learning Loop Hardening Plan (2026-03-05)
 
+> Archived on 2026-03-11.
+> Superseded by `/Users/asteroida/work/Cogniforge/docs/plans/2026-03-10-focused-milestone-and-hardening-plan.md`.
+> Preserved as historical planning context, not as the active execution plan.
+
 ## 1. 背景与目标
 
 ### 1.1 背景问题
