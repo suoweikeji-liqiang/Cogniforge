@@ -583,7 +583,7 @@
                   collapse-older
                   :candidates="conceptCandidates"
                   :loading="candidateLoading"
-                  :current-turn-id="activeConceptTurnId"
+                  :current-turn-id="artifactFocusTurnId"
                   :focus-candidate-id="reinforcementFocusCandidateId"
                   :focus-turn-id="reinforcementFocusTurnId"
                   :focus-concept-text="activeReinforcementTarget?.concept_text || null"
@@ -605,7 +605,7 @@
                   embedded
                   collapse-older
                   :candidates="pathCandidates"
-                  :current-turn-id="activeConceptTurnId"
+                  :current-turn-id="artifactFocusTurnId"
                   :loading="pathCandidateLoading"
                   :submitting-id="pathCandidateSubmittingId"
                   @decide="handlePathCandidateDecision"
@@ -742,6 +742,20 @@ const activeConceptTurnId = computed(() => {
   }
   return latestResponse.value?.turn_id || null
 })
+const artifactFocusTurnId = computed(() => {
+  if (activeConceptTurnId.value) return activeConceptTurnId.value
+
+  const explorationTurnId = latestExplorationTurnId.value || latestQA.value?.turn_id || null
+  if (explorationTurnId) return explorationTurnId
+
+  if (latestResponse.value?.turn_id) return latestResponse.value.turn_id
+
+  const newestArtifact = [...conceptCandidates.value, ...pathCandidates.value]
+    .sort((left: any, right: any) => String(right.created_at || '').localeCompare(String(left.created_at || '')))
+    .find((item: any) => item?.source_turn_id)
+
+  return newestArtifact?.source_turn_id || null
+})
 const latestPathArtifacts = computed(() => {
   if (learningMode.value === 'exploration') {
     return latestQA.value?.derived_path_candidates?.length
@@ -757,12 +771,12 @@ const latestDerivedConceptCount = computed(() => {
   return (latestResponse.value?.accepted_concepts?.length || 0) + (latestResponse.value?.pending_concepts?.length || 0)
 })
 const currentTurnConceptCandidates = computed(() => {
-  if (!activeConceptTurnId.value) return []
-  return conceptCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(activeConceptTurnId.value))
+  if (!artifactFocusTurnId.value) return []
+  return conceptCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(artifactFocusTurnId.value))
 })
 const currentTurnPathCandidates = computed(() => {
-  if (!activeConceptTurnId.value) return []
-  return pathCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(activeConceptTurnId.value))
+  if (!artifactFocusTurnId.value) return []
+  return pathCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(artifactFocusTurnId.value))
 })
 const {
   workspacePathSummary,

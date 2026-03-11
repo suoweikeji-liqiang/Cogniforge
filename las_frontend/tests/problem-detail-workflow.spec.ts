@@ -193,6 +193,7 @@ test.describe('ProblemDetail main workflow', () => {
     await page.goto(`/problems/${session.problemId}`)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/fragile|reinforcement/i)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/revisit|reinforce/i)
+    await expect(page.getByTestId('derived-concepts-older')).toBeVisible()
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Needs reinforcement|Reinforcement Target/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch|Branch path/i)
     await page.getByTestId('reinforcement-details-toggle').click()
