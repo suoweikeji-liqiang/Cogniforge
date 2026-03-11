@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional
 
 from sqlalchemy import desc, select
@@ -16,13 +17,34 @@ from app.models.entities.user import (
 from app.services.model_os_service import model_os_service
 
 settings = get_settings()
+MAX_CONCEPT_EVIDENCE_SNIPPET_CHARS = 1200
+
+def clamp_concept_evidence_snippet(text: Optional[str], limit: int = MAX_CONCEPT_EVIDENCE_SNIPPET_CHARS) -> str:
+    source = str(text or "").strip()
+    if not source:
+        return ""
+    normalized = re.sub(r"\r\n?", "\n", source)
+    if len(normalized) <= limit:
+        return normalized
+
+    floor = max(120, int(limit * 0.45))
+    boundary_positions = [
+        normalized.rfind(marker, floor, limit)
+        for marker in ("\n\n", "\n", "。", "！", "？", ". ", "! ", "? ", "；", ";")
+    ]
+    boundary = max(boundary_positions)
+    if boundary != -1:
+        snippet = normalized[:boundary].rstrip()
+    else:
+        snippet = normalized[:limit].rstrip()
+    return f"{snippet}..."
 
 
 def build_concept_evidence_snippet(user_text: str, anchor_text: str) -> str:
     source = "\n".join([str(user_text or "").strip(), str(anchor_text or "").strip()]).strip()
     if not source:
         return ""
-    return source[:280]
+    return clamp_concept_evidence_snippet(source)
 
 
 def estimate_concept_confidence(
@@ -109,7 +131,7 @@ async def ensure_concept_record(
             concept_id=concept.id,
             source_type=source_type,
             source_id=source_id,
-            snippet=(snippet or "")[:500] or None,
+            snippet=clamp_concept_evidence_snippet(snippet) or None,
             confidence=max(0.0, min(1.0, float(confidence or 0.0))),
         )
     )
@@ -167,7 +189,7 @@ async def register_problem_concept_candidates(
     max_concepts = max(6, int(settings.PROBLEM_MAX_ASSOCIATED_CONCEPTS))
     auto_accept_threshold = max(0.0, min(1.0, float(settings.PROBLEM_CONCEPT_AUTO_ACCEPT_CONFIDENCE)))
 
-    normalized_inputs = model_os_service.normalize_concepts(inferred_concepts, limit=max_candidates)
+    normalized_inputs = model_os_service.filter_low_signal_concepts(inferred_concepts, limit=max_candidates)
     if not normalized_inputs:
         return [], []
 
@@ -248,7 +270,7 @@ async def register_problem_concept_candidates(
                 source_turn_id=source_turn_id,
                 confidence=confidence,
                 status=status,
-                evidence_snippet=evidence_snippet[:500] or None,
+                evidence_snippet=clamp_concept_evidence_snippet(evidence_snippet) or None,
             )
         )
         existing_candidate_contexts.add((normalized, source_path_id or None))

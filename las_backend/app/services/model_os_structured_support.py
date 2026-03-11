@@ -235,6 +235,82 @@ def normalize_concepts(concepts: List[str], limit: int = 8) -> List[str]:
     return normalized
 
 
+def is_low_signal_concept_candidate(concept: Optional[str]) -> bool:
+    text = re.sub(r"\s+", " ", str(concept or "")).strip(" \t\r\n,.;:!?\"'()[]{}")
+    if not text:
+        return True
+
+    lowered = text.casefold()
+    if contains_cjk(text):
+        compact = re.sub(r"\s+", "", text)
+        if compact in {
+            "简洁定义",
+            "关键区别",
+            "具体例子",
+            "常见误区",
+            "问题陈述",
+            "问题背景",
+            "问题描述",
+            "核心思路",
+            "解题思路",
+            "总结",
+            "结论",
+            "提示",
+            "回答",
+            "答案",
+        }:
+            return True
+        if any(
+            compact.endswith(suffix)
+            for suffix in ("是什么", "是什么意思", "有哪些", "吗", "么", "呢", "如何", "怎么", "为什么", "为何")
+        ):
+            return True
+        if any(
+            compact.startswith(prefix)
+            for prefix in ("中的", "关于", "对于", "根据", "通过", "利用", "使用", "用于", "用来", "把", "将", "从", "对", "但")
+        ):
+            return True
+        if len(compact) >= 8 and any(
+            marker in compact
+            for marker in ("根据", "通过", "用于", "用来", "当前", "过去", "未来", "所有", "可能", "以及", "并且", "从而")
+        ):
+            return True
+        return False
+
+    if lowered in {
+        "problem statement",
+        "definition",
+        "key distinction",
+        "example",
+        "examples",
+        "summary",
+        "conclusion",
+    }:
+        return True
+    if lowered.startswith(("what is ", "explain ", "define ", "clarify ", "problem statement")):
+        return True
+    return False
+
+
+def filter_low_signal_concepts(concepts: List[str], limit: int = 8) -> List[str]:
+    filtered: List[str] = []
+    seen = set()
+    for raw in concepts or []:
+        concept = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n,.;:|/-")
+        if not concept or is_low_signal_concept_candidate(concept):
+            continue
+        if len(concept) > 80:
+            concept = concept[:80].rstrip()
+        key = concept.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        filtered.append(concept)
+        if len(filtered) >= limit:
+            break
+    return filtered
+
+
 def normalize_concept_key(concept: str) -> str:
     base = re.sub(r"\s+", " ", str(concept or "")).strip().casefold()
     if not base:
@@ -599,6 +675,36 @@ def fallback_concepts_from_problem(
     candidates: List[str] = []
 
     if contains_cjk(combined):
+        for match in re.finditer(r"([\u4e00-\u9fff]{2,12})(?=（[A-Za-z0-9_+\-/]{1,6}）)", combined):
+            candidates.append(match.group(1))
+
+        for match in re.finditer(
+            r"(?:^|[\n\r\-•*]\s*|\d+\.\s*)([\u4e00-\u9fff]{2,12})(?:（[A-Za-z0-9_+\-/]{1,6}）)?\s*[:：]",
+            combined,
+        ):
+            candidates.append(match.group(1))
+
+        for line in re.split(r"[\r\n]+", combined):
+            compact = re.sub(r"\s+", "", str(line or ""))
+            if not compact or not contains_cjk(compact):
+                continue
+            compact = re.sub(
+                r"^(?:Question|Answer|Currentstepconcept|Currentstepdescription)[:：]?",
+                "",
+                compact,
+                flags=re.IGNORECASE,
+            )
+            compact = re.sub(r"^[A-Za-z0-9_+\-/]+中的", "", compact)
+            compact = re.sub(r"(是什么|是什么意思|有哪些|吗|么|呢|如何|怎么|为什么|为何)[?？]?$", "", compact)
+            if any(separator in compact for separator in ("、", "和", "及", "与", "，", ",")):
+                for part in re.split(r"[、，,]|和|及|与", compact):
+                    cleaned_part = re.sub(r"^[A-Za-z0-9_+\-/]+中的", "", part)
+                    cleaned_part = re.sub(r"^(中的|关于|对于)", "", cleaned_part)
+                    cleaned_part = re.sub(r"(是什么|是什么意思|有哪些|吗|么|呢|如何|怎么|为什么|为何)$", "", cleaned_part)
+                    cleaned_part = cleaned_part.strip()
+                    if 2 <= len(cleaned_part) <= 12:
+                        candidates.append(cleaned_part)
+
         candidates.extend(re.findall(r"[\u4e00-\u9fff]{2,12}", combined))
     else:
         stop_words = {
@@ -675,7 +781,10 @@ def fallback_concepts_from_problem(
     if not candidates and problem_title:
         candidates.append(problem_title)
 
-    return normalize_concepts(candidates, limit=limit)
+    filtered = filter_low_signal_concepts(candidates, limit=limit)
+    if filtered:
+        return filtered
+    return filter_low_signal_concepts([problem_title], limit=max(1, limit))
 
 
 def build_problem_concepts_local(
@@ -685,7 +794,7 @@ def build_problem_concepts_local(
     max_concepts: int = 8,
 ) -> List[str]:
     normalized_limit = max(3, min(max_concepts, 12))
-    seed = normalize_concepts(seed_concepts or [], limit=normalized_limit)
+    seed = filter_low_signal_concepts(seed_concepts or [], limit=normalized_limit)
     if len(seed) >= normalized_limit:
         return seed
 
@@ -694,10 +803,10 @@ def build_problem_concepts_local(
         problem_description=problem_description,
         limit=normalized_limit,
     )
-    concepts = normalize_concepts(seed + inferred, limit=normalized_limit)
+    concepts = filter_low_signal_concepts(seed + inferred, limit=normalized_limit)
     if concepts:
         return concepts
-    return normalize_concepts([problem_title], limit=max(1, normalized_limit))
+    return filter_low_signal_concepts([problem_title], limit=max(1, normalized_limit))
 
 
 def build_fallback_learning_path(

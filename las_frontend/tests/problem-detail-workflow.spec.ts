@@ -73,7 +73,10 @@ async function openWorkspace(page: Page, problemId: string) {
   await page.goto(`/problems/${problemId}`)
   await expect(page.getByTestId('problem-detail-workspace')).toBeVisible()
   await expect(page.getByTestId('workspace-overview')).toBeVisible()
+  await expect(page.getByTestId('workspace-mainline-focus')).toBeVisible()
+  await expect(page.getByTestId('workspace-next-action')).toBeVisible()
   await expect(page.getByTestId('workspace-path-summary')).toBeVisible()
+  await expect(page.getByTestId('workspace-artifacts-panel')).toBeVisible()
   await expect(page.getByTestId('current-learning-path')).toContainText(/Main path/i)
 }
 
@@ -132,7 +135,9 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(latestTurnOutcome(page)).toContainText(/Comparison/i)
     await expect(latestTurnOutcome(page)).toContainText(/Precision measures/i)
     await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
+    await expect(page.getByTestId('workspace-artifact-concept-count')).toContainText(/[1-9]/)
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+    await page.getByTestId('workspace-assets-toggle').click()
     await page.getByTestId('workspace-note-input').fill('Capture the precision and recall tradeoff before branching.')
     await page.getByTestId('save-workspace-note').click()
     await expect(page.getByTestId('workspace-notes-panel')).toContainText(/Current turn/i)
@@ -156,7 +161,7 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(latestTurnOutcome(page)).toContainText(/Comparison|Concept explanation/i)
 
     const branchCandidate = page.getByTestId('derived-concept-card').filter({
-      hasText: /threshold moves|false negatives/i,
+      hasText: /false negatives/i,
     }).first()
     await expect(branchCandidate).toBeVisible()
     await branchCandidate.getByTestId('accept-derived-concept').click()
@@ -190,6 +195,7 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/revisit|reinforce/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Needs reinforcement|Reinforcement Target/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch|Branch path/i)
+    await page.getByTestId('reinforcement-details-toggle').click()
     await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target|false negatives/i)
     await expect(page.getByTestId('workspace-reinforcement-action')).toContainText(/Do this first|Compare/i)
     await expect(page.getByTestId('reinforcement-starter-source-cue')).toContainText(/precision and recall when the threshold moves/i)
@@ -210,7 +216,8 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByRole('link', { name: 'Open Workspace' }).first().click()
     await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch/i)
-    await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/false negatives/i)
+    await page.getByTestId('reinforcement-details-toggle').click()
+    await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target/i)
     await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
     await expect(page.getByTestId('workspace-reinforcement-action')).toContainText(/Compare/i)
     await page.getByTestId('apply-reinforcement-action-template').click()
@@ -274,6 +281,47 @@ test.describe('ProblemDetail main workflow', () => {
     expect(streamAttempts).toBe(2)
     expect(refreshCalls).toBeGreaterThanOrEqual(1)
     expect(fallbackAskCalls).toBe(0)
+  })
+
+  test('Scenario 2c: Derived concept evidence renders markdown formatting', async ({ page, request }) => {
+    const session = await prepareAuthenticatedProblem(page, request)
+
+    await page.route(`**/api/problems/${session.problemId}/concept-candidates`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'candidate-markdown',
+            problem_id: session.problemId,
+            concept_text: '比例',
+            normalized_text: '比例',
+            source: 'ask',
+            learning_mode: 'exploration',
+            source_turn_id: 'turn-markdown',
+            source_turn_preview: 'PID中的比例、微分和积分是什么',
+            confidence: 0.74,
+            status: 'pending',
+            evidence_snippet:
+              '1. **简洁定义**\n- **比例（P）**：根据当前误差大小成比例地调整控制输出。\n- **积分（I）**：累积过去所有误差。',
+            merged_into_concept: null,
+            linked_model_card_id: null,
+            reviewed_at: null,
+            created_at: new Date().toISOString(),
+          },
+        ]),
+      })
+    })
+
+    await openWorkspace(page, session.problemId)
+    await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+
+    const evidence = page.getByTestId('derived-concept-evidence').first()
+    await expect(evidence).toBeVisible()
+    await expect(evidence.locator('strong').first()).toHaveText('简洁定义')
+    await expect(evidence.locator('strong').nth(1)).toHaveText('比例（P）')
+    await expect(evidence).toContainText('积分（I）')
+    await expect(evidence).not.toContainText('**简洁定义**')
   })
 
   test('Scenario 3: Branch path can return to the main path', async ({ page, request }) => {

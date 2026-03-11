@@ -25,6 +25,50 @@ async def test_model_os_extract_concepts():
     assert len(concepts) <= 5
 
 
+def test_model_os_fallback_cjk_concepts_avoid_question_fragments():
+    from app.services.model_os_service import model_os_service
+
+    concepts = model_os_service._fallback_concepts_from_problem(
+        problem_title="PID",
+        problem_description=(
+            "Question: PID中的比例、微分和积分是什么\n"
+            "Answer: 1. 简洁定义\n"
+            "- 比例（P）：根据当前误差大小成比例地调整控制输出，响应快但可能存在稳态误差。\n"
+            "- 积分（I）：累积过去所有误差，用于消除稳态误差，但可能降低系统响应速度。\n"
+            "- 微分（D）：根据误差变化率预测未来趋势，抑制超调和振荡，但对噪声敏感。"
+        ),
+        limit=5,
+    )
+
+    assert "比例" in concepts
+    assert "积分" in concepts
+    assert "微分" in concepts
+    assert "中的比例" not in concepts
+    assert "微分和积分是什么" not in concepts
+    assert "简洁定义" not in concepts
+    assert "根据当前误差大小成比例地" not in concepts
+
+
+def test_build_concept_evidence_snippet_preserves_long_answers_without_mid_sentence_cut():
+    from app.api.routes.problem_concept_registration_support import build_concept_evidence_snippet
+
+    snippet = build_concept_evidence_snippet(
+        "PID中的比例、微分和积分是什么",
+        (
+            "1. 简洁定义\n"
+            "- 比例（P）：根据当前误差大小成比例地调整控制输出，响应快但可能存在稳态误差。\n"
+            "- 积分（I）：累积过去所有误差，用于消除稳态误差，但可能降低系统响应速度。\n"
+            "- 微分（D）：根据误差变化率预测未来趋势，抑制超调和振荡，但对噪声敏感。\n"
+            "2. 关键区别\n"
+            "三者分别针对误差的当前值、历史累积和变化趋势进行补偿。"
+        ),
+    )
+
+    assert "对噪声敏感" in snippet
+    assert "历史累积和变化趋势" in snippet
+    assert not snippet.endswith("...")
+
+
 def test_model_os_rank_model_cards_prefers_direct_match():
     from app.services.model_os_service import model_os_service
 

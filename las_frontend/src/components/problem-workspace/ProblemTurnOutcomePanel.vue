@@ -1,9 +1,11 @@
 <template>
-  <section class="card turn-outcome-card" data-testid="turn-outcome-panel">
-    <h2>{{ t('problemDetail.turnResultTitle') }}</h2>
-    <p class="section-subtitle">
-      {{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}
-    </p>
+  <section :class="embedded ? 'turn-outcome-embedded' : 'card turn-outcome-card'" data-testid="turn-outcome-panel">
+    <template v-if="!embedded">
+      <h2>{{ t('problemDetail.turnResultTitle') }}</h2>
+      <p class="section-subtitle">
+        {{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}
+      </p>
+    </template>
 
     <template v-if="learningMode === 'socratic'">
       <div v-if="latestResponse && latestFeedback" class="turn-outcome-body">
@@ -128,6 +130,7 @@ const props = defineProps<{
   latestResponse?: any | null
   latestFeedback?: any | null
   latestQa?: any | null
+  embedded?: boolean
 }>()
 
 const { t } = useI18n()
@@ -200,6 +203,11 @@ const explorationActionHints = computed(() => {
 <style scoped>
 .turn-outcome-card {
   height: fit-content;
+}
+
+.turn-outcome-embedded {
+  display: grid;
+  gap: 0.55rem;
 }
 
 .turn-outcome-body {

@@ -40,13 +40,21 @@
                 </div>
               </div>
 
-              <div class="workspace-summary-grid">
-                <article class="workspace-summary-card">
+              <div class="workspace-mainline-grid">
+                <article class="workspace-summary-card workspace-mainline-card" data-testid="workspace-mainline-focus">
                   <span class="workspace-summary-label">{{ t('problemDetail.currentStepTitle') }}</span>
                   <strong>{{ workspaceFocusTitle }}</strong>
                   <p>{{ workspaceFocusDescription }}</p>
                 </article>
-                <article class="workspace-summary-card" data-testid="workspace-path-summary">
+                <article class="workspace-summary-card workspace-mainline-card workspace-next-action-card" data-testid="workspace-next-action">
+                  <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
+                  <strong>{{ workspaceNextAction }}</strong>
+                  <p>{{ learningMode === 'exploration' ? t('problemDetail.modeExplorationHint') : t('problemDetail.modeSocraticHint') }}</p>
+                </article>
+              </div>
+
+              <div class="workspace-status-strip">
+                <article class="workspace-status-pill" data-testid="workspace-path-summary">
                   <span class="workspace-summary-label">{{ t('problemDetail.currentPath') }}</span>
                   <strong>{{ workspacePathSummary }}</strong>
                   <p v-if="learningPath?.branch_reason">{{ learningPath.branch_reason }}</p>
@@ -55,17 +63,12 @@
                   </p>
                   <p v-else>{{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}</p>
                 </article>
-                <article class="workspace-summary-card">
-                  <span class="workspace-summary-label">{{ t('problemDetail.turnResultTitle') }}</span>
-                  <strong>{{ workspaceTurnSummary }}</strong>
-                  <p>{{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}</p>
+                <article class="workspace-status-pill">
+                  <span class="workspace-summary-label">{{ t('problemDetail.currentMode') }}</span>
+                  <strong>{{ formatLearningMode(learningMode) }}</strong>
+                  <p>{{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}</p>
                 </article>
-                <article class="workspace-summary-card">
-                  <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
-                  <strong>{{ workspaceNextAction }}</strong>
-                  <p>{{ learningMode === 'exploration' ? t('problemDetail.modeExplorationHint') : t('problemDetail.modeSocraticHint') }}</p>
-                </article>
-                <article class="workspace-summary-card" data-testid="workspace-review-summary">
+                <article class="workspace-status-pill" data-testid="workspace-review-summary">
                   <span class="workspace-summary-label">{{ t('problemDetail.reviewLoopTitle') }}</span>
                   <strong>{{ workspaceReviewSummary }}</strong>
                   <p>{{ workspaceReviewDescription }}</p>
@@ -74,10 +77,10 @@
 
               <div class="workspace-mode-row">
                 <div class="workspace-mode-copy">
-                  <span class="workspace-summary-label">{{ t('problemDetail.currentMode') }}</span>
-                  <strong>{{ formatLearningMode(learningMode) }}</strong>
+                  <span class="workspace-summary-label">{{ t('problemDetail.turnResultTitle') }}</span>
+                  <strong>{{ workspaceTurnSummary }}</strong>
                   <p class="section-subtitle">
-                    {{ learningMode === 'socratic' ? t('problemDetail.modeSocraticHint') : t('problemDetail.modeExplorationHint') }}
+                    {{ learningMode === 'socratic' ? t('problemDetail.turnResultSubtitleSocratic') : t('problemDetail.turnResultSubtitleExploration') }}
                   </p>
                 </div>
                 <div class="workspace-mode-toggle">
@@ -110,133 +113,137 @@
               class="card reinforcement-target-card"
               data-testid="workspace-reinforcement-target"
             >
-              <div class="reinforcement-head">
-                <div>
-                  <p class="workspace-eyebrow">{{ t('problemDetail.reinforcementTargetTitle') }}</p>
-                  <h2>{{ activeReinforcementTarget.concept_text || t('problemDetail.derivedConceptsTitle') }}</h2>
-                  <p class="section-subtitle">{{ formatReinforcementSummary(activeReinforcementEntry) }}</p>
-                </div>
-                <span class="reinforcement-priority" :class="`priority-${activeReinforcementTarget.priority || 'medium'}`">
-                  {{ t('problemDetail.needsReinforcementBadge') }}
-                </span>
-              </div>
+              <details class="reinforcement-details">
+                <summary class="reinforcement-summary" data-testid="reinforcement-details-toggle">
+                  <div>
+                    <p class="workspace-eyebrow">{{ t('problemDetail.reinforcementTargetTitle') }}</p>
+                    <strong>{{ activeReinforcementTarget.concept_text || t('problemDetail.derivedConceptsTitle') }}</strong>
+                    <p class="section-subtitle">{{ formatReinforcementSummary(activeReinforcementEntry) }}</p>
+                  </div>
+                  <span class="reinforcement-priority" :class="`priority-${activeReinforcementTarget.priority || 'medium'}`">
+                    {{ t('problemDetail.needsReinforcementBadge') }}
+                  </span>
+                </summary>
 
-              <div class="reinforcement-grid">
-                <article class="workspace-summary-card">
-                  <span class="workspace-summary-label">{{ t('problemDetail.reinforcementWorkspaceLabel') }}</span>
-                  <strong>{{ activeReinforcementTarget.problem_title || problem.title }}</strong>
-                  <p>{{ formatLearningMode(activeReinforcementEntry.origin?.learning_mode || learningMode) }}</p>
-                </article>
-                <article v-if="hasReinforcementPath(activeReinforcementTarget)" class="workspace-summary-card">
-                  <span class="workspace-summary-label">{{ t('problemDetail.reinforcementPathLabel') }}</span>
-                  <strong>{{ formatReinforcementPath(activeReinforcementTarget) }}</strong>
-                  <p>{{ t('problemDetail.reinforcementPathHint') }}</p>
-                </article>
-                <article class="workspace-summary-card">
-                  <span class="workspace-summary-label">{{ t('problemDetail.reinforcementResumeLabel') }}</span>
-                  <strong>{{ formatReinforcementResume(activeReinforcementTarget) }}</strong>
-                  <p>{{ t('problemDetail.reinforcementResumeHint') }}</p>
-                </article>
-                <article class="workspace-summary-card">
-                  <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
-                  <strong>{{ formatRecommendedAction(activeReinforcementEntry.recommended_action) }}</strong>
-                  <p>{{ t('problemDetail.reinforcementActionHint') }}</p>
-                </article>
-              </div>
+                <div class="reinforcement-details-body">
+                  <div class="reinforcement-grid">
+                    <article class="workspace-summary-card">
+                      <span class="workspace-summary-label">{{ t('problemDetail.reinforcementWorkspaceLabel') }}</span>
+                      <strong>{{ activeReinforcementTarget.problem_title || problem.title }}</strong>
+                      <p>{{ formatLearningMode(activeReinforcementEntry.origin?.learning_mode || learningMode) }}</p>
+                    </article>
+                    <article v-if="hasReinforcementPath(activeReinforcementTarget)" class="workspace-summary-card">
+                      <span class="workspace-summary-label">{{ t('problemDetail.reinforcementPathLabel') }}</span>
+                      <strong>{{ formatReinforcementPath(activeReinforcementTarget) }}</strong>
+                      <p>{{ t('problemDetail.reinforcementPathHint') }}</p>
+                    </article>
+                    <article class="workspace-summary-card">
+                      <span class="workspace-summary-label">{{ t('problemDetail.reinforcementResumeLabel') }}</span>
+                      <strong>{{ formatReinforcementResume(activeReinforcementTarget) }}</strong>
+                      <p>{{ t('problemDetail.reinforcementResumeHint') }}</p>
+                    </article>
+                    <article class="workspace-summary-card">
+                      <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
+                      <strong>{{ formatRecommendedAction(activeReinforcementEntry.recommended_action) }}</strong>
+                      <p>{{ t('problemDetail.reinforcementActionHint') }}</p>
+                    </article>
+                  </div>
 
-              <article class="workspace-summary-card reinforcement-focus-card" data-testid="workspace-reinforcement-focus">
-                <span class="workspace-summary-label">{{ t('problemDetail.reinforcementFocusTitle') }}</span>
-                <strong>{{ reinforcementFocusTitle }}</strong>
-                <p>{{ reinforcementFocusDescription }}</p>
-                <p v-if="reinforcementFocusTurnPreview" class="reinforcement-preview">
-                  <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-                  {{ reinforcementFocusTurnPreview }}
-                </p>
-              </article>
+                  <article class="workspace-summary-card reinforcement-focus-card" data-testid="workspace-reinforcement-focus">
+                    <span class="workspace-summary-label">{{ t('problemDetail.reinforcementFocusTitle') }}</span>
+                    <strong>{{ reinforcementFocusTitle }}</strong>
+                    <p>{{ reinforcementFocusDescription }}</p>
+                    <p v-if="reinforcementFocusTurnPreview" class="reinforcement-preview">
+                      <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                      {{ reinforcementFocusTurnPreview }}
+                    </p>
+                  </article>
 
-              <article
-                v-if="reinforcementActionTemplate"
-                class="workspace-summary-card reinforcement-action-card"
-                data-testid="workspace-reinforcement-action"
-              >
-                <span class="workspace-summary-label">{{ t('problemDetail.reinforcementActionTitle') }}</span>
-                <strong>{{ reinforcementActionTemplate.title }}</strong>
-                <p>{{ reinforcementActionTemplate.description }}</p>
-                <div
-                  v-if="reinforcementActionTemplate.sourceCue"
-                  class="reinforcement-action-source"
-                  data-testid="reinforcement-starter-source-cue"
-                >
-                  <strong>{{ t('problemDetail.reinforcementStarterGroundingLabel') }}</strong>
-                  <p>{{ reinforcementActionTemplate.sourceCue }}</p>
-                </div>
-                <div
-                  v-if="reinforcementActionTemplate.sourceClue"
-                  class="reinforcement-action-source"
-                  data-testid="reinforcement-starter-source-clue"
-                >
-                  <strong>{{ t('problemDetail.reinforcementStarterClueLabel') }}</strong>
-                  <p>{{ reinforcementActionTemplate.sourceClue }}</p>
-                </div>
-                <div
-                  v-if="reinforcementActionTemplate.likelyConfusion"
-                  class="reinforcement-action-source reinforcement-action-warning"
-                  data-testid="reinforcement-likely-confusion"
-                >
-                  <strong>{{ t('problemDetail.reinforcementLikelyConfusionLabel') }}</strong>
-                  <p>{{ reinforcementActionTemplate.likelyConfusion }}</p>
-                </div>
-                <div
-                  v-if="reinforcementActionTemplate.evidenceCue"
-                  class="reinforcement-action-source"
-                  data-testid="reinforcement-starter-evidence"
-                >
-                  <strong>{{ t('problemDetail.reinforcementStarterEvidenceLabel') }}</strong>
-                  <p>{{ reinforcementActionTemplate.evidenceCue }}</p>
-                </div>
-                <div class="reinforcement-action-starter">
-                  <strong>{{ t('problemDetail.reinforcementStarterLabel') }}</strong>
-                  <p>{{ reinforcementActionTemplate.starter }}</p>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-primary"
-                  data-testid="apply-reinforcement-action-template"
-                  @click="applyReinforcementActionTemplate"
-                >
-                  {{ t('problemDetail.useReinforcementStarter') }}
-                </button>
-              </article>
+                  <article
+                    v-if="reinforcementActionTemplate"
+                    class="workspace-summary-card reinforcement-action-card"
+                    data-testid="workspace-reinforcement-action"
+                  >
+                    <span class="workspace-summary-label">{{ t('problemDetail.reinforcementActionTitle') }}</span>
+                    <strong>{{ reinforcementActionTemplate.title }}</strong>
+                    <p>{{ reinforcementActionTemplate.description }}</p>
+                    <div
+                      v-if="reinforcementActionTemplate.sourceCue"
+                      class="reinforcement-action-source"
+                      data-testid="reinforcement-starter-source-cue"
+                    >
+                      <strong>{{ t('problemDetail.reinforcementStarterGroundingLabel') }}</strong>
+                      <p>{{ reinforcementActionTemplate.sourceCue }}</p>
+                    </div>
+                    <div
+                      v-if="reinforcementActionTemplate.sourceClue"
+                      class="reinforcement-action-source"
+                      data-testid="reinforcement-starter-source-clue"
+                    >
+                      <strong>{{ t('problemDetail.reinforcementStarterClueLabel') }}</strong>
+                      <p>{{ reinforcementActionTemplate.sourceClue }}</p>
+                    </div>
+                    <div
+                      v-if="reinforcementActionTemplate.likelyConfusion"
+                      class="reinforcement-action-source reinforcement-action-warning"
+                      data-testid="reinforcement-likely-confusion"
+                    >
+                      <strong>{{ t('problemDetail.reinforcementLikelyConfusionLabel') }}</strong>
+                      <p>{{ reinforcementActionTemplate.likelyConfusion }}</p>
+                    </div>
+                    <div
+                      v-if="reinforcementActionTemplate.evidenceCue"
+                      class="reinforcement-action-source"
+                      data-testid="reinforcement-starter-evidence"
+                    >
+                      <strong>{{ t('problemDetail.reinforcementStarterEvidenceLabel') }}</strong>
+                      <p>{{ reinforcementActionTemplate.evidenceCue }}</p>
+                    </div>
+                    <div class="reinforcement-action-starter">
+                      <strong>{{ t('problemDetail.reinforcementStarterLabel') }}</strong>
+                      <p>{{ reinforcementActionTemplate.starter }}</p>
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-primary"
+                      data-testid="apply-reinforcement-action-template"
+                      @click="applyReinforcementActionTemplate"
+                    >
+                      {{ t('problemDetail.useReinforcementStarter') }}
+                    </button>
+                  </article>
 
-              <p
-                v-if="activeReinforcementTarget.source_turn_preview && activeReinforcementTarget.source_turn_preview !== reinforcementFocusTurnPreview"
-                class="reinforcement-preview"
-              >
-                <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-                {{ activeReinforcementTarget.source_turn_preview }}
-              </p>
+                  <p
+                    v-if="activeReinforcementTarget.source_turn_preview && activeReinforcementTarget.source_turn_preview !== reinforcementFocusTurnPreview"
+                    class="reinforcement-preview"
+                  >
+                    <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                    {{ activeReinforcementTarget.source_turn_preview }}
+                  </p>
 
-              <div class="reinforcement-actions">
-                <button
-                  v-if="canSwitchToReinforcementPath"
-                  type="button"
-                  class="btn btn-primary"
-                  data-testid="switch-to-reinforcement-path"
-                  @click="switchToReinforcementPath"
-                >
-                  {{ t('problemDetail.switchToReinforcementPath') }}
-                </button>
-                <router-link
-                  v-if="activeReinforcementEntry.model_card_id"
-                  :to="`/model-cards/${activeReinforcementEntry.model_card_id}`"
-                  class="btn btn-secondary"
-                >
-                  {{ t('problemDetail.openModelCard') }}
-                </router-link>
-                <router-link to="/reviews" class="btn btn-secondary">
-                  {{ t('modelCards.openReviewHub') }}
-                </router-link>
-              </div>
+                  <div class="reinforcement-actions">
+                    <button
+                      v-if="canSwitchToReinforcementPath"
+                      type="button"
+                      class="btn btn-primary"
+                      data-testid="switch-to-reinforcement-path"
+                      @click="switchToReinforcementPath"
+                    >
+                      {{ t('problemDetail.switchToReinforcementPath') }}
+                    </button>
+                    <router-link
+                      v-if="activeReinforcementEntry.model_card_id"
+                      :to="`/model-cards/${activeReinforcementEntry.model_card_id}`"
+                      class="btn btn-secondary"
+                    >
+                      {{ t('problemDetail.openModelCard') }}
+                    </router-link>
+                    <router-link to="/reviews" class="btn btn-secondary">
+                      {{ t('modelCards.openReviewHub') }}
+                    </router-link>
+                  </div>
+                </div>
+              </details>
             </section>
 
             <section class="card current-step-section">
@@ -538,55 +545,100 @@
           </div>
 
           <aside class="workspace-side-column workspace-side-stack">
-            <ProblemTurnOutcomePanel
-              :learning-mode="learningMode"
-              :latest-response="latestResponse"
-              :latest-feedback="latestFeedback"
-              :latest-qa="latestQA"
-            />
-            <ProblemDerivedConceptsPanel
-              :candidates="conceptCandidates"
-              :loading="candidateLoading"
-              :current-turn-id="activeConceptTurnId"
-              :focus-candidate-id="reinforcementFocusCandidateId"
-              :focus-turn-id="reinforcementFocusTurnId"
-              :focus-concept-text="activeReinforcementTarget?.concept_text || null"
-              :merge-targets="conceptMergeTargets"
-              :action-pending-id="candidateSubmittingId"
-              :handoff-pending-id="handoffSubmittingId"
-              :scheduled-model-card-ids="scheduledModelCardIds"
-              :scheduled-reviews-by-model-card-id="scheduledReviewsByModelCardId"
-              @accept="acceptCandidate"
-              @reject="rejectCandidate"
-              @postpone="postponeCandidate"
-              @merge="mergeCandidate"
-              @rollback="rollbackConcept"
-              @promote="promoteCandidateToModelCard"
-              @open-card="openModelCard"
-              @schedule-review="scheduleCandidateReview"
-            />
-            <ProblemDerivedPathsPanel
-              :candidates="pathCandidates"
-              :loading="pathCandidateLoading"
-              :submitting-id="pathCandidateSubmittingId"
-              @decide="handlePathCandidateDecision"
-            />
-            <ProblemWorkspaceNotesPanel
-              :notes="workspaceNotes"
-              :saving="noteSaving"
-              :current-turn-id="activeConceptTurnId"
-              @save="saveWorkspaceNote"
-              @delete="deleteWorkspaceNote"
-            />
-            <ProblemWorkspaceResourcesPanel
-              :resources="workspaceResources"
-              :saving="resourceSaving"
-              :interpreting-id="resourceInterpretingId"
-              :current-turn-id="activeConceptTurnId"
-              @save="saveWorkspaceResource"
-              @delete="deleteWorkspaceResource"
-              @interpret="interpretWorkspaceResource"
-            />
+            <section class="card workspace-artifacts-card" data-testid="workspace-artifacts-panel">
+              <div class="workspace-artifacts-head">
+                <div>
+                  <p class="workspace-eyebrow">{{ t('problemDetail.workspaceArtifactsTitle') }}</p>
+                  <h2>{{ t('problemDetail.turnResultTitle') }}</h2>
+                  <p class="section-subtitle">{{ t('problemDetail.workspaceArtifactsSubtitle') }}</p>
+                </div>
+              </div>
+              <div class="workspace-artifacts-strip">
+                <article class="workspace-status-pill" data-testid="workspace-artifact-turn-summary">
+                  <span class="workspace-summary-label">{{ t('problemDetail.turnResultTitle') }}</span>
+                  <strong>{{ workspaceTurnSummary }}</strong>
+                  <p>{{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}</p>
+                </article>
+                <article class="workspace-status-pill" data-testid="workspace-artifact-concept-count">
+                  <span class="workspace-summary-label">{{ t('problemDetail.derivedConceptsTitle') }}</span>
+                  <strong>{{ currentTurnConceptCandidates.length }}</strong>
+                  <p>{{ t('problemDetail.workspaceArtifactConceptCountHint') }}</p>
+                </article>
+                <article class="workspace-status-pill" data-testid="workspace-artifact-path-count">
+                  <span class="workspace-summary-label">{{ t('problemDetail.pathCandidatesTitle') }}</span>
+                  <strong>{{ currentTurnPathCandidates.length }}</strong>
+                  <p>{{ t('problemDetail.workspaceArtifactPathCountHint') }}</p>
+                </article>
+              </div>
+              <div class="workspace-artifacts-sections">
+                <ProblemTurnOutcomePanel
+                  embedded
+                  :learning-mode="learningMode"
+                  :latest-response="latestResponse"
+                  :latest-feedback="latestFeedback"
+                  :latest-qa="latestQA"
+                />
+                <ProblemDerivedConceptsPanel
+                  embedded
+                  collapse-older
+                  :candidates="conceptCandidates"
+                  :loading="candidateLoading"
+                  :current-turn-id="activeConceptTurnId"
+                  :focus-candidate-id="reinforcementFocusCandidateId"
+                  :focus-turn-id="reinforcementFocusTurnId"
+                  :focus-concept-text="activeReinforcementTarget?.concept_text || null"
+                  :merge-targets="conceptMergeTargets"
+                  :action-pending-id="candidateSubmittingId"
+                  :handoff-pending-id="handoffSubmittingId"
+                  :scheduled-model-card-ids="scheduledModelCardIds"
+                  :scheduled-reviews-by-model-card-id="scheduledReviewsByModelCardId"
+                  @accept="acceptCandidate"
+                  @reject="rejectCandidate"
+                  @postpone="postponeCandidate"
+                  @merge="mergeCandidate"
+                  @rollback="rollbackConcept"
+                  @promote="promoteCandidateToModelCard"
+                  @open-card="openModelCard"
+                  @schedule-review="scheduleCandidateReview"
+                />
+                <ProblemDerivedPathsPanel
+                  embedded
+                  collapse-older
+                  :candidates="pathCandidates"
+                  :current-turn-id="activeConceptTurnId"
+                  :loading="pathCandidateLoading"
+                  :submitting-id="pathCandidateSubmittingId"
+                  @decide="handlePathCandidateDecision"
+                />
+              </div>
+            </section>
+            <details class="workspace-assets-details" data-testid="workspace-assets-panel">
+              <summary class="workspace-assets-summary" data-testid="workspace-assets-toggle">
+                <div>
+                  <span class="workspace-summary-label">{{ t('nav.notes') }} · {{ t('nav.resources') }}</span>
+                  <strong>{{ t('problemDetail.workspaceAssetsTitle') }}</strong>
+                  <p class="section-subtitle">{{ t('problemDetail.workspaceAssetsSubtitle') }}</p>
+                </div>
+              </summary>
+              <div class="workspace-assets-stack">
+                <ProblemWorkspaceNotesPanel
+                  :notes="workspaceNotes"
+                  :saving="noteSaving"
+                  :current-turn-id="activeConceptTurnId"
+                  @save="saveWorkspaceNote"
+                  @delete="deleteWorkspaceNote"
+                />
+                <ProblemWorkspaceResourcesPanel
+                  :resources="workspaceResources"
+                  :saving="resourceSaving"
+                  :interpreting-id="resourceInterpretingId"
+                  :current-turn-id="activeConceptTurnId"
+                  @save="saveWorkspaceResource"
+                  @delete="deleteWorkspaceResource"
+                  @interpret="interpretWorkspaceResource"
+                />
+              </div>
+            </details>
           </aside>
         </div>
       </div>
@@ -703,6 +755,14 @@ const latestDerivedConceptCount = computed(() => {
     return (latestQA.value?.accepted_concepts?.length || 0) + (latestQA.value?.pending_concepts?.length || 0)
   }
   return (latestResponse.value?.accepted_concepts?.length || 0) + (latestResponse.value?.pending_concepts?.length || 0)
+})
+const currentTurnConceptCandidates = computed(() => {
+  if (!activeConceptTurnId.value) return []
+  return conceptCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(activeConceptTurnId.value))
+})
+const currentTurnPathCandidates = computed(() => {
+  if (!activeConceptTurnId.value) return []
+  return pathCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(activeConceptTurnId.value))
 })
 const {
   workspacePathSummary,
@@ -1113,6 +1173,12 @@ onMounted(async () => {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.workspace-mainline-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
 .workspace-summary-card {
   padding: 0.9rem 1rem;
   border-radius: 12px;
@@ -1131,6 +1197,44 @@ onMounted(async () => {
   font-size: 0.9rem;
 }
 
+.workspace-mainline-card {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.workspace-mainline-card strong {
+  font-size: 1.02rem;
+}
+
+.workspace-next-action-card {
+  border-color: rgba(74, 222, 128, 0.2);
+  background: rgba(74, 222, 128, 0.06);
+}
+
+.workspace-status-strip {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.workspace-status-pill {
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.015);
+  display: grid;
+  gap: 0.22rem;
+}
+
+.workspace-status-pill strong {
+  line-height: 1.3;
+}
+
+.workspace-status-pill p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
 .workspace-mode-row {
   display: flex;
   justify-content: space-between;
@@ -1144,6 +1248,29 @@ onMounted(async () => {
 .reinforcement-target-card {
   border-color: rgba(248, 113, 113, 0.28);
   background: rgba(120, 24, 24, 0.16);
+}
+
+.reinforcement-details {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.reinforcement-summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.reinforcement-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reinforcement-details-body {
+  display: grid;
+  gap: 0.9rem;
 }
 
 .reinforcement-head {
@@ -1190,6 +1317,37 @@ onMounted(async () => {
   gap: 0.65rem;
   flex-wrap: wrap;
   margin-top: 0.85rem;
+}
+
+.workspace-assets-details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.9rem 1rem;
+}
+
+.workspace-assets-summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.workspace-assets-summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-assets-summary strong {
+  display: block;
+  line-height: 1.35;
+}
+
+.workspace-assets-summary p {
+  margin-top: 0.25rem;
+}
+
+.workspace-assets-stack {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.9rem;
 }
 
 .reinforcement-focus-card {

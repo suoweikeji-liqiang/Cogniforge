@@ -753,6 +753,127 @@ async def test_problem_ask_updates_candidates_and_logs_event(client, db_session,
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_filters_low_signal_concept_candidates(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="PID", description="理解 PID 的比例、积分和微分")
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "1. 简洁定义\n"
+            "- 比例（P）：根据当前误差大小成比例地调整控制输出，响应快但可能存在稳态误差。\n"
+            "- 积分（I）：累积过去所有误差，用于消除稳态误差，但可能降低系统响应速度。\n"
+            "- 微分（D）：根据误差变化率预测未来趋势，抑制超调和振荡，但对噪声敏感。"
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "中的比例",
+            "微分和积分是什么",
+            "简洁定义",
+            "比例",
+            "根据当前误差大小成比例地",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "PID中的比例、微分和积分是什么",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    turn_candidates = {item["name"] for item in body["derived_candidates"]}
+
+    assert "比例" in turn_candidates
+    assert "中的比例" not in turn_candidates
+    assert "微分和积分是什么" not in turn_candidates
+    assert "简洁定义" not in turn_candidates
+    assert "根据当前误差大小成比例地" not in turn_candidates
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/concept-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    stored_turn_candidates = [
+        item
+        for item in candidates_response.json()
+        if item["source_turn_id"] == body["turn_id"]
+    ]
+    stored_turn_candidate_names = {item["concept_text"] for item in stored_turn_candidates}
+    assert "比例" in stored_turn_candidate_names
+    assert "中的比例" not in stored_turn_candidate_names
+    assert "微分和积分是什么" not in stored_turn_candidate_names
+    assert "简洁定义" not in stored_turn_candidate_names
+    assert "根据当前误差大小成比例地" not in stored_turn_candidate_names
+    ratio_candidate = next(item for item in stored_turn_candidates if item["concept_text"] == "比例")
+    assert "积分（I）" in ratio_candidate["evidence_snippet"]
+    assert "对噪声敏感" in ratio_candidate["evidence_snippet"]
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_caps_exploration_concept_candidates_to_three(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="PID tuning", description="Compare control terms")
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "Proportional control reacts to the current error, integral control accumulates past error, "
+            "derivative control damps fast changes, feedforward anticipates disturbances, and anti-windup "
+            "keeps the integral term from saturating."
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Proportional control",
+            "Integral control",
+            "Derivative control",
+            "Feedforward control",
+            "Anti-windup",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "How do proportional, integral, derivative, feedforward, and anti-windup compare?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert len(body["derived_candidates"]) == 3
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/concept-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    stored_turn_candidates = [
+        item
+        for item in candidates_response.json()
+        if item["source_turn_id"] == body["turn_id"]
+    ]
+    assert len(stored_turn_candidates) == 3
+
+
+@pytest.mark.asyncio
 async def test_problem_ask_returns_structured_exploration_artifacts(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 

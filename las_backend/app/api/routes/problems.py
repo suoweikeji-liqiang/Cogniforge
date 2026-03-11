@@ -187,6 +187,11 @@ async def _resolve_fallback_value(fallback):
     return value
 
 
+def _exploration_concept_candidate_limit() -> int:
+    configured_limit = int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)
+    return max(1, min(3, configured_limit))
+
+
 async def _complete_exploration_learning_turn(
     *,
     db: AsyncSession,
@@ -223,10 +228,14 @@ async def _complete_exploration_learning_turn(
                 f"Current step concept: {step_concept}\n"
                 f"Current step description: {step_description}"
             ),
-            limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
+            limit=_exploration_concept_candidate_limit(),
         ),
         fallback=lambda: [step_concept],
         low_priority=True,
+    )
+    ask_concepts = model_os_service.filter_low_signal_concepts(
+        ask_concepts,
+        limit=_exploration_concept_candidate_limit(),
     )
 
     db_turn = ProblemTurn(
@@ -249,6 +258,7 @@ async def _complete_exploration_learning_turn(
         answer_type=answer_type,
         candidate_concepts=[*(problem.associated_concepts or []), *ask_concepts, step_concept],
     )
+    question_concepts = model_os_service.filter_low_signal_concepts(question_concepts, limit=2)
     filtered_ask_concepts = _filter_grounded_ask_concepts(
         question=payload.question,
         answer=answer,
@@ -256,11 +266,15 @@ async def _complete_exploration_learning_turn(
         question_concepts=question_concepts,
         step_concept=step_concept,
     )
+    filtered_ask_concepts = model_os_service.filter_low_signal_concepts(
+        filtered_ask_concepts,
+        limit=_exploration_concept_candidate_limit(),
+    )
     # Candidate artifacts should prefer concepts grounded in the answer itself,
     # then backfill with question targets when there is remaining budget.
     candidate_concepts = model_os_service.normalize_concepts(
         [*filtered_ask_concepts, *question_concepts],
-        limit=max(3, int(settings.PROBLEM_CONCEPT_MAX_CANDIDATES_PER_TURN)),
+        limit=_exploration_concept_candidate_limit(),
     ) or [step_concept]
     accepted_concepts, pending_concepts = await _register_problem_concept_candidates(
         db=db,

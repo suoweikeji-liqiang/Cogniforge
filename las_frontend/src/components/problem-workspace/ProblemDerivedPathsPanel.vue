@@ -1,73 +1,151 @@
 <template>
-  <section class="card derived-paths-card" data-testid="path-candidates-panel">
-    <h2>{{ t('problemDetail.pathCandidatesTitle') }}</h2>
-    <p class="section-subtitle">{{ t('problemDetail.pathCandidatesSubtitle') }}</p>
+  <section :class="embedded ? 'derived-paths-embedded' : 'card derived-paths-card'" data-testid="path-candidates-panel">
+    <template v-if="!embedded">
+      <h2>{{ t('problemDetail.pathCandidatesTitle') }}</h2>
+      <p class="section-subtitle">{{ t('problemDetail.pathCandidatesSubtitle') }}</p>
+    </template>
 
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     <p v-else-if="!candidates.length" class="empty">{{ t('problemDetail.noPathCandidates') }}</p>
-    <div v-else class="candidate-list">
-      <article
-        v-for="candidate in sortedCandidates"
-        :key="candidate.id"
-        class="candidate-item"
-        :class="`candidate-${candidate.status}`"
-        data-testid="path-candidate-card"
-      >
-        <div class="candidate-head">
-          <strong>{{ candidate.title }}</strong>
-          <span class="candidate-status">{{ formatPathCandidateStatus(candidate.status) }}</span>
-          <span class="candidate-source">{{ formatLearningMode(candidate.learning_mode) }}</span>
-          <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
-        </div>
-        <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
-        <p class="candidate-meta">
-          <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
-          {{ formatInsertionBehavior(candidate.recommended_insertion) }}
-        </p>
-        <p v-if="candidate.selected_insertion" class="candidate-meta">
-          <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
-          {{ formatInsertionBehavior(candidate.selected_insertion) }}
-        </p>
-
-        <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="submittingId === candidate.id"
-            data-testid="path-candidate-insert-main"
-            @click="emit('decide', { candidateId: candidate.id, action: 'insert_before_current_main' })"
-          >
-            {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="submittingId === candidate.id"
-            data-testid="path-candidate-save-branch"
-            @click="emit('decide', { candidateId: candidate.id, action: 'save_as_side_branch' })"
-          >
-            {{ t('problemDetail.pathCandidateSaveAsBranch') }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="submittingId === candidate.id"
-            data-testid="path-candidate-bookmark"
-            @click="emit('decide', { candidateId: candidate.id, action: 'bookmark_for_later' })"
-          >
-            {{ t('problemDetail.pathCandidateBookmark') }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="submittingId === candidate.id"
-            data-testid="path-candidate-dismiss"
-            @click="emit('decide', { candidateId: candidate.id, action: 'dismiss' })"
-          >
-            {{ t('problemDetail.pathCandidateDismiss') }}
-          </button>
-        </div>
-      </article>
+    <div v-else class="candidate-groups">
+      <template v-for="group in candidateGroups" :key="group.key">
+        <details
+          v-if="collapseOlder && group.key === 'older'"
+          class="candidate-group candidate-group-collapsed"
+          data-testid="path-candidates-older"
+        >
+          <summary class="group-title candidate-group-summary">{{ group.title }} ({{ group.items.length }})</summary>
+          <div class="candidate-list">
+            <article
+              v-for="candidate in group.items"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="`candidate-${candidate.status}`"
+              data-testid="path-candidate-card"
+            >
+              <div class="candidate-head">
+                <strong>{{ candidate.title }}</strong>
+                <span class="candidate-status">{{ formatPathCandidateStatus(candidate.status) }}</span>
+                <span class="candidate-source">{{ formatLearningMode(candidate.learning_mode) }}</span>
+                <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
+              </div>
+              <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+              </p>
+              <p v-if="candidate.selected_insertion" class="candidate-meta">
+                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.selected_insertion) }}
+              </p>
+              <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-insert-main"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'insert_before_current_main' })"
+                >
+                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-save-branch"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'save_as_side_branch' })"
+                >
+                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-bookmark"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'bookmark_for_later' })"
+                >
+                  {{ t('problemDetail.pathCandidateBookmark') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-dismiss"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'dismiss' })"
+                >
+                  {{ t('problemDetail.pathCandidateDismiss') }}
+                </button>
+              </div>
+            </article>
+          </div>
+        </details>
+        <section v-else class="candidate-group">
+          <h3 v-if="group.title" class="group-title">{{ group.title }}</h3>
+          <div class="candidate-list">
+            <article
+              v-for="candidate in group.items"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="`candidate-${candidate.status}`"
+              data-testid="path-candidate-card"
+            >
+              <div class="candidate-head">
+                <strong>{{ candidate.title }}</strong>
+                <span class="candidate-status">{{ formatPathCandidateStatus(candidate.status) }}</span>
+                <span class="candidate-source">{{ formatLearningMode(candidate.learning_mode) }}</span>
+                <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
+              </div>
+              <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+              </p>
+              <p v-if="candidate.selected_insertion" class="candidate-meta">
+                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                {{ formatInsertionBehavior(candidate.selected_insertion) }}
+              </p>
+              <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-insert-main"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'insert_before_current_main' })"
+                >
+                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-save-branch"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'save_as_side_branch' })"
+                >
+                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-bookmark"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'bookmark_for_later' })"
+                >
+                  {{ t('problemDetail.pathCandidateBookmark') }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="submittingId === candidate.id"
+                  data-testid="path-candidate-dismiss"
+                  @click="emit('decide', { candidateId: candidate.id, action: 'dismiss' })"
+                >
+                  {{ t('problemDetail.pathCandidateDismiss') }}
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+      </template>
     </div>
   </section>
 </template>
@@ -80,6 +158,9 @@ const props = defineProps<{
   candidates: any[]
   loading?: boolean
   submittingId?: string | null
+  currentTurnId?: string | null
+  embedded?: boolean
+  collapseOlder?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -103,6 +184,25 @@ const sortedCandidates = computed(() => {
     if (leftStatus !== rightStatus) return leftStatus - rightStatus
     return String(right.created_at || '').localeCompare(String(left.created_at || ''))
   })
+})
+
+const isCurrentTurnCandidate = (candidate: any) => Boolean(props.currentTurnId && candidate.source_turn_id === props.currentTurnId)
+
+const candidateGroups = computed(() => {
+  if (!props.currentTurnId) {
+    return [{ key: 'all', title: '', items: sortedCandidates.value }]
+  }
+
+  const current = sortedCandidates.value.filter((candidate) => isCurrentTurnCandidate(candidate))
+  const older = sortedCandidates.value.filter((candidate) => !isCurrentTurnCandidate(candidate))
+  const groups = []
+  if (current.length) {
+    groups.push({ key: 'current', title: t('problemDetail.currentTurnPaths'), items: current })
+  }
+  if (older.length) {
+    groups.push({ key: 'older', title: t('problemDetail.earlierPathCandidates'), items: older })
+  }
+  return groups
 })
 
 const formatLearningMode = (mode: string | undefined | null) => {
@@ -136,11 +236,45 @@ const formatInsertionBehavior = (action: string | undefined | null) => {
   height: fit-content;
 }
 
+.derived-paths-embedded {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .section-subtitle,
 .candidate-meta,
 .candidate-source,
 .candidate-evidence {
   color: var(--text-muted);
+}
+
+.candidate-groups {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.candidate-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.candidate-group-collapsed {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 0.75rem;
+}
+
+.group-title {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.candidate-group-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.candidate-group-summary::-webkit-details-marker {
+  display: none;
 }
 
 .candidate-list {

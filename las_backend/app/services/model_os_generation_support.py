@@ -105,7 +105,7 @@ Return ONLY a JSON array of strings, e.g.:
     if isinstance(structured_result, dict):
         structured_result = structured_result.get("concepts", [])
     if isinstance(structured_result, list):
-        normalized = self.normalize_concepts(
+        normalized = self.filter_low_signal_concepts(
             [str(item) for item in structured_result],
             limit=normalized_limit,
         )
@@ -119,7 +119,7 @@ Return ONLY a JSON array of strings, e.g.:
             parsed = parsed.get("concepts", [])
         if not isinstance(parsed, list):
             return []
-        return self.normalize_concepts([str(item) for item in parsed], limit=normalized_limit)
+        return self.filter_low_signal_concepts([str(item) for item in parsed], limit=normalized_limit)
     except json.JSONDecodeError:
         return []
 

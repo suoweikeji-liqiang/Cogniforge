@@ -1,201 +1,326 @@
 <template>
-  <section class="card derived-concepts-card" data-testid="derived-concepts-panel">
-    <h2>{{ t('problemDetail.derivedConceptsTitle') }}</h2>
-    <p class="section-subtitle">{{ t('problemDetail.derivedConceptsSubtitle') }}</p>
+  <section :class="embedded ? 'derived-concepts-embedded' : 'card derived-concepts-card'" data-testid="derived-concepts-panel">
+    <template v-if="!embedded">
+      <h2>{{ t('problemDetail.derivedConceptsTitle') }}</h2>
+      <p class="section-subtitle">{{ t('problemDetail.derivedConceptsSubtitle') }}</p>
+    </template>
 
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
     <p v-else-if="!sortedCandidates.length" class="empty">{{ t('problemDetail.noConceptCandidates') }}</p>
     <div v-else class="candidate-groups">
-      <section
-        v-for="group in candidateGroups"
-        :key="group.key"
-        class="candidate-group"
-      >
-        <h3 v-if="group.title" class="group-title">{{ group.title }}</h3>
-        <div class="candidate-list">
-          <article
-            v-for="candidate in group.items"
-            :key="candidate.id"
-            class="candidate-item"
-            :class="[
-              `candidate-${candidate.status}`,
-              {
-                'candidate-current': isCurrentTurnCandidate(candidate),
-                'candidate-needs-reinforcement': needsReinforcement(candidate),
-                'candidate-focus-target': isFocusTarget(candidate),
-              },
-            ]"
-            :data-testid="isFocusTarget(candidate) ? 'derived-concept-focus-target' : 'derived-concept-card'"
-          >
-            <div class="candidate-head">
-              <strong>{{ candidate.concept_text }}</strong>
-              <span v-if="isFocusTarget(candidate)" class="handoff-badge handoff-badge-alert">
-                {{ t('problemDetail.reinforcementFocusBadge') }}
-              </span>
-              <span class="candidate-status">{{ formatCandidateStatus(candidate.status) }}</span>
-              <span class="candidate-mode">{{ formatLearningMode(candidate.learning_mode) }}</span>
-              <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
-            </div>
-
-            <p class="candidate-meta">
-              <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
-              {{ formatCandidateSource(candidate.source) }}
-            </p>
-            <p class="candidate-meta">
-              <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-              {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
-            </p>
-            <p v-if="candidate.evidence_snippet" class="candidate-evidence">
-              <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
-              {{ candidate.evidence_snippet }}
-            </p>
-            <p v-if="candidate.merged_into_concept" class="candidate-meta">
-              <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
-              {{ candidate.merged_into_concept }}
-            </p>
-
-            <div v-if="canModerate(candidate)" class="candidate-actions">
-              <button
-                type="button"
-                class="btn btn-primary"
-                :disabled="actionPendingId === candidate.id"
-                data-testid="accept-derived-concept"
-                @click="emit('accept', candidate.id)"
-              >
-                {{ t('problemDetail.acceptCandidate') }}
-              </button>
-              <button
-                type="button"
-                class="btn btn-secondary"
-                :disabled="actionPendingId === candidate.id"
-                data-testid="reject-derived-concept"
-                @click="emit('reject', candidate.id)"
-              >
-                {{ t('problemDetail.rejectCandidate') }}
-              </button>
-              <button
-                v-if="candidate.status !== 'postponed'"
-                type="button"
-                class="btn btn-secondary"
-                :disabled="actionPendingId === candidate.id"
-                data-testid="postpone-derived-concept"
-                @click="emit('postpone', candidate.id)"
-              >
-                {{ t('problemDetail.postponeCandidate') }}
-              </button>
-            </div>
-
-            <div v-if="canMerge(candidate)" class="candidate-merge-row">
-              <select
-                v-model="selectedMergeTargets[candidate.id]"
-                class="merge-select"
-                :disabled="actionPendingId === candidate.id"
-                data-testid="merge-derived-concept-target"
-              >
-                <option value="">{{ t('problemDetail.mergeTargetPlaceholder') }}</option>
-                <option
-                  v-for="target in mergeTargetsFor(candidate)"
-                  :key="`${candidate.id}-${target}`"
-                  :value="target"
-                >
-                  {{ target }}
-                </option>
-              </select>
-              <button
-                type="button"
-                class="btn btn-secondary"
-                :disabled="actionPendingId === candidate.id || !selectedMergeTargets[candidate.id]"
-                data-testid="merge-derived-concept"
-                @click="emitMerge(candidate.id)"
-              >
-                {{ t('problemDetail.mergeCandidate') }}
-              </button>
-            </div>
-
-            <div v-if="candidate.status === 'accepted'" class="candidate-actions">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                :disabled="actionPendingId === candidate.id"
-                data-testid="rollback-derived-concept"
-                @click="emit('rollback', { candidateId: candidate.id, conceptText: candidate.concept_text })"
-              >
-                {{ t('problemDetail.rollbackConcept') }}
-              </button>
-            </div>
-
-            <div v-if="['accepted', 'merged'].includes(candidate.status)" class="candidate-handoff">
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
-                {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
-              </p>
-              <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
-                <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
-                {{ formatReviewSchedule(candidate) }}
-              </p>
-              <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
-                <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
-                {{ formatRecallConsequence(candidate) }}
-              </p>
-              <div
-                v-if="needsReinforcement(candidate)"
-                class="candidate-reinforcement-panel"
-                data-testid="derived-concept-needs-reinforcement"
-              >
-                <span class="handoff-badge handoff-badge-alert">{{ t('problemDetail.needsReinforcementBadge') }}</span>
-                <p class="candidate-meta candidate-review-meta">
-                  <strong>{{ t('problemDetail.reinforcementResumeLabel') }}:</strong>
-                  {{ formatReinforcementResume(candidate) }}
-                </p>
-              </div>
-              <div class="candidate-actions">
-                <button
-                  v-if="!isLinkedToModelCard(candidate)"
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="handoffPendingId === candidate.id"
-                  data-testid="promote-derived-concept"
-                  @click="emit('promote', candidate.id)"
-                >
-                  {{ t('problemDetail.promoteConceptToModelCard') }}
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="handoffPendingId === candidate.id"
-                  data-testid="open-derived-concept-model-card"
-                  @click="emit('openCard', candidate.linked_model_card_id)"
-                >
-                  {{ t('problemDetail.openModelCard') }}
-                </button>
-                <button
-                  v-if="isLinkedToModelCard(candidate) && !isReviewScheduled(candidate)"
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="handoffPendingId === candidate.id"
-                  data-testid="schedule-derived-concept-review"
-                  @click="emit('scheduleReview', candidate.id)"
-                >
-                  {{ t('problemDetail.addConceptToReview') }}
-                </button>
-                <span
-                  v-if="isReviewScheduled(candidate)"
-                  class="handoff-badge"
-                  data-testid="derived-concept-review-scheduled"
-                >
-                  {{ t('problemDetail.reviewScheduled') }}
+      <template v-for="group in candidateGroups" :key="group.key">
+        <details
+          v-if="collapseOlder && group.key === 'older'"
+          class="candidate-group candidate-group-collapsed"
+          data-testid="derived-concepts-older"
+        >
+          <summary class="group-title candidate-group-summary">
+            {{ group.title }} ({{ group.items.length }})
+          </summary>
+          <div class="candidate-list">
+            <article
+              v-for="candidate in group.items"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="[
+                `candidate-${candidate.status}`,
+                {
+                  'candidate-current': isCurrentTurnCandidate(candidate),
+                  'candidate-needs-reinforcement': needsReinforcement(candidate),
+                  'candidate-focus-target': isFocusTarget(candidate),
+                },
+              ]"
+              :data-testid="isFocusTarget(candidate) ? 'derived-concept-focus-target' : 'derived-concept-card'"
+            >
+              <div class="candidate-head">
+                <strong>{{ candidate.concept_text }}</strong>
+                <span v-if="isFocusTarget(candidate)" class="handoff-badge handoff-badge-alert">
+                  {{ t('problemDetail.reinforcementFocusBadge') }}
                 </span>
+                <span class="candidate-status">{{ formatCandidateStatus(candidate.status) }}</span>
+                <span class="candidate-mode">{{ formatLearningMode(candidate.learning_mode) }}</span>
+                <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
               </div>
-            </div>
-          </article>
-        </div>
-      </section>
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
+                {{ formatCandidateSource(candidate.source) }}
+              </p>
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
+              </p>
+              <div v-if="candidate.evidence_snippet" class="candidate-evidence">
+                <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
+                <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
+              </div>
+              <p v-if="candidate.merged_into_concept" class="candidate-meta">
+                <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
+                {{ candidate.merged_into_concept }}
+              </p>
+              <div v-if="canModerate(candidate)" class="candidate-actions">
+                <button type="button" class="btn btn-primary" :disabled="actionPendingId === candidate.id" data-testid="accept-derived-concept" @click="emit('accept', candidate.id)">
+                  {{ t('problemDetail.acceptCandidate') }}
+                </button>
+                <button type="button" class="btn btn-secondary" :disabled="actionPendingId === candidate.id" data-testid="reject-derived-concept" @click="emit('reject', candidate.id)">
+                  {{ t('problemDetail.rejectCandidate') }}
+                </button>
+                <button
+                  v-if="candidate.status !== 'postponed'"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="actionPendingId === candidate.id"
+                  data-testid="postpone-derived-concept"
+                  @click="emit('postpone', candidate.id)"
+                >
+                  {{ t('problemDetail.postponeCandidate') }}
+                </button>
+              </div>
+              <div v-if="canMerge(candidate)" class="candidate-merge-row">
+                <select v-model="selectedMergeTargets[candidate.id]" class="merge-select" :disabled="actionPendingId === candidate.id" data-testid="merge-derived-concept-target">
+                  <option value="">{{ t('problemDetail.mergeTargetPlaceholder') }}</option>
+                  <option v-for="target in mergeTargetsFor(candidate)" :key="`${candidate.id}-${target}`" :value="target">
+                    {{ target }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="actionPendingId === candidate.id || !selectedMergeTargets[candidate.id]"
+                  data-testid="merge-derived-concept"
+                  @click="emitMerge(candidate.id)"
+                >
+                  {{ t('problemDetail.mergeCandidate') }}
+                </button>
+              </div>
+              <div v-if="candidate.status === 'accepted'" class="candidate-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="actionPendingId === candidate.id"
+                  data-testid="rollback-derived-concept"
+                  @click="emit('rollback', { candidateId: candidate.id, conceptText: candidate.concept_text })"
+                >
+                  {{ t('problemDetail.rollbackConcept') }}
+                </button>
+              </div>
+              <div v-if="['accepted', 'merged'].includes(candidate.status)" class="candidate-handoff">
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                  {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+                </p>
+                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                  <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                  {{ formatReviewSchedule(candidate) }}
+                </p>
+                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                  <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                  {{ formatRecallConsequence(candidate) }}
+                </p>
+                <div v-if="needsReinforcement(candidate)" class="candidate-reinforcement-panel" data-testid="derived-concept-needs-reinforcement">
+                  <span class="handoff-badge handoff-badge-alert">{{ t('problemDetail.needsReinforcementBadge') }}</span>
+                  <p class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reinforcementResumeLabel') }}:</strong>
+                    {{ formatReinforcementResume(candidate) }}
+                  </p>
+                </div>
+                <div class="candidate-actions">
+                  <button
+                    v-if="!isLinkedToModelCard(candidate)"
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="handoffPendingId === candidate.id"
+                    data-testid="promote-derived-concept"
+                    @click="emit('promote', candidate.id)"
+                  >
+                    {{ t('problemDetail.promoteConceptToModelCard') }}
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="handoffPendingId === candidate.id"
+                    data-testid="open-derived-concept-model-card"
+                    @click="emit('openCard', candidate.linked_model_card_id)"
+                  >
+                    {{ t('problemDetail.openModelCard') }}
+                  </button>
+                  <button
+                    v-if="isLinkedToModelCard(candidate) && !isReviewScheduled(candidate)"
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="handoffPendingId === candidate.id"
+                    data-testid="schedule-derived-concept-review"
+                    @click="emit('scheduleReview', candidate.id)"
+                  >
+                    {{ t('problemDetail.addConceptToReview') }}
+                  </button>
+                  <span v-if="isReviewScheduled(candidate)" class="handoff-badge" data-testid="derived-concept-review-scheduled">
+                    {{ t('problemDetail.reviewScheduled') }}
+                  </span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </details>
+        <section v-else class="candidate-group">
+          <h3 v-if="group.title" class="group-title">{{ group.title }}</h3>
+          <div class="candidate-list">
+            <article
+              v-for="candidate in group.items"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="[
+                `candidate-${candidate.status}`,
+                {
+                  'candidate-current': isCurrentTurnCandidate(candidate),
+                  'candidate-needs-reinforcement': needsReinforcement(candidate),
+                  'candidate-focus-target': isFocusTarget(candidate),
+                },
+              ]"
+              :data-testid="isFocusTarget(candidate) ? 'derived-concept-focus-target' : 'derived-concept-card'"
+            >
+              <div class="candidate-head">
+                <strong>{{ candidate.concept_text }}</strong>
+                <span v-if="isFocusTarget(candidate)" class="handoff-badge handoff-badge-alert">
+                  {{ t('problemDetail.reinforcementFocusBadge') }}
+                </span>
+                <span class="candidate-status">{{ formatCandidateStatus(candidate.status) }}</span>
+                <span class="candidate-mode">{{ formatLearningMode(candidate.learning_mode) }}</span>
+                <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
+              </div>
+
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
+                {{ formatCandidateSource(candidate.source) }}
+              </p>
+              <p class="candidate-meta">
+                <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
+              </p>
+              <div v-if="candidate.evidence_snippet" class="candidate-evidence">
+                <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
+                <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
+              </div>
+              <p v-if="candidate.merged_into_concept" class="candidate-meta">
+                <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
+                {{ candidate.merged_into_concept }}
+              </p>
+
+              <div v-if="canModerate(candidate)" class="candidate-actions">
+                <button type="button" class="btn btn-primary" :disabled="actionPendingId === candidate.id" data-testid="accept-derived-concept" @click="emit('accept', candidate.id)">
+                  {{ t('problemDetail.acceptCandidate') }}
+                </button>
+                <button type="button" class="btn btn-secondary" :disabled="actionPendingId === candidate.id" data-testid="reject-derived-concept" @click="emit('reject', candidate.id)">
+                  {{ t('problemDetail.rejectCandidate') }}
+                </button>
+                <button
+                  v-if="candidate.status !== 'postponed'"
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="actionPendingId === candidate.id"
+                  data-testid="postpone-derived-concept"
+                  @click="emit('postpone', candidate.id)"
+                >
+                  {{ t('problemDetail.postponeCandidate') }}
+                </button>
+              </div>
+
+              <div v-if="canMerge(candidate)" class="candidate-merge-row">
+                <select v-model="selectedMergeTargets[candidate.id]" class="merge-select" :disabled="actionPendingId === candidate.id" data-testid="merge-derived-concept-target">
+                  <option value="">{{ t('problemDetail.mergeTargetPlaceholder') }}</option>
+                  <option v-for="target in mergeTargetsFor(candidate)" :key="`${candidate.id}-${target}`" :value="target">
+                    {{ target }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="actionPendingId === candidate.id || !selectedMergeTargets[candidate.id]"
+                  data-testid="merge-derived-concept"
+                  @click="emitMerge(candidate.id)"
+                >
+                  {{ t('problemDetail.mergeCandidate') }}
+                </button>
+              </div>
+
+              <div v-if="candidate.status === 'accepted'" class="candidate-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  :disabled="actionPendingId === candidate.id"
+                  data-testid="rollback-derived-concept"
+                  @click="emit('rollback', { candidateId: candidate.id, conceptText: candidate.concept_text })"
+                >
+                  {{ t('problemDetail.rollbackConcept') }}
+                </button>
+              </div>
+
+              <div v-if="['accepted', 'merged'].includes(candidate.status)" class="candidate-handoff">
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                  {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+                </p>
+                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                  <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                  {{ formatReviewSchedule(candidate) }}
+                </p>
+                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                  <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                  {{ formatRecallConsequence(candidate) }}
+                </p>
+                <div v-if="needsReinforcement(candidate)" class="candidate-reinforcement-panel" data-testid="derived-concept-needs-reinforcement">
+                  <span class="handoff-badge handoff-badge-alert">{{ t('problemDetail.needsReinforcementBadge') }}</span>
+                  <p class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reinforcementResumeLabel') }}:</strong>
+                    {{ formatReinforcementResume(candidate) }}
+                  </p>
+                </div>
+                <div class="candidate-actions">
+                  <button
+                    v-if="!isLinkedToModelCard(candidate)"
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="handoffPendingId === candidate.id"
+                    data-testid="promote-derived-concept"
+                    @click="emit('promote', candidate.id)"
+                  >
+                    {{ t('problemDetail.promoteConceptToModelCard') }}
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="handoffPendingId === candidate.id"
+                    data-testid="open-derived-concept-model-card"
+                    @click="emit('openCard', candidate.linked_model_card_id)"
+                  >
+                    {{ t('problemDetail.openModelCard') }}
+                  </button>
+                  <button
+                    v-if="isLinkedToModelCard(candidate) && !isReviewScheduled(candidate)"
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="handoffPendingId === candidate.id"
+                    data-testid="schedule-derived-concept-review"
+                    @click="emit('scheduleReview', candidate.id)"
+                  >
+                    {{ t('problemDetail.addConceptToReview') }}
+                  </button>
+                  <span v-if="isReviewScheduled(candidate)" class="handoff-badge" data-testid="derived-concept-review-scheduled">
+                    {{ t('problemDetail.reviewScheduled') }}
+                  </span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </template>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import MarkdownIt from 'markdown-it'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -211,6 +336,8 @@ const props = defineProps<{
   focusCandidateId?: string | null
   focusTurnId?: string | null
   focusConceptText?: string | null
+  embedded?: boolean
+  collapseOlder?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -226,8 +353,18 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const selectedMergeTargets = ref<Record<string, string>>({})
+const evidenceMarkdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 
 const normalizeKey = (value: string | undefined | null) => String(value || '').trim().toLowerCase()
+const renderEvidenceSnippet = (value: string | undefined | null) => {
+  const source = String(value || '').trim()
+  if (!source) return ''
+  return evidenceMarkdown.render(source)
+}
 
 const isCurrentTurnCandidate = (candidate: any) => Boolean(props.currentTurnId && candidate.source_turn_id === props.currentTurnId)
 const isFocusTarget = (candidate: any) => {
@@ -427,6 +564,11 @@ const emitMerge = (candidateId: string) => {
   height: fit-content;
 }
 
+.derived-concepts-embedded {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .section-subtitle {
   color: var(--text-muted);
   margin-bottom: 0.75rem;
@@ -442,9 +584,23 @@ const emitMerge = (candidateId: string) => {
   gap: 0.5rem;
 }
 
+.candidate-group-collapsed {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 0.75rem;
+}
+
 .group-title {
   font-size: 0.92rem;
   color: var(--text-muted);
+}
+
+.candidate-group-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.candidate-group-summary::-webkit-details-marker {
+  display: none;
 }
 
 .candidate-list {
@@ -502,7 +658,24 @@ const emitMerge = (candidateId: string) => {
   margin-top: 0.45rem;
   font-size: 0.85rem;
   color: var(--text);
-  white-space: pre-wrap;
+}
+
+.candidate-evidence-body {
+  overflow-wrap: anywhere;
+}
+
+.candidate-evidence-body :deep(p),
+.candidate-evidence-body :deep(ol),
+.candidate-evidence-body :deep(ul) {
+  margin: 0.35rem 0 0;
+}
+
+.candidate-evidence-body :deep(li) {
+  margin: 0.2rem 0;
+}
+
+.candidate-evidence-body :deep(strong) {
+  color: var(--text);
 }
 
 .candidate-actions,
