@@ -128,6 +128,7 @@ def build_socratic_path_candidate_specs(
     question_kind: str,
     structured_feedback: dict,
     auto_advanced: bool,
+    context_texts: Optional[List[str]] = None,
 ) -> List[dict]:
     if auto_advanced:
         return []
@@ -146,7 +147,14 @@ def build_socratic_path_candidate_specs(
     next_question = str(structured_feedback.get("next_question") or "").strip()
     decision_reason = str(structured_feedback.get("decision_reason") or "").strip()
     joined_text = " ".join([next_question, *suggestions, *misconceptions]).casefold()
-    cjk = _contains_cjk_text(step_concept, next_question, decision_reason, *misconceptions, *suggestions)
+    cjk = _contains_cjk_text(
+        step_concept,
+        next_question,
+        decision_reason,
+        *misconceptions,
+        *suggestions,
+        *(context_texts or []),
+    )
 
     candidate_specs: List[dict] = []
     if mastery_score < 60 or misconceptions:

@@ -415,6 +415,39 @@ async def test_problem_ask_persists_turn_when_concept_candidate_persistence_fail
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_sync_route_falls_back_when_answer_is_empty(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(
+        client,
+        headers,
+        title="PID",
+        description="理解 PID 控制器中的比例、积分、微分，并说明它们和稳态误差的关系。",
+    )
+
+    async def empty_generate_with_context(*args, **kwargs):
+        return ""
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", empty_generate_with_context)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "PID 中积分项为什么能消除稳态误差？",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+    assert body["answer"].startswith("一个简洁的起点：")
+    assert "empty:ask_answer" in (body.get("fallback_reason") or "")
+
+
+@pytest.mark.asyncio
 async def test_problem_ask_stream_returns_incremental_answer_and_final_payload(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
@@ -469,6 +502,46 @@ async def test_problem_ask_stream_returns_incremental_answer_and_final_payload(c
     assert payload["mode_metadata"]["turn_source"] == "ask"
     assert payload["llm_calls"] >= 1
     assert payload["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_problem_response_fallback_localizes_pid_follow_up_and_path_candidates(client, monkeypatch):
+    from app.api.routes import problem_socratic_response_support as socratic_response_support
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(
+        client,
+        headers,
+        title="PID",
+        description="理解 PID 控制器中的比例、积分、微分，并能解释稳态误差为什么出现。",
+    )
+
+    async def failing_feedback(*args, **kwargs):
+        raise RuntimeError("force structured feedback fallback")
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", failing_feedback)
+    monkeypatch.setattr(socratic_response_support.settings, "PROBLEM_AUTO_ADVANCE_MODE", "conservative")
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={
+            "problem_id": problem["id"],
+            "user_response": "我知道积分项会累积误差，但还说不清楚边界。",
+            "learning_mode": "socratic",
+            "question_kind": "checkpoint",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["follow_up"]["question"].startswith("如果换一个边界情况")
+    assert "正确性：" in (body.get("system_feedback") or "")
+    assert body["derived_path_candidates"]
+    assert "Fill prerequisite foundations" not in body["derived_path_candidates"][0]["title"]
+    assert body["derived_path_candidates"][0]["title"].startswith("先补“")
 
 
 @pytest.mark.asyncio

@@ -446,6 +446,9 @@ def build_socratic_question_fallback(
     step_concept: str,
     question_kind: str,
     latest_feedback: Optional[Dict[str, Any]] = None,
+    problem_title: Optional[str] = None,
+    problem_description: Optional[str] = None,
+    step_description: Optional[str] = None,
 ) -> str:
     concept = str(step_concept or "this concept").strip()
     feedback = latest_feedback or {}
@@ -454,7 +457,17 @@ def build_socratic_question_fallback(
     misconceptions = feedback.get("misconceptions") or []
     if misconceptions:
         misconception = str(misconceptions[0] or "").strip()
-    has_cjk = contains_cjk(concept) or contains_cjk(next_question) or contains_cjk(misconception)
+    has_cjk = any(
+        contains_cjk(text)
+        for text in [
+            concept,
+            next_question,
+            misconception,
+            problem_title,
+            problem_description,
+            step_description,
+        ]
+    )
 
     if next_question:
         return next_question
@@ -1101,6 +1114,29 @@ def format_feedback_text(structured_feedback: Dict[str, Any]) -> str:
     confidence = structured_feedback.get("confidence", 0.0)
     pass_stage = structured_feedback.get("pass_stage", False)
     decision_reason = structured_feedback.get("decision_reason", "")
+    has_cjk = any(
+        contains_cjk(str(item or ""))
+        for item in [
+            correctness,
+            next_question,
+            decision_reason,
+            *(misconceptions or []),
+            *(suggestions or []),
+        ]
+    )
+
+    if has_cjk:
+        lines = [
+            f"正确性：{correctness or '无'}",
+            f"掌握度分数：{mastery_score}",
+            f"置信度：{confidence}",
+            f"已通过当前步骤：{pass_stage}",
+            f"误区：{' | '.join(misconceptions) if misconceptions else '无'}",
+            f"建议：{' | '.join(suggestions) if suggestions else '无'}",
+            f"下一题：{next_question or '无'}",
+            f"判定原因：{decision_reason or '无'}",
+        ]
+        return "\n".join(lines)
 
     lines = [
         f"Correctness: {correctness or 'N/A'}",
@@ -1136,23 +1172,23 @@ def parse_feedback_text(feedback_text: Optional[str]) -> Dict[str, Any]:
     }
 
     patterns = {
-        "correctness": r"Correctness:\s*(.*)",
-        "mastery_score": r"Mastery Score:\s*(.*)",
-        "confidence": r"Confidence:\s*(.*)",
-        "pass_stage": r"Pass Stage:\s*(.*)",
-        "misconceptions": r"Misconceptions:\s*(.*)",
-        "suggestions": r"Suggestions:\s*(.*)",
-        "next_question": r"Next Question:\s*(.*)",
-        "decision_reason": r"Decision Reason:\s*(.*)",
+        "correctness": r"(?:Correctness|正确性)[:：]\s*(.*)",
+        "mastery_score": r"(?:Mastery Score|掌握度分数)[:：]\s*(.*)",
+        "confidence": r"(?:Confidence|置信度)[:：]\s*(.*)",
+        "pass_stage": r"(?:Pass Stage|已通过当前步骤)[:：]\s*(.*)",
+        "misconceptions": r"(?:Misconceptions|误区)[:：]\s*(.*)",
+        "suggestions": r"(?:Suggestions|建议)[:：]\s*(.*)",
+        "next_question": r"(?:Next Question|下一题)[:：]\s*(.*)",
+        "decision_reason": r"(?:Decision Reason|判定原因)[:：]\s*(.*)",
     }
 
     for key, pattern in patterns.items():
-        match = re.search(pattern, feedback_text)
+        match = re.search(pattern, feedback_text, flags=re.MULTILINE)
         if not match:
             continue
         value = match.group(1).strip()
         if key in ("misconceptions", "suggestions"):
-            structured[key] = [] if value in ("None", "") else [item.strip() for item in value.split("|") if item.strip()]
+            structured[key] = [] if value in ("None", "无", "") else [item.strip() for item in value.split("|") if item.strip()]
         elif key == "mastery_score":
             structured[key] = normalize_int(value, 0, 0, 100)
         elif key == "confidence":
@@ -1160,7 +1196,7 @@ def parse_feedback_text(feedback_text: Optional[str]) -> Dict[str, Any]:
         elif key == "pass_stage":
             structured[key] = normalize_bool(value, False)
         else:
-            structured[key] = "" if value in ("None", "N/A") else value
+            structured[key] = "" if value in ("None", "N/A", "无") else value
 
     if (
         not structured["correctness"]

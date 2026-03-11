@@ -1598,7 +1598,21 @@ Learner question: {payload.question}
             mode=mode,
         ),
     )
-    return await _complete_exploration_learning_turn(
+    answer = str(answer or "").strip()
+    if not answer:
+        fallback_reasons.append("empty:ask_answer")
+        answer = str(
+            await _resolve_fallback_value(
+                lambda: model_os_service.build_learning_answer_fallback(
+                    question=payload.question,
+                    step_concept=step_concept,
+                    mode=mode,
+                )
+            )
+            or ""
+        ).strip()
+
+    response_payload = await _complete_exploration_learning_turn(
         db=db,
         current_user=current_user,
         problem=problem,
@@ -1616,6 +1630,7 @@ Learner question: {payload.question}
         fallback_reasons=fallback_reasons,
         guarded_llm_call=guarded_llm_call,
     )
+    return LearningQuestionResponse.model_validate(jsonable_encoder(response_payload))
 
 
 @router.post("/{problem_id}/ask/stream")

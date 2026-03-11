@@ -36,6 +36,9 @@ async def generate_socratic_question(
             step_concept=step_concept,
             question_kind=question_kind,
             latest_feedback=latest_feedback,
+            problem_title=problem_title,
+            problem_description=problem_description,
+            step_description=step_description,
         )
     return question
 

@@ -86,6 +86,69 @@ def test_model_os_user_visible_fallbacks_localize_to_chinese():
     assert question_fallback.startswith("检查题：")
 
 
+def test_model_os_socratic_fallback_uses_chinese_when_pid_context_is_cjk():
+    from app.services.model_os_service import model_os_service
+
+    question_fallback = model_os_service.build_socratic_question_fallback(
+        step_concept="PID",
+        question_kind="probe",
+        latest_feedback={},
+        problem_title="PID",
+        problem_description="理解 PID 控制器中的比例、积分、微分，并能解释稳态误差。",
+        step_description="说明 PID 的核心思想和最容易混淆的点。",
+    )
+
+    assert "Probe:" not in question_fallback
+    assert question_fallback.startswith("追问题：")
+
+
+def test_model_os_feedback_text_localizes_and_parses_chinese_labels():
+    from app.services.model_os_service import model_os_service
+
+    original = {
+        "correctness": "部分正确",
+        "misconceptions": ["还没有把积分项和稳态误差的关系说清楚。"],
+        "suggestions": ["用一个恒温器例子把积分项的累计作用讲清楚。"],
+        "next_question": "如果一直存在微小误差，积分项会如何变化？",
+        "mastery_score": 74,
+        "confidence": 0.81,
+        "pass_stage": False,
+        "decision_reason": "当前回答已经抓住方向，但还缺一个稳定例子。",
+    }
+
+    text = model_os_service.format_feedback_text(original)
+    parsed = model_os_service.parse_feedback_text(text)
+
+    assert text.splitlines()[0].startswith("正确性：")
+    assert "下一题：" in text
+    assert parsed["correctness"] == original["correctness"]
+    assert parsed["mastery_score"] == original["mastery_score"]
+    assert parsed["confidence"] == original["confidence"]
+    assert parsed["pass_stage"] == original["pass_stage"]
+    assert parsed["next_question"] == original["next_question"]
+
+
+def test_socratic_path_candidate_specs_use_chinese_copy_for_pid_context():
+    from app.api.routes.problem_path_candidate_support import build_socratic_path_candidate_specs
+
+    specs = build_socratic_path_candidate_specs(
+        step_concept="PID",
+        question_kind="probe",
+        structured_feedback={
+            "mastery_score": 42,
+            "misconceptions": [],
+            "suggestions": [],
+            "next_question": "",
+            "decision_reason": "",
+        },
+        auto_advanced=False,
+        context_texts=["PID 是什么", "理解 PID 控制器中的比例、积分、微分"],
+    )
+
+    assert specs
+    assert specs[0]["title"].startswith("先补“PID”")
+
+
 def test_build_concept_evidence_snippet_preserves_long_answers_without_mid_sentence_cut():
     from app.api.routes.problem_concept_registration_support import build_concept_evidence_snippet
 

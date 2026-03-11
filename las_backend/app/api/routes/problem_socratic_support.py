@@ -122,6 +122,9 @@ async def _resolve_socratic_question_payload(
             step_concept=step_concept,
             question_kind=question_kind,
             latest_feedback=latest_feedback,
+            problem_title=problem.title,
+            problem_description=problem.description or "",
+            step_description=step_description,
         )
         question = fallback_question
         if use_llm:
@@ -242,6 +245,9 @@ async def build_socratic_question_stream_response(
         step_concept=step_concept,
         question_kind=question_kind,
         latest_feedback=latest_feedback,
+        problem_title=problem.title,
+        problem_description=problem.description or "",
+        step_description=step_description,
     )
 
     async def event_generator():

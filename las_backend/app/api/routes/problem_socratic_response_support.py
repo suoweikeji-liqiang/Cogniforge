@@ -48,6 +48,55 @@ def _clamp_correctness_label(value: Optional[str], limit: int = 100) -> str:
     return str(value or "").strip()[:limit]
 
 
+def _build_feedback_fallback(
+    *,
+    problem_title: str,
+    problem_description: str,
+    step_concept: str,
+    step_description: str,
+    user_response: str,
+    socratic_question: str,
+) -> dict:
+    has_cjk = any(
+        model_os_service._contains_cjk(text)
+        for text in [
+            problem_title,
+            problem_description,
+            step_concept,
+            step_description,
+            user_response,
+            socratic_question,
+        ]
+    )
+    if has_cjk:
+        return model_os_service.normalize_feedback_structured(
+            {
+                "correctness": "部分正确",
+                "misconceptions": [],
+                "suggestions": ["请用一个具体例子把你的关键假设说得更清楚。"],
+                "next_question": f"如果换一个边界情况，什么情况下你对“{step_concept}”的当前理解会失效？",
+                "mastery_score": 58,
+                "dimension_scores": {"accuracy": 60, "completeness": 56, "transfer": 57, "rigor": 59},
+                "confidence": 0.66,
+                "pass_stage": False,
+                "decision_reason": "当前回答抓住了方向，但还不足以支持推进。",
+            }
+        )
+    return model_os_service.normalize_feedback_structured(
+        {
+            "correctness": "partially correct",
+            "misconceptions": [],
+            "suggestions": ["Please clarify your key assumptions with one concrete example."],
+            "next_question": f"What boundary case can falsify your current view of '{step_concept}'?",
+            "mastery_score": 58,
+            "dimension_scores": {"accuracy": 60, "completeness": 56, "transfer": 57, "rigor": 59},
+            "confidence": 0.66,
+            "pass_stage": False,
+            "decision_reason": "The answer points in the right direction, but it is not stable enough for progression.",
+        }
+    )
+
+
 def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
     verdict = str((structured_feedback or {}).get("correctness", "")).strip().lower()
     if not verdict:
@@ -88,7 +137,12 @@ def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
     return False
 
 
-def _should_auto_advance_v2(structured_feedback: dict, mode: str, pass_streak: int) -> tuple[bool, str]:
+def _should_auto_advance_v2(
+    structured_feedback: dict,
+    mode: str,
+    pass_streak: int,
+    use_cjk: bool = False,
+) -> tuple[bool, str]:
     mastery_score = int(structured_feedback.get("mastery_score") or 0)
     confidence = float(structured_feedback.get("confidence") or 0.0)
     pass_stage = bool(structured_feedback.get("pass_stage"))
@@ -123,12 +177,21 @@ def _should_auto_advance_v2(structured_feedback: dict, mode: str, pass_streak: i
         and misconception_count <= threshold_misconceptions
     )
     qualifies = meets_now and (pass_streak + 1) >= required_streak
-    reason = (
-        f"V2 auto-advance: score={mastery_score}/{threshold_score}, "
-        f"confidence={confidence:.2f}/{threshold_confidence:.2f}, "
-        f"misconceptions={misconception_count}/{threshold_misconceptions}, "
-        f"pass_streak={pass_streak + 1}/{required_streak}, pass_stage={pass_stage}"
-    )
+    if use_cjk:
+        reason = (
+            f"V2 自动推进：分数={mastery_score}/{threshold_score}，"
+            f"置信度={confidence:.2f}/{threshold_confidence:.2f}，"
+            f"误区数={misconception_count}/{threshold_misconceptions}，"
+            f"连续通过={pass_streak + 1}/{required_streak}，"
+            f"当前步骤通过={pass_stage}"
+        )
+    else:
+        reason = (
+            f"V2 auto-advance: score={mastery_score}/{threshold_score}, "
+            f"confidence={confidence:.2f}/{threshold_confidence:.2f}, "
+            f"misconceptions={misconception_count}/{threshold_misconceptions}, "
+            f"pass_streak={pass_streak + 1}/{required_streak}, pass_stage={pass_stage}"
+        )
     return qualifies, reason
 
 
@@ -202,6 +265,17 @@ async def complete_socratic_response(
             use_llm=False,
         )
     )
+    has_cjk_context = any(
+        model_os_service._contains_cjk(text)
+        for text in [
+            problem.title,
+            problem.description or "",
+            step_concept,
+            step_description,
+            response_data.user_response,
+            socratic_question,
+        ]
+    )
 
     trace_id = str(uuid.uuid4())
     started_at = time.monotonic()
@@ -259,13 +333,13 @@ async def complete_socratic_response(
             model_examples=model_examples,
             retrieval_context=retrieval_context,
         ),
-        fallback=lambda: model_os_service.normalize_feedback_structured(
-            {
-                "correctness": "partially correct",
-                "misconceptions": [],
-                "suggestions": ["Please clarify your key assumptions with one concrete example."],
-                "next_question": f"What boundary case can falsify your current view of '{step_concept}'?",
-            }
+        fallback=lambda: _build_feedback_fallback(
+            problem_title=problem.title,
+            problem_description=problem.description or "",
+            step_concept=step_concept,
+            step_description=step_description,
+            user_response=response_data.user_response,
+            socratic_question=socratic_question,
         ),
     )
     structured_feedback = model_os_service.normalize_feedback_structured(structured_feedback)
@@ -391,6 +465,7 @@ async def complete_socratic_response(
                 structured_feedback=structured_feedback,
                 mode=settings.PROBLEM_AUTO_ADVANCE_MODE,
                 pass_streak=pass_streak,
+                use_cjk=has_cjk_context,
             )
         else:
             should_advance = _should_auto_advance(
@@ -398,7 +473,9 @@ async def complete_socratic_response(
                 settings.PROBLEM_AUTO_ADVANCE_MODE,
             )
             v2_decision_reason = (
-                f"V1 auto-advance mode={settings.PROBLEM_AUTO_ADVANCE_MODE}, verdict={structured_feedback.get('correctness', '')}"
+                f"V1 自动推进模式={settings.PROBLEM_AUTO_ADVANCE_MODE}，判定={structured_feedback.get('correctness', '')}"
+                if has_cjk_context
+                else f"V1 auto-advance mode={settings.PROBLEM_AUTO_ADVANCE_MODE}, verdict={structured_feedback.get('correctness', '')}"
             )
 
         if should_advance:
@@ -415,7 +492,11 @@ async def complete_socratic_response(
                 else:
                     problem.status = "new"
     elif question_kind == "probe":
-        v2_decision_reason = "Probe questions collect clarification and do not run progression logic."
+        v2_decision_reason = (
+            "探测题只用于澄清理解，不触发推进判断。"
+            if has_cjk_context
+            else "Probe questions collect clarification and do not run progression logic."
+        )
 
     if v2_decision_reason:
         structured_feedback["decision_reason"] = (
@@ -440,6 +521,9 @@ async def complete_socratic_response(
             step_concept=step_concept,
             question_kind=next_question_kind,
             latest_feedback=structured_feedback,
+            problem_title=problem.title,
+            problem_description=problem.description or "",
+            step_description=step_description,
         )
     follow_up = TurnFollowUpResponse(
         needed=follow_up_needed,
@@ -464,6 +548,13 @@ async def complete_socratic_response(
                 question_kind=question_kind,
                 structured_feedback=structured_feedback,
                 auto_advanced=auto_advanced,
+                context_texts=[
+                    problem.title,
+                    problem.description or "",
+                    step_description,
+                    socratic_question,
+                    response_data.user_response,
+                ],
             ),
             evidence_snippet=response_data.user_response,
         ),
