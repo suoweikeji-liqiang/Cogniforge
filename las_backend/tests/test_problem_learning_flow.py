@@ -279,6 +279,49 @@ async def test_socratic_question_endpoint_returns_probe_by_default(client, monke
 
 
 @pytest.mark.asyncio
+async def test_socratic_question_endpoint_returns_checkpoint_after_mastery_pass(client, db_session, monkeypatch):
+    from app.models.entities.user import ProblemMasteryEvent, User
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Checkpoint protocol")
+
+    user_result = await db_session.execute(select(User).where(User.username == "tester"))
+    user = user_result.scalar_one()
+    db_session.add(
+        ProblemMasteryEvent(
+            user_id=str(user.id),
+            problem_id=problem["id"],
+            step_index=0,
+            mastery_score=88,
+            confidence=0.92,
+            pass_stage=True,
+            auto_advanced=False,
+            correctness_label="correct",
+            decision_reason="Checkpoint ready",
+        )
+    )
+    await db_session.commit()
+
+    async def fake_generate_question(*args, **kwargs):
+        return "What tradeoff would make you change the threshold?"
+
+    monkeypatch.setattr(model_os_service, "generate_socratic_question", fake_generate_question)
+
+    response = await client.get(
+        f"/api/problems/{problem['id']}/socratic-question",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["question_kind"] == "checkpoint"
+    assert body["question"] == "What tradeoff would make you change the threshold?"
+    assert body["mode_metadata"]["latest_pass_stage"] is True
+    assert body["mode_metadata"]["latest_mastery_score"] == 88
+
+
+@pytest.mark.asyncio
 async def test_socratic_question_stream_returns_incremental_question_and_final_payload(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
@@ -1076,6 +1119,107 @@ async def test_problem_path_candidates_from_exploration_can_be_decided(client, d
     stored = result.scalar_one()
     assert stored.status == "planned"
     assert stored.selected_insertion == "insert_before_current_main"
+
+
+@pytest.mark.asyncio
+async def test_redeciding_insert_before_current_main_reactivates_main_path(client, db_session, monkeypatch):
+    from app.models.entities.user import LearningPath
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Main path reactivation")
+
+    async def fake_answer(*args, **kwargs):
+        return "Model Predictive Control depends on state-space modeling first."
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "Model Predictive Control",
+            "State-space model",
+            "Constraint handling",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What should I learn before Model Predictive Control?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    candidate = ask_response.json()["derived_path_candidates"][0]
+
+    first_decision = await client.post(
+        f"/api/problems/{problem['id']}/path-candidates/{candidate['id']}/decide",
+        json={"action": "insert_before_current_main"},
+        headers=headers,
+    )
+    assert first_decision.status_code == 200
+
+    active_main_response = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert active_main_response.status_code == 200
+    active_main = active_main_response.json()
+    assert active_main["kind"] == "main"
+    main_path_id = active_main["id"]
+    main_step_count = len(active_main["path_data"])
+    main_current_step = active_main["current_step"]
+
+    branch_path = LearningPath(
+        problem_id=problem["id"],
+        title="Temporary branch detour",
+        kind="branch",
+        parent_path_id=main_path_id,
+        source_turn_id=candidate["source_turn_id"],
+        return_step_id=0,
+        branch_reason="Temporary detour for reactivation coverage.",
+        is_active=False,
+        path_data=[
+            {
+                "step": 1,
+                "concept": "Temporary branch detour",
+                "description": "Use a temporary branch to verify reactivation.",
+                "resources": [],
+            }
+        ],
+        current_step=0,
+    )
+    db_session.add(branch_path)
+    await db_session.commit()
+
+    activate_branch = await client.post(
+        f"/api/problems/{problem['id']}/learning-paths/{branch_path.id}/activate",
+        headers=headers,
+    )
+    assert activate_branch.status_code == 200
+    assert activate_branch.json()["id"] == str(branch_path.id)
+
+    repeat_decision = await client.post(
+        f"/api/problems/{problem['id']}/path-candidates/{candidate['id']}/decide",
+        json={"action": "insert_before_current_main"},
+        headers=headers,
+    )
+    assert repeat_decision.status_code == 200
+    assert repeat_decision.json()["candidate"]["selected_insertion"] == "insert_before_current_main"
+
+    restored_path = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert restored_path.status_code == 200
+    restored_body = restored_path.json()
+    assert restored_body["id"] == main_path_id
+    assert restored_body["kind"] == "main"
+    assert len(restored_body["path_data"]) == main_step_count
+    assert restored_body["current_step"] == main_current_step
 
 
 @pytest.mark.asyncio

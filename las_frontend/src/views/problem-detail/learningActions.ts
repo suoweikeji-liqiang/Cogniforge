@@ -20,6 +20,7 @@ type LearningActionDeps = {
   problemId: string
   t: TranslateFn
   ensureFreshToken: () => Promise<string | null>
+  refreshToken: () => Promise<string | null>
   getToken: () => string | null
   problem: RefLike<any>
   learningMode: RefLike<LearningMode>
@@ -58,6 +59,7 @@ export const createProblemDetailLearningActions = ({
   problemId,
   t,
   ensureFreshToken,
+  refreshToken,
   getToken,
   problem,
   learningMode,
@@ -183,6 +185,7 @@ export const createProblemDetailLearningActions = ({
           await streamSocraticResponse({
             problemId,
             token,
+            refreshToken,
             payload: {
               ...payload,
               learning_mode: 'socratic',
@@ -299,6 +302,7 @@ export const createProblemDetailLearningActions = ({
           await streamExplorationAsk({
             problemId,
             token,
+            refreshToken,
             payload: {
               question,
               learning_mode: 'exploration',

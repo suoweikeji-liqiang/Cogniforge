@@ -91,7 +91,6 @@ test.describe('ProblemDetail main workflow', () => {
     await openWorkspace(page, session.problemId)
 
     await page.getByTestId('mode-switch-socratic').click()
-    await expect(page.getByTestId('socratic-question-stream-preview')).toBeVisible()
     await expect(page.getByTestId('socratic-question-panel')).toContainText(/Probe/i)
 
     await page.getByTestId('socratic-response-input').fill(
@@ -103,7 +102,6 @@ test.describe('ProblemDetail main workflow', () => {
 
     await expect(latestTurnOutcome(page)).toContainText(/Mastery Score/i)
     await expect(latestTurnOutcome(page)).toContainText(/Progression skipped/i)
-    await expect(page.getByTestId('socratic-question-stream-preview')).toBeVisible()
     await expect(page.getByTestId('socratic-question-panel')).toContainText(/Checkpoint/i)
 
     await page.getByTestId('socratic-response-input').fill(
@@ -130,7 +128,7 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('submit-exploration-question').click()
 
     await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
-    await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Precision|Recall/i)
+    await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Streaming answer|drafting the explanation/i)
     await expect(latestTurnOutcome(page)).toContainText(/Comparison/i)
     await expect(latestTurnOutcome(page)).toContainText(/Precision measures/i)
     await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
@@ -143,6 +141,10 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('save-workspace-resource').click()
     await expect(page.getByTestId('workspace-resources-panel')).toContainText(/Current turn/i)
     await expect(page.getByTestId('workspace-resources-panel')).toContainText(/precision-recall/i)
+    await page.getByTestId('workspace-notes-panel').getByRole('button', { name: /Delete/i }).click()
+    await expect(page.getByTestId('workspace-notes-panel')).not.toContainText(/precision and recall tradeoff/i)
+    await page.getByTestId('workspace-resources-panel').getByRole('button', { name: /Delete/i }).click()
+    await expect(page.getByTestId('workspace-resources-panel')).not.toContainText(/precision-recall/i)
 
     await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
     await expect(page.getByTestId('path-candidate-card').first()).toBeVisible()
@@ -223,6 +225,55 @@ test.describe('ProblemDetail main workflow', () => {
     await page.goto('/reviews')
     await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)
     await expect(page.getByTestId('review-model-cards-panel')).toContainText(/exploration-derived concept|exploration/i)
+  })
+
+  test('Scenario 2b: Exploration stream refreshes auth and retries before falling back', async ({ page, request }) => {
+    // Contract Assertions:
+    // - Critical Path: exploration ask should survive a one-off 401 at the streaming boundary.
+    // - Critical Path: auth refresh should restore the stream instead of silently dropping to the blocking endpoint.
+    const session = await prepareAuthenticatedProblem(page, request)
+    await openWorkspace(page, session.problemId)
+
+    let streamAttempts = 0
+    let refreshCalls = 0
+    let fallbackAskCalls = 0
+
+    await page.route(`**/api/problems/${session.problemId}/ask/stream`, async (route) => {
+      streamAttempts += 1
+      if (streamAttempts === 1) {
+        await route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'Token expired during stream setup.' }),
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await page.route('**/api/auth/refresh', async (route) => {
+      refreshCalls += 1
+      await route.continue()
+    })
+
+    await page.route(`**/api/problems/${session.problemId}/ask`, async (route) => {
+      fallbackAskCalls += 1
+      await route.continue()
+    })
+
+    await page.getByTestId('mode-switch-exploration').click()
+    await page.getByTestId('exploration-question-input').fill('Explain precision and recall with one concrete threshold example.')
+    await page.getByTestId('submit-exploration-question').click()
+
+    await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
+    await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Streaming answer|drafting the explanation/i)
+    await expect(latestTurnOutcome(page)).toContainText(/Answered Concepts|Pending Concept Candidates|Path Suggestions/i)
+    await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
+    await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+
+    expect(streamAttempts).toBe(2)
+    expect(refreshCalls).toBeGreaterThanOrEqual(1)
+    expect(fallbackAskCalls).toBe(0)
   })
 
   test('Scenario 3: Branch path can return to the main path', async ({ page, request }) => {

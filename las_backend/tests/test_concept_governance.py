@@ -286,6 +286,63 @@ async def test_promote_accepted_concept_candidate_to_model_card_and_schedule_rev
 
 
 @pytest.mark.asyncio
+async def test_schedule_review_reuses_existing_schedule_for_promoted_candidate(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session: AsyncSession,
+    test_user,
+):
+    problem = Problem(
+        user_id=str(test_user.id),
+        title="Repeated Schedule Problem",
+        associated_concepts=["precision threshold"],
+    )
+    db_session.add(problem)
+    await db_session.flush()
+
+    candidate = ProblemConceptCandidate(
+        user_id=str(test_user.id),
+        problem_id=str(problem.id),
+        concept_text="precision threshold",
+        normalized_text="precision threshold",
+        source="response",
+        learning_mode="socratic",
+        confidence=0.84,
+        status="accepted",
+        evidence_snippet="Precision changes with the decision threshold.",
+    )
+    db_session.add(candidate)
+    await db_session.commit()
+
+    first_schedule_response = await client.post(
+        f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/schedule-review",
+        headers=auth_headers,
+    )
+    assert first_schedule_response.status_code == 200
+    first_schedule_data = first_schedule_response.json()
+    assert first_schedule_data["review_scheduled"] is True
+
+    second_schedule_response = await client.post(
+        f"/api/problems/{problem.id}/concept-candidates/{candidate.id}/schedule-review",
+        headers=auth_headers,
+    )
+    assert second_schedule_response.status_code == 200
+    second_schedule_data = second_schedule_response.json()
+    assert second_schedule_data["review_scheduled"] is True
+    assert second_schedule_data["model_card"]["id"] == first_schedule_data["model_card"]["id"]
+    assert second_schedule_data["next_review_at"] == first_schedule_data["next_review_at"]
+
+    schedules_result = await db_session.execute(
+        select(ReviewSchedule).where(
+            ReviewSchedule.user_id == str(test_user.id),
+            ReviewSchedule.model_card_id == first_schedule_data["model_card"]["id"],
+        )
+    )
+    schedules = schedules_result.scalars().all()
+    assert len(schedules) == 1
+
+
+@pytest.mark.asyncio
 async def test_reject_concept_candidate(client: AsyncClient, auth_headers: dict, db_session: AsyncSession, test_user):
     """Rejecting a candidate should update status without adding to problem"""
     problem = Problem(

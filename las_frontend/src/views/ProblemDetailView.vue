@@ -605,19 +605,12 @@ import ProblemDerivedConceptsPanel from '@/components/problem-workspace/ProblemD
 import ProblemDerivedPathsPanel from '@/components/problem-workspace/ProblemDerivedPathsPanel.vue'
 import ProblemWorkspaceNotesPanel from '@/components/problem-workspace/ProblemWorkspaceNotesPanel.vue'
 import ProblemWorkspaceResourcesPanel from '@/components/problem-workspace/ProblemWorkspaceResourcesPanel.vue'
-import {
-  buildReinforcementActionTemplate,
-  buildReinforcementStarterContext,
-  deriveReinforcementErrorHint,
-  extractEvidenceCue,
-  normalizeInlineText,
-  uniqueContextConcepts,
-  type ReinforcementActionTemplate,
-  type ReinforcementErrorHint,
-  type ReinforcementStarterContext,
-} from '@/views/problem-detail/reinforcementSupport'
 import { createProblemDetailLearningActions } from '@/views/problem-detail/learningActions'
-import { streamSocraticQuestion } from '@/views/problem-detail/socraticQuestionStream'
+import { createProblemDetailKnowledgeAssetActions } from '@/views/problem-detail/knowledgeAssetActions'
+import { createProblemDetailPathActions } from '@/views/problem-detail/pathActions'
+import { createProblemDetailDataSupport } from '@/views/problem-detail/problemDetailDataSupport'
+import { createProblemDetailWorkspaceAssetActions } from '@/views/problem-detail/workspaceAssetActions'
+import { createProblemDetailWorkspaceSummarySupport } from '@/views/problem-detail/workspaceSummarySupport'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -711,6 +704,56 @@ const latestDerivedConceptCount = computed(() => {
   }
   return (latestResponse.value?.accepted_concepts?.length || 0) + (latestResponse.value?.pending_concepts?.length || 0)
 })
+const {
+  workspacePathSummary,
+  workspaceTurnSummary,
+  workspaceNextAction,
+  workspaceReviewSummary,
+  workspaceReviewDescription,
+  conceptMergeTargets,
+  scheduledReviewsByModelCardId,
+  activeReinforcementEntry,
+  activeReinforcementTarget,
+  reinforcementFocusCandidateId,
+  reinforcementFocusTurnId,
+  reinforcementTargetPathId,
+  canSwitchToReinforcementPath,
+  reinforcementFocusTitle,
+  reinforcementFocusDescription,
+  reinforcementFocusTurnPreview,
+  reinforcementActionTemplate,
+  formatConfidence,
+  formatRecommendedAction,
+  formatReinforcementResume,
+  hasReinforcementPath,
+  formatReinforcementPath,
+  formatReinforcementSummary,
+  formatLearningMode,
+  formatLearningPathKind,
+  formatQuestionKind,
+  formatAnswerType,
+} = createProblemDetailWorkspaceSummarySupport({
+  t,
+  route,
+  problem,
+  learningPath,
+  allLearningPaths,
+  learningMode,
+  totalSteps,
+  currentStepNumber,
+  currentStep,
+  latestQA,
+  latestResponse,
+  latestFeedback,
+  latestPathArtifacts,
+  latestDerivedConceptCount,
+  activeConceptTurnId,
+  socraticQuestion,
+  qaHistory,
+  conceptCandidates,
+  pathCandidates,
+  scheduledReviews,
+})
 const workspaceFocusTitle = computed(() => {
   if (currentStep.value?.concept) return currentStep.value.concept
   if (isPathCompleted.value) return t('problemDetail.completed')
@@ -721,654 +764,57 @@ const workspaceFocusDescription = computed(() => {
   if (isPathCompleted.value) return t('problemDetail.completedAll')
   return t('problemDetail.noLearningPath')
 })
-const workspacePathSummary = computed(() => {
-  if (!learningPath.value) return t('problemDetail.noLearningPath')
-  const label = `${formatLearningPathKind(learningPath.value.kind)} · ${learningPath.value.title || t('problemDetail.unnamedPath')}`
-  if (!totalSteps.value) return label
-  return `${label} · ${t('problemDetail.stepIndicator', { current: currentStepNumber.value, total: totalSteps.value })}`
-})
-const workspaceTurnSummary = computed(() => {
-  if (!latestResponse.value && !latestQA.value) {
-    return t('problemDetail.workspaceTurnEmpty')
-  }
-  if (!latestDerivedConceptCount.value && !latestPathArtifacts.value.length && latestFeedback.value?.mastery_score !== undefined) {
-    return t('problemDetail.workspaceTurnMastery', { score: latestFeedback.value.mastery_score })
-  }
-  if (!latestDerivedConceptCount.value && !latestPathArtifacts.value.length) {
-    return t('problemDetail.workspaceTurnEmpty')
-  }
-  return t('problemDetail.workspaceTurnSummary', {
-    concepts: latestDerivedConceptCount.value,
-    paths: latestPathArtifacts.value.length,
-  })
-})
-const workspaceNextAction = computed(() => {
-  const recallEntry = recallPriorityReviewEntry.value
-  const recallConceptLabel = recallEntry?.origin?.concept_text || recallEntry?.title || t('problemDetail.derivedConceptsTitle')
-  if (recallEntry?.recommended_action === 'revisit_workspace') {
-    return t('problemDetail.workspaceNextReviewRevisit', { concept: recallConceptLabel })
-  }
-  if (recallEntry?.recommended_action === 'reinforce_soon') {
-    return t('problemDetail.workspaceNextReviewReinforce', { concept: recallConceptLabel })
-  }
-  if (recallEntry?.recommended_action === 'extend_or_compare' && pendingPathFollowUpCount.value) {
-    return t('problemDetail.workspaceNextReviewExtend', { concept: recallConceptLabel })
-  }
-  if (learningMode.value === 'exploration') {
-    return latestQA.value?.next_learning_actions?.[0]
-      || latestQA.value?.suggested_next_focus
-      || t('problemDetail.workspaceNextExplorationDefault')
-  }
-  return latestResponse.value?.follow_up?.question
-    || socraticQuestion.value?.question
-    || t('problemDetail.workspaceNextSocraticDefault')
-})
-const conceptMergeTargets = computed(() => {
-  const values = [
-    ...(problem.value?.associated_concepts || []),
-    ...conceptCandidates.value
-      .filter((candidate) => ['accepted', 'merged'].includes(candidate.status))
-      .map((candidate) => candidate.merged_into_concept || candidate.concept_text),
-  ]
-  const seen = new Set<string>()
-  return values.filter((item) => {
-    const key = String(item || '').trim().toLowerCase()
-    if (!key || seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-})
-const scheduledReviewsByModelCardId = computed(() => {
-  return Object.fromEntries(
-    scheduledReviews.value.map((schedule: any) => [String(schedule.model_card_id), schedule])
-  )
-})
-const routeFocusModelCardId = computed(() => String(route.query.focus_model_card || ''))
-const routeFocusCandidateId = computed(() => String(route.query.focus_candidate || ''))
-const routeFocusTurnId = computed(() => String(route.query.focus_turn || ''))
-const problemReviewEntries = computed(() => {
-  const problemId = String(route.params.id || '')
-  return [...scheduledReviews.value]
-    .filter((schedule: any) => String(schedule.origin?.problem_id || '') === problemId)
-    .sort((left: any, right: any) => String(left.next_review_at || '').localeCompare(String(right.next_review_at || '')))
-})
-const currentTurnReviewEntries = computed(() => {
-  if (!activeConceptTurnId.value) return []
-  return problemReviewEntries.value.filter(
-    (schedule: any) => String(schedule.origin?.source_turn_id || '') === String(activeConceptTurnId.value)
-  )
-})
-const reinforcementReviewEntries = computed(() => {
-  return [...problemReviewEntries.value]
-    .filter((schedule: any) => Boolean(schedule.needs_reinforcement))
-    .sort((left: any, right: any) => {
-      const leftDate = String(left.last_reviewed_at || left.next_review_at || '')
-      const rightDate = String(right.last_reviewed_at || right.next_review_at || '')
-      return rightDate.localeCompare(leftDate)
-    })
-})
-const activeReinforcementEntry = computed(() => {
-  const routeFocusedEntry = reinforcementReviewEntries.value.find((schedule: any) => {
-    if (routeFocusModelCardId.value && String(schedule.model_card_id || '') === routeFocusModelCardId.value) return true
-    if (routeFocusCandidateId.value && String(schedule.reinforcement_target?.concept_candidate_id || schedule.origin?.concept_candidate_id || '') === routeFocusCandidateId.value) return true
-    if (routeFocusTurnId.value && String(schedule.reinforcement_target?.source_turn_id || schedule.origin?.source_turn_id || '') === routeFocusTurnId.value) return true
-    return false
-  })
-  if (routeFocusedEntry) return routeFocusedEntry
-  return currentTurnReviewEntries.value.find((schedule: any) => Boolean(schedule.needs_reinforcement))
-    || reinforcementReviewEntries.value[0]
-    || null
-})
-const activeReinforcementTarget = computed(() => activeReinforcementEntry.value?.reinforcement_target || null)
-const reinforcementFocusCandidateId = computed(() => {
-  const value = routeFocusCandidateId.value || String(activeReinforcementTarget.value?.concept_candidate_id || '')
-  return value || null
-})
-const reinforcementFocusTurnId = computed(() => {
-  const value = routeFocusTurnId.value || String(activeReinforcementTarget.value?.source_turn_id || '')
-  return value || null
-})
-const reinforcementTargetPathId = computed(() => String(activeReinforcementTarget.value?.resume_path_id || ''))
-const canSwitchToReinforcementPath = computed(() => {
-  return Boolean(
-    reinforcementTargetPathId.value
-      && String(learningPath.value?.id || '') !== reinforcementTargetPathId.value
-      && allLearningPaths.value.some((path: any) => String(path.id) === reinforcementTargetPathId.value)
-  )
-})
-const latestProblemReviewEntry = computed(() => problemReviewEntries.value[0] || null)
-const latestReviewedProblemEntry = computed(() => {
-  return [...problemReviewEntries.value]
-    .filter((schedule: any) => Boolean(schedule.last_reviewed_at))
-    .sort((left: any, right: any) => String(right.last_reviewed_at || '').localeCompare(String(left.last_reviewed_at || '')))[0] || null
-})
-const recallPriorityReviewEntry = computed(() => {
-  const reviewedEntries = [...problemReviewEntries.value]
-    .filter((schedule: any) => Boolean(schedule.last_reviewed_at))
-    .sort((left: any, right: any) => String(right.last_reviewed_at || '').localeCompare(String(left.last_reviewed_at || '')))
-  return reviewedEntries.find((schedule: any) => ['fragile', 'rebuilding'].includes(schedule.recall_state))
-    || reviewedEntries[0]
-    || latestProblemReviewEntry.value
-})
-const pendingPathFollowUpCount = computed(() => {
-  return pathCandidates.value.filter((candidate) => ['planned', 'bookmarked'].includes(candidate.status)).length
-})
-const workspaceReviewSummary = computed(() => {
-  if (!problemReviewEntries.value.length) {
-    return t('problemDetail.workspaceReviewEmpty')
-  }
-  if (recallPriorityReviewEntry.value?.recall_state === 'fragile') {
-    return t('problemDetail.workspaceReviewFragile', { count: problemReviewEntries.value.length })
-  }
-  if (recallPriorityReviewEntry.value?.recall_state === 'rebuilding') {
-    return t('problemDetail.workspaceReviewRebuilding', { count: problemReviewEntries.value.length })
-  }
-  if (latestReviewedProblemEntry.value?.recall_state === 'stable') {
-    return t('problemDetail.workspaceReviewStable', { count: problemReviewEntries.value.length })
-  }
-  if (currentTurnReviewEntries.value.length) {
-    return t('problemDetail.workspaceReviewCurrentTurn', { count: currentTurnReviewEntries.value.length })
-  }
-  return t('problemDetail.workspaceReviewScheduled', { count: problemReviewEntries.value.length })
-})
-const workspaceReviewDescription = computed(() => {
-  const latest = recallPriorityReviewEntry.value
-  if (!latest) {
-    if (pendingPathFollowUpCount.value) {
-      return t('problemDetail.workspaceReviewPathsPending', { count: pendingPathFollowUpCount.value })
-    }
-    return t('problemDetail.workspaceReviewEmptyHint')
-  }
-
-  const conceptLabel = latest.origin?.concept_text || latest.title || t('problemDetail.derivedConceptsTitle')
-  if (latest.last_reviewed_at) {
-    return t('problemDetail.workspaceReviewOutcome', {
-      concept: conceptLabel,
-      state: formatRecallState(latest.recall_state),
-      action: formatRecommendedAction(latest.recommended_action),
-      date: formatDateTime(latest.last_reviewed_at),
-    })
-  }
-  return t('problemDetail.workspaceReviewNextRecall', {
-    concept: conceptLabel,
-    date: formatDateTime(latest.next_review_at),
-  })
-})
-const focusedReinforcementCandidate = computed(() => {
-  if (reinforcementFocusCandidateId.value) {
-    const exactCandidate = conceptCandidates.value.find(
-      (candidate: any) => String(candidate.id || '') === String(reinforcementFocusCandidateId.value)
-    )
-    if (exactCandidate) return exactCandidate
-  }
-
-  if (reinforcementFocusTurnId.value) {
-    const turnMatches = conceptCandidates.value.filter(
-      (candidate: any) => String(candidate.source_turn_id || '') === String(reinforcementFocusTurnId.value)
-    )
-    if (turnMatches.length === 1) return turnMatches[0]
-
-    const targetConcept = String(activeReinforcementTarget.value?.concept_text || '').trim().toLowerCase()
-    const conceptMatch = turnMatches.find(
-      (candidate: any) => String(candidate.concept_text || '').trim().toLowerCase() === targetConcept
-    )
-    if (conceptMatch) return conceptMatch
-    if (turnMatches.length) return turnMatches[0]
-  }
-
-  return null
-})
-const focusedReinforcementTurn = computed(() => {
-  if (!reinforcementFocusTurnId.value) return null
-  return qaHistory.value.find((turn: any) => String(turn.turn_id || '') === String(reinforcementFocusTurnId.value)) || null
-})
-const reinforcementFocusTitle = computed(() => {
-  return focusedReinforcementCandidate.value?.concept_text
-    || activeReinforcementTarget.value?.concept_text
-    || t('problemDetail.derivedConceptsTitle')
-})
-const reinforcementFocusDescription = computed(() => {
-  if (focusedReinforcementCandidate.value) {
-    return t('problemDetail.reinforcementFocusCandidate', {
-      status: formatCandidateStatus(focusedReinforcementCandidate.value.status),
-      source: formatCandidateSource(focusedReinforcementCandidate.value.source),
-    })
-  }
-  if (focusedReinforcementTurn.value?.answer_type) {
-    return t('problemDetail.reinforcementFocusTurn', {
-      answerType: formatAnswerType(focusedReinforcementTurn.value.answer_type),
-    })
-  }
-  return t('problemDetail.reinforcementFocusFallback')
-})
-const reinforcementFocusTurnPreview = computed(() => {
-  if (focusedReinforcementCandidate.value?.source_turn_preview) {
-    return focusedReinforcementCandidate.value.source_turn_preview
-  }
-  if (activeReinforcementTarget.value?.source_turn_preview) {
-    return activeReinforcementTarget.value.source_turn_preview
-  }
-  if (!focusedReinforcementTurn.value) return ''
-  const question = String(focusedReinforcementTurn.value.question || '').trim()
-  const answer = String(focusedReinforcementTurn.value.answer || '').trim()
-  if (question && answer) return `${question.slice(0, 110)} -> ${answer.slice(0, 110)}`
-  return question || answer
-})
-const reinforcementStarterContext = computed<ReinforcementStarterContext>(() => {
-  const concept = reinforcementFocusTitle.value
-  const contextConcepts = uniqueContextConcepts([
-    ...(focusedReinforcementTurn.value?.answered_concepts || []),
-    ...(focusedReinforcementTurn.value?.related_concepts || []),
-    focusedReinforcementTurn.value?.suggested_next_focus,
-    focusedReinforcementTurn.value?.step_concept,
-    activeReinforcementTarget.value?.resume_step_concept,
-    currentStep.value?.concept,
-    problem.value?.title,
-  ], [concept])
-  return buildReinforcementStarterContext({
-    question: normalizeInlineText(focusedReinforcementTurn.value?.question || ''),
-    answer: normalizeInlineText(focusedReinforcementTurn.value?.answer || ''),
-    answerType: String(focusedReinforcementTurn.value?.answer_type || '').trim(),
-    turnPreview: reinforcementFocusTurnPreview.value,
-    contextConcepts,
-  })
-})
-const reinforcementErrorHint = computed<ReinforcementErrorHint | null>(() => {
-  if (!focusedReinforcementTurn.value) return null
-  return deriveReinforcementErrorHint({
-    answerType: String(focusedReinforcementTurn.value.answer_type || '').trim(),
-    question: normalizeInlineText(focusedReinforcementTurn.value.question || ''),
-    answer: normalizeInlineText(focusedReinforcementTurn.value.answer || ''),
-    questionCue: reinforcementStarterContext.value.questionCue,
-    comparisonCue: reinforcementStarterContext.value.comparisonCue,
-    t,
-  })
-})
-const reinforcementEvidenceCue = computed(() => {
-  const evidenceSnippet = String(
-    focusedReinforcementCandidate.value?.evidence_snippet
-      || activeReinforcementEntry.value?.origin?.evidence_snippet
-      || '',
-  ).trim()
-  if (!evidenceSnippet) return ''
-
-  const concept = reinforcementFocusTitle.value
-  const anchor = String(
-    activeReinforcementTarget.value?.resume_step_concept
-      || currentStep.value?.concept
-      || problem.value?.title
-      || concept
-  ).trim()
-
-  return extractEvidenceCue({
-    evidenceSnippet,
-    concept,
-    sourceCue: reinforcementStarterContext.value.primaryCue,
-    sourceClue: reinforcementStarterContext.value.answerCue,
-    likelyConfusion: reinforcementErrorHint.value?.text || '',
-    anchor,
-  })
-})
-const reinforcementActionTemplate = computed<ReinforcementActionTemplate | null>(() => {
-  const concept = reinforcementFocusTitle.value
-  const anchor = String(
-    activeReinforcementTarget.value?.resume_step_concept
-      || currentStep.value?.concept
-      || problem.value?.title
-      || concept
-  ).trim()
-  const originMode = String(activeReinforcementEntry.value?.origin?.learning_mode || learningMode.value || 'socratic').trim()
-  const sourceCue = reinforcementStarterContext.value.primaryCue
-  return buildReinforcementActionTemplate({
-    activeReinforcementEntry: activeReinforcementEntry.value,
-    activeReinforcementTarget: activeReinforcementTarget.value,
-    focusedTurnAnswerType: String(focusedReinforcementTurn.value?.answer_type || '').trim(),
-    originMode,
-    concept,
-    anchor,
-    comparisonCue: reinforcementStarterContext.value.comparisonCue,
-    sourceCue,
-    sourceClue: reinforcementStarterContext.value.answerCue,
-    likelyConfusion: reinforcementErrorHint.value?.text || '',
-    evidenceCue: reinforcementEvidenceCue.value,
-    t,
-  })
+const {
+  fetchReviewSchedules,
+  hydrateWorkspaceSnapshot,
+  saveWorkspaceNote,
+  deleteWorkspaceNote,
+  saveWorkspaceResource,
+  deleteWorkspaceResource,
+  interpretWorkspaceResource,
+} = createProblemDetailWorkspaceAssetActions({
+  api,
+  problemId: String(route.params.id),
+  activeConceptTurnId,
+  scheduledModelCardIds,
+  scheduledReviews,
+  workspaceNotes,
+  noteSaving,
+  workspaceResources,
+  resourceSaving,
+  resourceInterpretingId,
 })
 
-const formatConfidence = (value: number | string | undefined | null) => {
-  const parsed = Number(value ?? 0)
-  if (!Number.isFinite(parsed)) return '0%'
-  const percent = Math.round(Math.max(0, Math.min(1, parsed)) * 100)
-  return `${percent}%`
-}
-
-const formatDateTime = (dateValue: string | undefined | null) => {
-  if (!dateValue) return '-'
-  return new Date(dateValue).toLocaleString()
-}
-
-const formatRecallState = (state: string | undefined | null) => {
-  if (state === 'fragile') return t('problemDetail.recallStateFragile')
-  if (state === 'rebuilding') return t('problemDetail.recallStateRebuilding')
-  if (state === 'reinforcing') return t('problemDetail.recallStateReinforcing')
-  if (state === 'stable') return t('problemDetail.recallStateStable')
-  return t('problemDetail.recallStateScheduled')
-}
-
-const formatRecommendedAction = (action: string | undefined | null) => {
-  if (action === 'revisit_workspace') return t('problemDetail.reviewActionRevisitWorkspace')
-  if (action === 'reinforce_soon') return t('problemDetail.reviewActionReinforceSoon')
-  if (action === 'keep_spacing') return t('problemDetail.reviewActionKeepSpacing')
-  if (action === 'extend_or_compare') return t('problemDetail.reviewActionExtendOrCompare')
-  return t('problemDetail.reviewActionCompleteFirstRecall')
-}
-
-const formatReinforcementResume = (target: any) => {
-  const rawStepIndex = Number(target?.resume_step_index)
-  const hasStepIndex = Number.isFinite(rawStepIndex)
-  const stepNumber = hasStepIndex ? rawStepIndex + 1 : null
-  const stepConcept = String(target?.resume_step_concept || '').trim()
-
-  if (stepNumber !== null && stepConcept) {
-    return t('problemDetail.reinforcementResumeStepConcept', {
-      step: stepNumber,
-      concept: stepConcept,
-    })
-  }
-  if (stepNumber !== null) {
-    return t('problemDetail.reinforcementResumeStepOnly', { step: stepNumber })
-  }
-  if (stepConcept) {
-    return t('problemDetail.reinforcementResumeConcept', { concept: stepConcept })
-  }
-  return t('problemDetail.reinforcementResumeCurrentWorkspace')
-}
-
-const hasReinforcementPath = (target: any) => {
-  return Boolean(target?.resume_path_id || target?.resume_path_kind || target?.resume_path_title)
-}
-
-const formatReinforcementPath = (target: any) => {
-  const title = String(target?.resume_path_title || '').trim()
-  const kind = String(target?.resume_path_kind || '').trim()
-  const kindLabel = kind ? formatLearningPathKind(kind) : ''
-  if (kindLabel && title) return `${kindLabel} · ${title}`
-  if (title) return title
-  if (kindLabel) return kindLabel
-  return t('problemDetail.reinforcementResumeCurrentWorkspace')
-}
-
-const formatReinforcementSummary = (entry: any) => {
-  const target = entry?.reinforcement_target || {}
-  const conceptLabel = target.concept_text || entry?.origin?.concept_text || entry?.title || t('problemDetail.derivedConceptsTitle')
-  return t('problemDetail.reinforcementSummary', {
-    concept: conceptLabel,
-    state: formatRecallState(entry?.recall_state),
-    action: formatRecommendedAction(entry?.recommended_action),
-  })
-}
-
-const formatLearningMode = (mode: string | undefined | null) => {
-  return mode === 'exploration'
-    ? t('problemDetail.modeExploration')
-    : t('problemDetail.modeSocratic')
-}
-
-const formatLearningPathKind = (kind: string | undefined | null) => {
-  if (kind === 'prerequisite') return t('problemDetail.pathKindPrerequisite')
-  if (kind === 'comparison') return t('problemDetail.pathKindComparison')
-  if (kind === 'branch') return t('problemDetail.pathKindBranch')
-  return t('problemDetail.pathKindMain')
-}
-
-const formatCandidateStatus = (status: string | undefined | null) => {
-  if (status === 'accepted') return t('problemDetail.conceptStatusAccepted')
-  if (status === 'rejected') return t('problemDetail.conceptStatusRejected')
-  if (status === 'reverted') return t('problemDetail.conceptStatusReverted')
-  if (status === 'postponed') return t('problemDetail.conceptStatusPostponed')
-  if (status === 'merged') return t('problemDetail.conceptStatusMerged')
-  return t('problemDetail.conceptStatusPending')
-}
-
-const formatCandidateSource = (source: string | undefined | null) => {
-  if (source === 'problem_inline_qa' || source === 'ask') return t('problemDetail.derivedConceptSourceAsk')
-  if (source === 'problem_response' || source === 'response') return t('problemDetail.derivedConceptSourceResponse')
-  return source || t('problemDetail.derivedConceptSourceUnknown')
-}
-
-const formatQuestionKind = (kind: string | undefined | null) => {
-  return kind === 'checkpoint'
-    ? t('problemDetail.questionKindCheckpoint')
-    : t('problemDetail.questionKindProbe')
-}
-
-const formatAnswerType = (answerType: string | undefined | null) => {
-  if (answerType === 'boundary_clarification') return t('problemDetail.answerTypeBoundaryClarification')
-  if (answerType === 'misconception_correction') return t('problemDetail.answerTypeMisconceptionCorrection')
-  if (answerType === 'comparison') return t('problemDetail.answerTypeComparison')
-  if (answerType === 'prerequisite_explanation') return t('problemDetail.answerTypePrerequisiteExplanation')
-  if (answerType === 'worked_example') return t('problemDetail.answerTypeWorkedExample')
-  return t('problemDetail.answerTypeConceptExplanation')
-}
-
-const normalizeExplorationTurn = (turn: any) => ({
-  turn_id: turn.turn_id || turn.id || null,
-  learning_mode: turn.learning_mode || 'exploration',
-  mode_metadata: turn.mode_metadata || {},
-  question: turn.question ?? turn.user_text ?? '',
-  answer: turn.answer ?? turn.assistant_text ?? '',
-  answer_mode: turn.answer_mode ?? turn.mode_metadata?.answer_mode ?? 'direct',
-  answer_type: turn.answer_type ?? turn.mode_metadata?.answer_type ?? 'concept_explanation',
-  answered_concepts: turn.answered_concepts ?? turn.mode_metadata?.answered_concepts ?? [],
-  related_concepts: turn.related_concepts ?? turn.mode_metadata?.related_concepts ?? [],
-  derived_candidates: turn.derived_candidates ?? turn.mode_metadata?.derived_candidates ?? [],
-  derived_path_candidates: turn.derived_path_candidates ?? turn.mode_metadata?.derived_path_candidates ?? [],
-  next_learning_actions: turn.next_learning_actions ?? turn.mode_metadata?.next_learning_actions ?? [],
-  path_suggestions: turn.path_suggestions ?? turn.mode_metadata?.path_suggestions ?? [],
-  return_to_main_path_hint: turn.return_to_main_path_hint ?? turn.mode_metadata?.return_to_main_path_hint ?? true,
-  step_index: Number(turn.step_index ?? turn.mode_metadata?.step_index ?? 0),
-  step_concept: turn.step_concept ?? turn.mode_metadata?.step_concept ?? problem.value?.title ?? '',
-  suggested_next_focus: turn.suggested_next_focus ?? turn.mode_metadata?.suggested_next_focus ?? null,
-  accepted_concepts: turn.accepted_concepts ?? turn.mode_metadata?.accepted_concepts ?? [],
-  pending_concepts: turn.pending_concepts ?? turn.mode_metadata?.pending_concepts ?? [],
-  trace_id: turn.trace_id,
-  llm_calls: turn.llm_calls,
-  llm_latency_ms: turn.llm_latency_ms,
-  fallback_reason: turn.fallback_reason,
-  created_at: turn.created_at,
+const {
+  fetchExplorationTurns,
+  fetchSocraticQuestion,
+  fetchConceptCandidates,
+  fetchPathCandidates,
+  fetchLearningPath,
+  fetchLearningPaths,
+  fetchProblem,
+} = createProblemDetailDataSupport({
+  api,
+  problemId: String(route.params.id),
+  ensureFreshToken: () => authStore.ensureFreshToken(),
+  refreshToken: () => authStore.refreshToken(),
+  getToken: () => authStore.token,
+  problem,
+  learningMode,
+  loading,
+  responses,
+  learningPath,
+  allLearningPaths,
+  qaHistory,
+  conceptCandidates,
+  pathCandidates,
+  socraticQuestion,
+  fetchingSocraticQuestion,
+  streamingSocraticQuestion,
+  candidateLoading,
+  pathCandidateLoading,
+  hydrateWorkspaceSnapshot,
 })
-
-const fetchExplorationTurns = async () => {
-  try {
-    const response = await api.get(`/problems/${route.params.id}/turns`, {
-      params: { learning_mode: 'exploration' },
-    })
-    qaHistory.value = (response.data || []).map(normalizeExplorationTurn)
-  } catch (e) {
-    console.error('Failed to fetch exploration turns:', e)
-    qaHistory.value = []
-  }
-}
-
-const fetchSocraticQuestion = async () => {
-  fetchingSocraticQuestion.value = true
-  streamingSocraticQuestion.value = ''
-  socraticQuestion.value = null
-  try {
-    let usedStream = false
-    const token = await authStore.ensureFreshToken() || authStore.token
-
-    if (token) {
-      try {
-        let finalPayload: Record<string, unknown> | null = null
-        let streamError: string | null = null
-
-        await streamSocraticQuestion({
-          problemId: String(route.params.id),
-          token,
-          onEvent: (event) => {
-            if (event.event === 'token') {
-              streamingSocraticQuestion.value += event.data
-              return
-            }
-            if (event.event === 'final') {
-              finalPayload = event.data
-              return
-            }
-            if (event.event === 'error') {
-              streamError = event.data?.message?.trim() || 'stream-error'
-            }
-          },
-        })
-
-        if (streamError) {
-          throw new Error(streamError)
-        }
-        if (!finalPayload) {
-          throw new Error('stream-finished-without-final-payload')
-        }
-        socraticQuestion.value = finalPayload
-        usedStream = true
-      } catch (e) {
-        console.error('Failed to stream socratic question, falling back to standard request:', e)
-        streamingSocraticQuestion.value = ''
-      }
-    }
-
-    if (!usedStream) {
-      const response = await api.get(`/problems/${route.params.id}/socratic-question`)
-      socraticQuestion.value = response.data || null
-    }
-  } catch (e) {
-    console.error('Failed to fetch socratic question:', e)
-    socraticQuestion.value = null
-  } finally {
-    streamingSocraticQuestion.value = ''
-    fetchingSocraticQuestion.value = false
-  }
-}
-
-const fetchConceptCandidates = async () => {
-  candidateLoading.value = true
-  try {
-    const response = await api.get(`/problems/${route.params.id}/concept-candidates`)
-    conceptCandidates.value = response.data || []
-  } catch (e) {
-    console.error('Failed to fetch concept candidates:', e)
-    conceptCandidates.value = []
-  } finally {
-    candidateLoading.value = false
-  }
-}
-
-const fetchPathCandidates = async () => {
-  pathCandidateLoading.value = true
-  try {
-    const response = await api.get(`/problems/${route.params.id}/path-candidates`)
-    pathCandidates.value = response.data || []
-  } catch (e) {
-    console.error('Failed to fetch path candidates:', e)
-    pathCandidates.value = []
-  } finally {
-    pathCandidateLoading.value = false
-  }
-}
-
-const fetchReviewSchedules = async () => {
-  try {
-    const response = await api.get('/srs/schedules')
-    scheduledReviews.value = response.data || []
-    scheduledModelCardIds.value = scheduledReviews.value.map((schedule: any) => String(schedule.model_card_id))
-  } catch (e) {
-    console.error('Failed to fetch review schedules:', e)
-    scheduledReviews.value = []
-    scheduledModelCardIds.value = []
-  }
-}
-
-const fetchWorkspaceNotes = async () => {
-  try {
-    const response = await api.get('/notes/', {
-      params: {
-        problem_id: route.params.id,
-      },
-    })
-    workspaceNotes.value = response.data || []
-  } catch (e) {
-    console.error('Failed to fetch workspace notes:', e)
-    workspaceNotes.value = []
-  }
-}
-
-const fetchWorkspaceResources = async () => {
-  try {
-    const response = await api.get('/resources/', {
-      params: {
-        problem_id: route.params.id,
-      },
-    })
-    workspaceResources.value = response.data || []
-  } catch (e) {
-    console.error('Failed to fetch workspace resources:', e)
-    workspaceResources.value = []
-  }
-}
-
-const fetchLearningPath = async () => {
-  const pathRes = await api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null }))
-  learningPath.value = pathRes.data
-}
-
-const fetchLearningPaths = async () => {
-  const response = await api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] }))
-  allLearningPaths.value = response.data || []
-}
-
-const fetchProblem = async () => {
-  try {
-    const [problemRes, pathRes, pathListRes, responsesRes, candidatesRes, pathCandidatesRes, turnsRes, schedulesRes, notesRes, resourcesRes] = await Promise.all([
-      api.get(`/problems/${route.params.id}`),
-      api.get(`/problems/${route.params.id}/learning-path`).catch(() => ({ data: null })),
-      api.get(`/problems/${route.params.id}/learning-paths`).catch(() => ({ data: [] })),
-      api.get(`/problems/${route.params.id}/responses`).catch(() => ({ data: [] })),
-      api.get(`/problems/${route.params.id}/concept-candidates`).catch(() => ({ data: [] })),
-      api.get(`/problems/${route.params.id}/path-candidates`).catch(() => ({ data: [] })),
-      api.get(`/problems/${route.params.id}/turns`, {
-        params: { learning_mode: 'exploration' },
-      }).catch(() => ({ data: [] })),
-      api.get('/srs/schedules').catch(() => ({ data: [] })),
-      api.get('/notes/', {
-        params: { problem_id: route.params.id },
-      }).catch(() => ({ data: [] })),
-      api.get('/resources/', {
-        params: { problem_id: route.params.id },
-      }).catch(() => ({ data: [] })),
-    ])
-
-    problem.value = problemRes.data
-    learningMode.value = problemRes.data?.learning_mode || 'socratic'
-    learningPath.value = pathRes.data
-    allLearningPaths.value = pathListRes.data || []
-    responses.value = responsesRes.data
-    conceptCandidates.value = candidatesRes.data || []
-    pathCandidates.value = pathCandidatesRes.data || []
-    qaHistory.value = (turnsRes.data || []).map(normalizeExplorationTurn)
-    scheduledReviews.value = schedulesRes.data || []
-    scheduledModelCardIds.value = scheduledReviews.value.map((schedule: any) => String(schedule.model_card_id))
-    workspaceNotes.value = notesRes.data || []
-    workspaceResources.value = resourcesRes.data || []
-    loading.value = false
-    if (learningMode.value === 'socratic') {
-      await fetchSocraticQuestion()
-    } else {
-      socraticQuestion.value = null
-    }
-  } catch (e) {
-    console.error('Failed to fetch problem:', e)
-  } finally {
-    loading.value = false
-  }
-}
 
 const {
   syncProblemSnapshot,
@@ -1381,6 +827,7 @@ const {
   problemId: String(route.params.id),
   t,
   ensureFreshToken: () => authStore.ensureFreshToken(),
+  refreshToken: () => authStore.refreshToken(),
   getToken: () => authStore.token,
   problem,
   learningMode,
@@ -1409,220 +856,47 @@ const {
   fetchSocraticQuestion,
 })
 
-const updateCurrentStep = async (nextStep: number) => {
-  if (!learningPath.value) return
+const {
+  acceptCandidate,
+  rejectCandidate,
+  postponeCandidate,
+  mergeCandidate,
+  rollbackConcept,
+  promoteCandidateToModelCard,
+  openModelCard,
+  scheduleCandidateReview,
+} = createProblemDetailKnowledgeAssetActions({
+  api,
+  problemId: String(route.params.id),
+  router,
+  candidateSubmittingId,
+  handoffSubmittingId,
+  fetchConceptCandidates,
+  fetchReviewSchedules,
+  syncProblemSnapshot,
+})
 
-  updatingPath.value = true
-  try {
-    const response = await api.put(`/problems/${route.params.id}/learning-path`, {
-      current_step: nextStep,
-    })
-    learningPath.value = response.data
-    await fetchLearningPaths()
-    if (learningMode.value === 'socratic') {
-      await fetchSocraticQuestion()
-    }
-
-    if (problem.value) {
-      if (totalSteps.value > 0 && nextStep >= totalSteps.value) {
-        problem.value.status = 'completed'
-      } else if (nextStep > 0) {
-        problem.value.status = 'in-progress'
-      } else {
-        problem.value.status = 'new'
-      }
-    }
-  } catch (e) {
-    console.error('Failed to update learning path:', e)
-  } finally {
-    updatingPath.value = false
-  }
-}
-
-const undoAutoAdvance = async () => {
-  if (!learningPath.value) return
-
-  const fallbackTarget = Math.max((learningPath.value.current_step || 1) - 1, 0)
-  const targetStep = undoTargetStep.value ?? fallbackTarget
-  await updateCurrentStep(targetStep)
-  autoAdvanceMessage.value = t('problemDetail.autoAdvanceUndone')
-  canUndoAutoAdvance.value = false
-  undoTargetStep.value = null
-}
-
-const acceptCandidate = async (candidateId: string) => {
-  candidateSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/accept`)
-    await Promise.all([
-      fetchConceptCandidates(),
-      syncProblemSnapshot(),
-    ])
-  } catch (e) {
-    console.error('Failed to accept concept candidate:', e)
-  } finally {
-    candidateSubmittingId.value = null
-  }
-}
-
-const rejectCandidate = async (candidateId: string) => {
-  candidateSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/reject`)
-    await fetchConceptCandidates()
-  } catch (e) {
-    console.error('Failed to reject concept candidate:', e)
-  } finally {
-    candidateSubmittingId.value = null
-  }
-}
-
-const postponeCandidate = async (candidateId: string) => {
-  candidateSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/postpone`)
-    await fetchConceptCandidates()
-  } catch (e) {
-    console.error('Failed to postpone concept candidate:', e)
-  } finally {
-    candidateSubmittingId.value = null
-  }
-}
-
-const mergeCandidate = async ({ candidateId, targetConcept }: { candidateId: string; targetConcept: string }) => {
-  candidateSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/merge`, {
-      target_concept_text: targetConcept,
-    })
-    await Promise.all([
-      fetchConceptCandidates(),
-      syncProblemSnapshot(),
-    ])
-  } catch (e) {
-    console.error('Failed to merge concept candidate:', e)
-  } finally {
-    candidateSubmittingId.value = null
-  }
-}
-
-const rollbackConcept = async ({ candidateId, conceptText }: { candidateId: string; conceptText: string }) => {
-  candidateSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concepts/rollback`, {
-      concept_text: conceptText,
-      reason: 'Manual rollback from UI',
-    })
-    await Promise.all([
-      fetchConceptCandidates(),
-      syncProblemSnapshot(),
-    ])
-  } catch (e) {
-    console.error('Failed to rollback concept:', e)
-  } finally {
-    candidateSubmittingId.value = null
-  }
-}
-
-const promoteCandidateToModelCard = async (candidateId: string) => {
-  handoffSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/promote`)
-    await fetchConceptCandidates()
-  } catch (e) {
-    console.error('Failed to promote concept candidate to model card:', e)
-  } finally {
-    handoffSubmittingId.value = null
-  }
-}
-
-const openModelCard = (modelCardId: string) => {
-  if (!modelCardId) return
-  router.push(`/model-cards/${modelCardId}`)
-}
-
-const scheduleCandidateReview = async (candidateId: string) => {
-  handoffSubmittingId.value = candidateId
-  try {
-    await api.post(`/problems/${route.params.id}/concept-candidates/${candidateId}/schedule-review`)
-    await Promise.all([
-      fetchReviewSchedules(),
-      fetchConceptCandidates(),
-    ])
-  } catch (e) {
-    console.error('Failed to schedule concept candidate review:', e)
-  } finally {
-    handoffSubmittingId.value = null
-  }
-}
-
-const saveWorkspaceNote = async ({ content, tags }: { content: string; tags: string[] }) => {
-  noteSaving.value = true
-  try {
-    await api.post('/notes/', {
-      content,
-      source: 'text',
-      tags,
-      problem_id: route.params.id,
-      source_turn_id: activeConceptTurnId.value || undefined,
-    })
-    await fetchWorkspaceNotes()
-  } catch (e) {
-    console.error('Failed to save workspace note:', e)
-  } finally {
-    noteSaving.value = false
-  }
-}
-
-const deleteWorkspaceNote = async (noteId: string) => {
-  try {
-    await api.delete(`/notes/${noteId}`)
-    workspaceNotes.value = workspaceNotes.value.filter((note) => note.id !== noteId)
-  } catch (e) {
-    console.error('Failed to delete workspace note:', e)
-  }
-}
-
-const saveWorkspaceResource = async ({ url, title, linkType }: { url: string; title: string; linkType: string }) => {
-  resourceSaving.value = true
-  try {
-    await api.post('/resources/', {
-      url,
-      title: title || null,
-      link_type: linkType,
-      problem_id: route.params.id,
-      source_turn_id: activeConceptTurnId.value || undefined,
-    })
-    await fetchWorkspaceResources()
-  } catch (e) {
-    console.error('Failed to save workspace resource:', e)
-  } finally {
-    resourceSaving.value = false
-  }
-}
-
-const deleteWorkspaceResource = async (resourceId: string) => {
-  try {
-    await api.delete(`/resources/${resourceId}`)
-    workspaceResources.value = workspaceResources.value.filter((resource) => resource.id !== resourceId)
-  } catch (e) {
-    console.error('Failed to delete workspace resource:', e)
-  }
-}
-
-const interpretWorkspaceResource = async (resourceId: string) => {
-  resourceInterpretingId.value = resourceId
-  try {
-    const response = await api.post(`/resources/${resourceId}/interpret`)
-    workspaceResources.value = workspaceResources.value.map((resource) =>
-      resource.id === resourceId ? response.data : resource
-    )
-  } catch (e) {
-    console.error('Failed to interpret workspace resource:', e)
-  } finally {
-    resourceInterpretingId.value = null
-  }
-}
+const {
+  updateCurrentStep,
+  undoAutoAdvance,
+  activateLearningPathById,
+  returnToParentPath,
+} = createProblemDetailPathActions({
+  api,
+  problemId: String(route.params.id),
+  t,
+  learningPath,
+  learningMode,
+  updatingPath,
+  problem,
+  totalSteps,
+  autoAdvanceMessage,
+  canUndoAutoAdvance,
+  undoTargetStep,
+  fetchLearningPath,
+  fetchLearningPaths,
+  fetchSocraticQuestion,
+})
 
 const decidePathCandidate = async (candidateId: string, action: string) => {
   pathCandidateSubmittingId.value = candidateId
@@ -1683,24 +957,6 @@ const switchToReinforcementPath = async () => {
   await scrollToReinforcementFocus()
 }
 
-const activateLearningPathById = async (pathId: string) => {
-  if (updatingPath.value) return
-
-  updatingPath.value = true
-  try {
-    const response = await api.post(`/problems/${route.params.id}/learning-paths/${pathId}/activate`)
-    learningPath.value = response.data
-    await Promise.all([
-      fetchLearningPaths(),
-      learningMode.value === 'socratic' ? fetchSocraticQuestion() : Promise.resolve(),
-    ])
-  } catch (e) {
-    console.error('Failed to activate learning path:', e)
-  } finally {
-    updatingPath.value = false
-  }
-}
-
 const applyResumePathFromQuery = async () => {
   const resumePathId = String(route.query.resume_path || '')
   if (!resumePathId) return
@@ -1716,24 +972,6 @@ const scrollToReinforcementFocus = async () => {
     || document.querySelector('[data-testid="workspace-reinforcement-target"]')
   if (target && 'scrollIntoView' in target) {
     target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
-}
-
-const returnToParentPath = async () => {
-  if (updatingPath.value || !canReturnToParent.value) return
-
-  updatingPath.value = true
-  try {
-    const response = await api.post(`/problems/${route.params.id}/learning-path/return`)
-    learningPath.value = response.data
-    await Promise.all([
-      fetchLearningPaths(),
-      learningMode.value === 'socratic' ? fetchSocraticQuestion() : Promise.resolve(),
-    ])
-  } catch (e) {
-    console.error('Failed to return to parent learning path:', e)
-  } finally {
-    updatingPath.value = false
   }
 }
 
