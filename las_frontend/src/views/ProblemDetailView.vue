@@ -53,6 +53,9 @@
                 </article>
               </div>
 
+            </section>
+
+            <section class="card workspace-context-card" data-testid="workspace-context-card">
               <div class="workspace-status-strip">
                 <article class="workspace-status-pill" data-testid="workspace-path-summary">
                   <span class="workspace-summary-label">{{ t('problemDetail.currentPath') }}</span>
@@ -344,7 +347,7 @@
               </details>
             </section>
 
-            <section v-if="learningMode === 'socratic'" class="card responses-section">
+            <section v-if="learningMode === 'socratic'" class="card responses-section workspace-primary-action-card" data-testid="workspace-primary-action">
               <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
               <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
 
@@ -465,7 +468,7 @@
               <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
             </section>
 
-            <section v-else class="card qa-section">
+            <section v-else class="card qa-section workspace-primary-action-card" data-testid="workspace-primary-action">
               <h2>{{ t('problemDetail.askTitle') }}</h2>
               <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
 
@@ -1064,7 +1067,7 @@ onMounted(async () => {
 
 .back-link {
   display: inline-block;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   color: var(--text-muted);
   text-decoration: none;
 }
@@ -1074,11 +1077,13 @@ onMounted(async () => {
 }
 
 .problem-header {
-  margin-bottom: 2rem;
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
 }
 
 .problem-kicker {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
   color: var(--primary);
   font-size: 0.8rem;
   font-weight: 700;
@@ -1087,14 +1092,16 @@ onMounted(async () => {
 }
 
 .problem-frame-copy {
+  margin-top: 0.15rem;
   color: var(--text-muted);
 }
 
 .problem-header h1 {
-  margin-bottom: 0.5rem;
+  margin: 0;
 }
 
 .problem-header p {
+  margin: 0;
   color: var(--text-muted);
 }
 
@@ -1103,7 +1110,7 @@ onMounted(async () => {
   gap: 0.75rem;
   align-items: center;
   flex-wrap: wrap;
-  margin-top: 0.75rem;
+  margin-top: 0.35rem;
 }
 
 .mode-badge {
@@ -1136,6 +1143,12 @@ onMounted(async () => {
   gap: 1rem;
 }
 
+.workspace-primary-action-card {
+  order: 1;
+  border-color: rgba(96, 165, 250, 0.22);
+  background: rgba(96, 165, 250, 0.06);
+}
+
 .workspace-main-column {
   min-width: 0;
 }
@@ -1150,6 +1163,13 @@ onMounted(async () => {
 }
 
 .workspace-overview-card {
+  order: 2;
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace-context-card {
+  order: 3;
   display: grid;
   gap: 1rem;
 }
@@ -1260,8 +1280,13 @@ onMounted(async () => {
 }
 
 .reinforcement-target-card {
+  order: 4;
   border-color: rgba(248, 113, 113, 0.28);
   background: rgba(120, 24, 24, 0.16);
+}
+
+.current-step-section {
+  order: 5;
 }
 
 .reinforcement-details {

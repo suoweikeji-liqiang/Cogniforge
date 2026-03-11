@@ -75,9 +75,15 @@ async function openWorkspace(page: Page, problemId: string) {
   await expect(page.getByTestId('workspace-overview')).toBeVisible()
   await expect(page.getByTestId('workspace-mainline-focus')).toBeVisible()
   await expect(page.getByTestId('workspace-next-action')).toBeVisible()
+  await expect(page.getByTestId('workspace-primary-action')).toBeVisible()
   await expect(page.getByTestId('workspace-path-summary')).toBeVisible()
   await expect(page.getByTestId('workspace-artifacts-panel')).toBeVisible()
   await expect(page.getByTestId('current-learning-path')).toContainText(/Main path/i)
+  const actionBox = await page.getByTestId('workspace-primary-action').boundingBox()
+  const viewport = page.viewportSize()
+  expect(actionBox).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  expect(actionBox!.y).toBeLessThan((viewport!.height || 0) * 0.8)
 }
 
 function latestTurnOutcome(page: Page) {
