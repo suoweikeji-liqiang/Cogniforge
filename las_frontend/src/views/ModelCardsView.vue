@@ -18,10 +18,22 @@
         data-testid="model-cards-search-input"
         :placeholder="t('modelCards.searchCards')"
       />
-      <select v-model="filterMode" class="filter-select">
-        <option value="all">{{ t('modelCards.filterAll') }}</option>
+      <select v-model="attentionFilter" class="filter-select" data-testid="model-cards-attention-filter">
+        <option value="all">{{ t('modelCards.filterAllAttention') }}</option>
         <option value="scheduled">{{ t('modelCards.filterScheduled') }}</option>
         <option value="unscheduled">{{ t('modelCards.filterUnscheduled') }}</option>
+        <option value="due">{{ t('modelCards.filterDueSoon') }}</option>
+        <option value="needs_reinforcement">{{ t('modelCards.filterNeedsReinforcement') }}</option>
+      </select>
+      <select v-model="originFilter" class="filter-select" data-testid="model-cards-origin-filter">
+        <option value="all">{{ t('modelCards.filterAllOrigins') }}</option>
+        <option value="manual">{{ t('modelCards.filterOriginManual') }}</option>
+        <option value="problem_concept_candidate">{{ t('modelCards.filterOriginProblemDerived') }}</option>
+      </select>
+      <select v-model="sortBy" class="filter-select" data-testid="model-cards-sort-filter">
+        <option value="updated_desc">{{ t('modelCards.sortRecentActivity') }}</option>
+        <option value="due_review">{{ t('modelCards.sortDueReview') }}</option>
+        <option value="created_desc">{{ t('modelCards.sortNewest') }}</option>
       </select>
     </div>
     
@@ -192,9 +204,16 @@ const showCreateModal = ref(false)
 const creating = ref(false)
 const error = ref('')
 const searchQuery = ref('')
-const filterMode = ref('all')
+const attentionFilter = ref('all')
+const originFilter = ref('all')
+const sortBy = ref('updated_desc')
 const trimmedSearchQuery = computed(() => searchQuery.value.trim())
-const hasActiveFilters = computed(() => Boolean(trimmedSearchQuery.value) || filterMode.value !== 'all')
+const hasActiveFilters = computed(() => (
+  Boolean(trimmedSearchQuery.value)
+  || attentionFilter.value !== 'all'
+  || originFilter.value !== 'all'
+  || sortBy.value !== 'updated_desc'
+))
 const emptyCardsMessage = computed(() => (
   hasActiveFilters.value ? t('modelCards.noCards') : t('modelCards.createFirst')
 ))
@@ -221,9 +240,19 @@ const fetchCards = async ({ append = false }: { append?: boolean } = {}) => {
       params: {
         q: trimmedSearchQuery.value || undefined,
         scheduled:
-          filterMode.value === 'all'
+          attentionFilter.value === 'all'
             ? undefined
-            : filterMode.value === 'scheduled',
+            : attentionFilter.value === 'scheduled'
+              ? true
+              : attentionFilter.value === 'unscheduled'
+                ? false
+                : undefined,
+        attention:
+          attentionFilter.value === 'due' || attentionFilter.value === 'needs_reinforcement'
+            ? attentionFilter.value
+            : undefined,
+        origin_type: originFilter.value === 'all' ? undefined : originFilter.value,
+        sort: sortBy.value,
         limit: PAGE_SIZE,
         offset: append ? modelCards.value.length : 0,
       },
@@ -480,7 +509,7 @@ onBeforeUnmount(() => {
   }
 })
 
-watch([trimmedSearchQuery, filterMode], () => {
+watch([trimmedSearchQuery, attentionFilter, originFilter, sortBy], () => {
   queueCardRefresh()
 })
 </script>

@@ -261,6 +261,106 @@ async def test_model_card_list_supports_limit_and_offset(client):
 
 
 @pytest.mark.asyncio
+async def test_model_card_list_filters_origin_attention_and_sort(client, db_session):
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.models.entities.user import ModelCard, ReviewSchedule
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    due_card = await create_model_card(client, headers, "Due Card", "needs reinforcement", activate=True)
+    future_card = await create_model_card(client, headers, "Future Card", "scheduled later", activate=True)
+    derived_card = await create_model_card(client, headers, "Derived Card", "problem derived", activate=True)
+    unscheduled_card = await create_model_card(client, headers, "Loose Card", "not scheduled yet", activate=True)
+
+    due_schedule_response = await client.post(f"/api/srs/schedule/{due_card['id']}", headers=headers)
+    future_schedule_response = await client.post(f"/api/srs/schedule/{future_card['id']}", headers=headers)
+    derived_schedule_response = await client.post(f"/api/srs/schedule/{derived_card['id']}", headers=headers)
+    assert due_schedule_response.status_code == 200
+    assert future_schedule_response.status_code == 200
+    assert derived_schedule_response.status_code == 200
+
+    due_review_response = await client.post(
+        f"/api/srs/review/{due_schedule_response.json()['id']}?quality=0",
+        headers=headers,
+    )
+    assert due_review_response.status_code == 200
+
+    due_schedule = (
+        await db_session.execute(
+            select(ReviewSchedule).where(ReviewSchedule.model_card_id == due_card["id"])
+        )
+    ).scalar_one()
+    due_schedule.next_review_at = datetime.utcnow() - timedelta(minutes=5)
+
+    future_schedule = (
+        await db_session.execute(
+            select(ReviewSchedule).where(ReviewSchedule.model_card_id == future_card["id"])
+        )
+    ).scalar_one()
+    future_schedule.next_review_at = datetime.utcnow() + timedelta(days=3)
+
+    derived_schedule = (
+        await db_session.execute(
+            select(ReviewSchedule).where(ReviewSchedule.model_card_id == derived_card["id"])
+        )
+    ).scalar_one()
+    derived_schedule.next_review_at = datetime.utcnow() + timedelta(days=7)
+
+    derived_card_row = (
+        await db_session.execute(select(ModelCard).where(ModelCard.id == derived_card["id"]))
+    ).scalar_one()
+    derived_card_row.origin_type = "problem_concept_candidate"
+    derived_card_row.origin_stage = "accepted_concept_candidate"
+    derived_card_row.origin_learning_mode = "exploration"
+    derived_card_row.origin_concept_text = "derived-card"
+
+    loose_card_row = (
+        await db_session.execute(select(ModelCard).where(ModelCard.id == unscheduled_card["id"]))
+    ).scalar_one()
+    loose_card_row.updated_at = datetime.utcnow() + timedelta(minutes=1)
+
+    await db_session.commit()
+
+    origin_response = await client.get(
+        "/api/model-cards/",
+        params={"origin_type": "problem_concept_candidate"},
+        headers=headers,
+    )
+    assert origin_response.status_code == 200
+    assert [item["title"] for item in origin_response.json()] == ["Derived Card"]
+
+    attention_response = await client.get(
+        "/api/model-cards/",
+        params={"attention": "needs_reinforcement"},
+        headers=headers,
+    )
+    assert attention_response.status_code == 200
+    assert [item["title"] for item in attention_response.json()] == ["Due Card"]
+
+    due_sort_response = await client.get(
+        "/api/model-cards/",
+        params={"sort": "due_review"},
+        headers=headers,
+    )
+    assert due_sort_response.status_code == 200
+    due_sort_titles = [item["title"] for item in due_sort_response.json()]
+    assert due_sort_titles[0] == "Due Card"
+    assert due_sort_titles[-1] == "Loose Card"
+
+    unscheduled_response = await client.get(
+        "/api/model-cards/",
+        params={"scheduled": False},
+        headers=headers,
+    )
+    assert unscheduled_response.status_code == 200
+    assert [item["title"] for item in unscheduled_response.json()] == ["Loose Card"]
+
+
+@pytest.mark.asyncio
 async def test_model_card_list_includes_review_schedule_summary(client):
     tokens = await register_and_login(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
@@ -349,6 +449,68 @@ async def test_problem_list_supports_limit_and_offset(client):
     )
     assert second_page.status_code == 200
     assert [item["title"] for item in second_page.json()] == ["Problem One"]
+
+
+@pytest.mark.asyncio
+async def test_problem_list_filters_mode_status_and_sort(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    created = []
+    for title in ["Problem One", "Problem Two", "Problem Three"]:
+        response = await client.post(
+            "/api/problems/",
+            json={
+                "title": title,
+                "description": f"{title} description",
+                "associated_concepts": ["threshold"],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201
+        created.append(response.json())
+
+    update_response = await client.put(
+        f"/api/problems/{created[0]['id']}",
+        json={
+            "learning_mode": "exploration",
+            "status": "completed",
+        },
+        headers=headers,
+    )
+    assert update_response.status_code == 200
+
+    mode_response = await client.get(
+        "/api/problems/",
+        params={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert mode_response.status_code == 200
+    assert [item["title"] for item in mode_response.json()] == ["Problem One"]
+
+    status_response = await client.get(
+        "/api/problems/",
+        params={"status": "completed"},
+        headers=headers,
+    )
+    assert status_response.status_code == 200
+    assert [item["title"] for item in status_response.json()] == ["Problem One"]
+
+    recent_response = await client.get(
+        "/api/problems/",
+        params={"sort": "updated_desc"},
+        headers=headers,
+    )
+    assert recent_response.status_code == 200
+    assert [item["title"] for item in recent_response.json()][:2] == ["Problem One", "Problem Three"]
+
+    oldest_response = await client.get(
+        "/api/problems/",
+        params={"sort": "created_asc"},
+        headers=headers,
+    )
+    assert oldest_response.status_code == 200
+    assert [item["title"] for item in oldest_response.json()] == ["Problem One", "Problem Two", "Problem Three"]
 
 
 @pytest.mark.asyncio

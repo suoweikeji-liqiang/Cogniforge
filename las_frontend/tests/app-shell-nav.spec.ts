@@ -223,36 +223,72 @@ test('problem and model card libraries scale with load-more and search reset', a
   // - Disabled State: load-more controls stay deterministic while additional pages are loading.
   const tokens = await authenticate(page, request)
   const suffix = randomUUID().slice(0, 6)
+  const explorationProblemTitle = `Library Problem ${suffix}-01`
+  const pagedProblemTitle = `Library Problem ${suffix}-02`
+  const pagedCardTitle = `Library Card ${suffix}-01`
+  const createdProblems: Array<{ id: string }> = []
+  const createdCards: Array<{ id: string }> = []
 
   for (let index = 1; index <= 13; index += 1) {
-    await createProblem(request, tokens.access_token, `Library Problem ${suffix}-${String(index).padStart(2, '0')}`)
+    createdProblems.push(
+      await createProblem(request, tokens.access_token, `Library Problem ${suffix}-${String(index).padStart(2, '0')}`),
+    )
   }
+  const updateProblemResponse = await request.put(`/api/problems/${createdProblems[0].id}`, {
+    data: {
+      learning_mode: 'exploration',
+      status: 'completed',
+    },
+    headers: {
+      Authorization: `Bearer ${tokens.access_token}`,
+    },
+  })
+  expect(updateProblemResponse.ok()).toBeTruthy()
   for (let index = 1; index <= 13; index += 1) {
-    await createModelCard(request, tokens.access_token, `Library Card ${suffix}-${String(index).padStart(2, '0')}`)
+    createdCards.push(
+      await createModelCard(request, tokens.access_token, `Library Card ${suffix}-${String(index).padStart(2, '0')}`),
+    )
   }
+  const scheduled = await scheduleReview(request, tokens.access_token, createdCards[0].id)
+  const reinforcementReviewResponse = await request.post(`/api/srs/review/${scheduled.id}?quality=0`, {
+    headers: {
+      Authorization: `Bearer ${tokens.access_token}`,
+    },
+  })
+  expect(reinforcementReviewResponse.ok()).toBeTruthy()
 
   await page.goto('/problems')
   await expect(page.getByTestId('problems-grid')).toBeVisible()
+  await page.getByTestId('problems-mode-filter').selectOption('exploration')
+  await page.getByTestId('problems-status-filter').selectOption('completed')
+  await expect(page.getByText(explorationProblemTitle)).toBeVisible()
+  await expect(page.getByText(pagedProblemTitle)).toHaveCount(0)
+  await page.getByTestId('problems-mode-filter').selectOption('all')
+  await page.getByTestId('problems-status-filter').selectOption('all')
   await expect(page.getByTestId('problems-load-more')).toBeVisible()
-  await expect(page.getByText(`Library Problem ${suffix}-01`)).toHaveCount(0)
+  await expect(page.getByText(pagedProblemTitle)).toHaveCount(0)
   await page.getByTestId('problems-load-more').click()
-  await expect(page.getByText(`Library Problem ${suffix}-01`)).toBeVisible()
-  await page.getByTestId('problems-search-input').fill(`Library Problem ${suffix}-01`)
-  await expect(page.getByText(`Library Problem ${suffix}-01`)).toBeVisible()
+  await expect(page.getByText(pagedProblemTitle)).toBeVisible()
+  await page.getByTestId('problems-search-input').fill(pagedProblemTitle)
+  await expect(page.getByText(pagedProblemTitle)).toBeVisible()
   await page.getByTestId('problems-search-input').fill('')
-  await expect(page.getByText(`Library Problem ${suffix}-01`)).toHaveCount(0)
+  await expect(page.getByText(pagedProblemTitle)).toHaveCount(0)
   await expect(page.getByTestId('problems-load-more')).toBeVisible()
 
   await page.goto('/model-cards')
   await expect(page.getByTestId('model-cards-grid')).toBeVisible()
+  await page.getByTestId('model-cards-attention-filter').selectOption('needs_reinforcement')
+  await expect(page.getByText(pagedCardTitle)).toBeVisible()
+  await expect(page.getByText(`Library Card ${suffix}-02`)).toHaveCount(0)
+  await page.getByTestId('model-cards-attention-filter').selectOption('all')
   await expect(page.getByTestId('model-cards-load-more')).toBeVisible()
-  await expect(page.getByText(`Library Card ${suffix}-01`)).toHaveCount(0)
+  await expect(page.getByText(pagedCardTitle)).toHaveCount(0)
   await page.getByTestId('model-cards-load-more').click()
-  await expect(page.getByText(`Library Card ${suffix}-01`)).toBeVisible()
-  await page.getByTestId('model-cards-search-input').fill(`Library Card ${suffix}-01`)
-  await expect(page.getByText(`Library Card ${suffix}-01`)).toBeVisible()
+  await expect(page.getByText(pagedCardTitle)).toBeVisible()
+  await page.getByTestId('model-cards-search-input').fill(pagedCardTitle)
+  await expect(page.getByText(pagedCardTitle)).toBeVisible()
   await page.getByTestId('model-cards-search-input').fill('')
-  await expect(page.getByText(`Library Card ${suffix}-01`)).toHaveCount(0)
+  await expect(page.getByText(pagedCardTitle)).toHaveCount(0)
   await expect(page.getByTestId('model-cards-load-more')).toBeVisible()
 })
 

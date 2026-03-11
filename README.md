@@ -17,7 +17,7 @@ This repository is not currently centered on generic chat, note-taking, or PKM-s
 
 ### v1.3 Guided Knowledge Revision + Hardening
 
-This is the active milestone for the repository. `P0` is complete and `P1` is in progress.
+This is the active milestone for the repository. `P0` is complete and `P1` is in final closeout.
 
 It means the codebase has already closed the first revision-oriented gap in the learning loop and is now hardening the main workflow before broader expansion.
 
@@ -38,8 +38,8 @@ The current codebase now has all of the following:
 7. `ModelCardDetail` can turn revision-focus signals into a lightweight guided revision action.
 8. Provider-native structured outputs now back the core learning artifacts and the remaining major `ModelOSService` JSON chains.
 9. `ProblemDetail` now streams key AI interactions for exploration ask, Socratic question generation, and Socratic response evaluation while keeping blocking fallbacks.
-10. `Problems` and `Model Cards` now scale better for larger libraries through list pagination, debounced search, and lighter review-summary fetching.
-11. Core workflow modules have started to split into support files to reduce concentration risk, but that hardening work is still active.
+10. `Problems` and `Model Cards` now scale better for larger libraries through database-backed pagination, debounced search, higher-signal filters, and lighter review-summary fetching.
+11. Core workflow modules have been materially split into support files so the main learning loop can now be iterated on without the earlier concentration risk hotspots.
 
 In practical terms, the current repo already contains:
 
@@ -65,9 +65,9 @@ What this milestone does not mean:
 
 The remaining work in this cycle is intentionally narrower than a new product-surface expansion:
 
-1. keep splitting oversized workflow files such as `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`
-2. expand regression coverage around the revised knowledge loop and streaming fallback paths
-3. keep multi-problem and multi-model-card improvements limited to core-loop ergonomics instead of graph navigation
+1. finish the remaining `Problems` / `Model Cards` list-closeout decisions without opening graph scope
+2. keep full regression healthy while the hardening pass is being closed out
+3. keep warning/debt cleanup as follow-up work instead of reopening milestone scope
 
 Still out of scope while this hardening pass remains open:
 

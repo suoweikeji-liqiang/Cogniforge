@@ -18,6 +18,22 @@
         data-testid="problems-search-input"
         :placeholder="t('problems.searchProblems')"
       />
+      <select v-model="learningModeFilter" class="filter-select" data-testid="problems-mode-filter">
+        <option value="all">{{ t('problems.filterAllModes') }}</option>
+        <option value="socratic">{{ t('problems.filterModeSocratic') }}</option>
+        <option value="exploration">{{ t('problems.filterModeExploration') }}</option>
+      </select>
+      <select v-model="statusFilter" class="filter-select" data-testid="problems-status-filter">
+        <option value="all">{{ t('problems.filterAllStatuses') }}</option>
+        <option value="new">{{ t('problems.filterStatusNew') }}</option>
+        <option value="in-progress">{{ t('problems.filterStatusInProgress') }}</option>
+        <option value="completed">{{ t('problems.filterStatusCompleted') }}</option>
+      </select>
+      <select v-model="sortBy" class="filter-select" data-testid="problems-sort-filter">
+        <option value="updated_desc">{{ t('problems.sortRecentActivity') }}</option>
+        <option value="created_desc">{{ t('problems.sortNewest') }}</option>
+        <option value="created_asc">{{ t('problems.sortOldest') }}</option>
+      </select>
     </div>
     
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
@@ -108,9 +124,18 @@ const showCreateModal = ref(false)
 const creating = ref(false)
 const error = ref('')
 const searchQuery = ref('')
+const learningModeFilter = ref('all')
+const statusFilter = ref('all')
+const sortBy = ref('updated_desc')
 const trimmedSearchQuery = computed(() => searchQuery.value.trim())
+const hasActiveFilters = computed(() => (
+  Boolean(trimmedSearchQuery.value)
+  || learningModeFilter.value !== 'all'
+  || statusFilter.value !== 'all'
+  || sortBy.value !== 'updated_desc'
+))
 const emptyProblemsMessage = computed(() => (
-  trimmedSearchQuery.value ? t('problems.noProblems') : t('problems.createFirst')
+  hasActiveFilters.value ? t('problems.noProblems') : t('problems.createFirst')
 ))
 let latestFetchId = 0
 let searchDebounceId: number | null = null
@@ -133,6 +158,9 @@ const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
     const response = await api.get('/problems/', {
       params: {
         q: trimmedSearchQuery.value || undefined,
+        learning_mode: learningModeFilter.value === 'all' ? undefined : learningModeFilter.value,
+        status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+        sort: sortBy.value,
         limit: PAGE_SIZE,
         offset: append ? problems.value.length : 0,
       },
@@ -210,7 +238,7 @@ onBeforeUnmount(() => {
   }
 })
 
-watch(trimmedSearchQuery, () => {
+watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
   queueProblemSearch()
 })
 </script>
@@ -231,16 +259,28 @@ watch(trimmedSearchQuery, () => {
 }
 
 .filters-bar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 1.5rem;
 }
 
-.search-input {
-  width: 100%;
+.search-input,
+.filter-select {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
   padding: 0.75rem 1rem;
+}
+
+.search-input {
+  flex: 1 1 18rem;
+  min-width: 16rem;
+}
+
+.filter-select {
+  min-width: 11rem;
 }
 
 .problems-grid {

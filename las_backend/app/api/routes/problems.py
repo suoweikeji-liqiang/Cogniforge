@@ -3,6 +3,7 @@ import json
 import re
 import time
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sse_starlette.sse import EventSourceResponse
@@ -128,6 +129,21 @@ def _normalize_learning_mode(raw_mode: Optional[str], default: str = "socratic")
     if mode not in {"socratic", "exploration"}:
         return default
     return mode
+
+
+def _normalize_problem_list_sort(raw_sort: Optional[str]) -> str:
+    sort = str(raw_sort or "updated_desc").strip().lower()
+    if sort not in {"updated_desc", "created_desc", "created_asc"}:
+        return "updated_desc"
+    return sort
+
+
+def _problem_sort_clauses(sort: str):
+    if sort == "created_asc":
+        return [Problem.created_at.asc(), Problem.updated_at.asc()]
+    if sort == "created_desc":
+        return [Problem.created_at.desc(), Problem.updated_at.desc()]
+    return [Problem.updated_at.desc(), Problem.created_at.desc()]
 
 
 async def _list_turn_concept_candidates(
@@ -562,18 +578,27 @@ async def create_problem(
 @router.get("/", response_model=List[ProblemResponse])
 async def list_problems(
     q: Optional[str] = Query(default=None),
+    learning_mode: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    sort: str = Query(default="updated_desc"),
     limit: int = Query(default=12, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(Problem)
-        .where(Problem.user_id == current_user.id)
-        .order_by(Problem.created_at.desc())
-    )
-    problems = result.scalars().all()
+    normalized_mode = learning_mode if learning_mode in {"socratic", "exploration"} else None
+    normalized_status = str(status or "").strip() or None
+    normalized_sort = _normalize_problem_list_sort(sort)
+
+    query = select(Problem).where(Problem.user_id == current_user.id)
+    if normalized_mode:
+        query = query.where(Problem.learning_mode == normalized_mode)
+    if normalized_status:
+        query = query.where(Problem.status == normalized_status)
+
     if q:
+        result = await db.execute(query.order_by(*_problem_sort_clauses(normalized_sort)))
+        problems = list(result.scalars().all())
         problems = list(problems)
         bind = db.get_bind()
         fallback_ranked = model_os_service.rank_problems(problems, q)
@@ -614,7 +639,15 @@ async def list_problems(
             problems = merged
         else:
             problems = fallback_ranked
-    return list(problems)[offset:offset + limit]
+        return list(problems)[offset:offset + limit]
+
+    result = await db.execute(
+        query
+        .order_by(*_problem_sort_clauses(normalized_sort))
+        .offset(offset)
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 @router.get("/{problem_id}", response_model=ProblemResponse)

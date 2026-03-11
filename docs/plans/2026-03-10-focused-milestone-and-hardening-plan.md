@@ -3,10 +3,11 @@
 ## 0. Status Snapshot (2026-03-11)
 
 - `P0` is complete.
-- `P1` is in progress.
+- `P1` is in final closeout.
 - This document is the active plan for the current cycle.
 - The earlier `2026-03-05-learning-loop-hardening-plan.md` has been archived as superseded.
 - A narrow list-scaling slice for larger `Problems` and `Model Cards` libraries was pulled into `P1` because it directly improves the core learning loop at moderate scale without opening graph scope.
+- That slice now includes database-backed default pagination, key filters, and higher-signal sort options on the two primary library surfaces.
 
 ## 1. Goal
 
@@ -106,18 +107,24 @@ Limited multi-problem and multi-model-card list/query improvements can be includ
    - add incremental streaming UX to `ProblemDetail`
    - do not expose raw chain-of-thought
 
+5. Complete the narrow library-scaling slice
+   - issue: `#29` (limited slice only)
+   - keep this scoped to `Problems` and `Model Cards`
+   - improve list retrieval, filtering, and sorting without opening graph navigation or dashboard scope
+
 ### P1 Completion Criteria
 
 - core learning artifacts are less fragile to malformed model output
 - the main workflow code is easier to evolve without regressions
 - the revised knowledge loop has automated regression coverage
 - `ProblemDetail` no longer feels fully blocking for key AI interactions
+- the primary library surfaces have a credible moderate-scale retrieval/filter/sort path without relying on full-list fetches in the default path
 
 ## 5. P2: Deferred Work
 
 These are useful, but not part of the immediate path from beta to a more stable product:
 
-- deeper list/index scaling beyond core-loop ergonomics (`#29`)
+- any list/index work beyond the current `Problems` / `Model Cards` retrieval and filtering slice
 - graph-oriented knowledge navigation
 - broader secondary-surface expansion
 - large analytics or dashboard work

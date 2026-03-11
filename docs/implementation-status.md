@@ -6,7 +6,7 @@
 
 ### v1.3 Guided Knowledge Revision + Hardening
 
-Status: `P0 complete, P1 in progress`
+Status: `P0 complete, P1 in final closeout`
 
 This document reflects the codebase as it exists now, not an aspirational product description.
 
@@ -89,26 +89,29 @@ The current learning flow can already produce:
 
 ### 11. Problems And Model-Card Library Scaling
 
-- The main list APIs now support `limit` / `offset`.
+- The main list APIs now support `limit` / `offset`, and the default non-search list paths now page at the database layer instead of always fetching full lists first.
 - `Problems` and `Model Cards` use debounced search plus `Load More` instead of assuming tiny libraries.
+- `Problems` can now be filtered by learning mode and status, then sorted by recent activity / newest / oldest.
+- `Model Cards` can now be filtered by origin and review attention state, then sorted by recent activity / due review / newest.
 - `ModelCardsView` no longer fetches a second full `/srs/schedules` payload just to render review state for the current page.
 
-### 12. Ongoing Maintainability Hardening
+### 12. Maintainability Hardening Outcome
 
-- Support modules have started to come out of `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`.
-- This reduces local concentration risk, but the hardening pass is still underway rather than complete.
+- Support modules have been extracted out of `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`.
+- The earlier core-file concentration hotspots have been materially reduced enough that the current repo can be treated as stable to iterate on.
+- Minor cleanup remains, but maintainability is no longer blocked on those files staying as oversized single surfaces.
 
 ## What Is Still Thin
 
 These areas are still intentionally limited:
 
-1. concentration risk is still high in `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py`
-2. streaming fallback and auth / token-refresh boundary coverage is not yet fully closed
-3. review prioritization is still lightweight
+1. the search-ranked library paths still fetch candidate sets before ranking, so there is still room to optimize larger-library retrieval further
+2. review prioritization is still lightweight
+3. warning-level cleanup remains, especially `datetime.utcnow()` deprecation warnings and the `learning_paths` / `problem_turns` FK cycle warning
 4. graph-oriented navigation and broader secondary surfaces remain deferred
 
 ## Current P1 Closeout Focus
 
-- finish reducing concentration risk in the main workflow files (`#23`)
-- expand regression coverage around the revised knowledge loop and streaming fallback paths
-- keep multi-problem and multi-model-card optimizations limited to core-loop ergonomics rather than graph surfaces
+- finish deciding whether any more `#29` library scaling work is needed beyond the current Problems / Model Cards slice
+- keep full backend/frontend regression healthy while the hardening pass is being closed out
+- keep warning-level cleanup out of the milestone unless it blocks release stability

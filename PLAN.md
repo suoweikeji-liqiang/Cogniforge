@@ -4,7 +4,7 @@
 
 ### v1.3 Guided Knowledge Revision + Hardening
 
-Status: `P0 complete, P1 in progress` (updated 2026-03-11).
+Status: `P0 complete, P1 in final closeout` (updated 2026-03-11).
 
 This is the active milestone for the repository.
 
@@ -19,8 +19,12 @@ What is already complete in this cycle:
 - provider-native structured outputs across core JSON learning artifacts and the remaining major `ModelOSService` chains (`#24`)
 - incremental streaming in `ProblemDetail` for exploration ask, Socratic question generation, and Socratic response evaluation (`#25`)
 - a first multi-library scaling slice for larger `Problems` and `Model Cards` sets
-- `limit` / `offset` list APIs, debounced search, and `Load More` in the main library views
+- database-backed `limit` / `offset` list retrieval in the default library paths
+- debounced search and `Load More` in the main library views
+- `Problems` filters for learning mode / status plus recent/newest/oldest sorting
+- `Model Cards` filters for origin / attention state plus recent/due-review-first sorting
 - model-card list review summaries inlined into `/model-cards/` so the page no longer fetches a second full `/srs/schedules` payload
+- maintainability hotspots in `problems.py`, `ProblemDetailView.vue`, and `model_os_service.py` have been materially reduced enough for stable iteration
 
 Working chain:
 
@@ -28,9 +32,9 @@ Working chain:
 
 Current P1 closeout priorities:
 
-1. continue reducing concentration risk in oversized core files (`#23`)
-2. expand automated protection around streaming fallback and auth / token-refresh boundaries
-3. keep multi-problem and multi-model-card ergonomics scoped to core-loop list/query performance, not graph navigation
+1. finish deciding whether any more `#29` list/index work is needed beyond the current Problems / Model Cards slice
+2. keep full backend/frontend regression healthy while the milestone is being closed out
+3. track warning-level cleanup separately instead of reopening scope inside this hardening pass
 
 Still out of scope while P1 remains open:
 

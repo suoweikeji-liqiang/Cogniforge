@@ -1,6 +1,7 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import and_, case, or_, select, text
 from uuid import UUID
 from typing import List, Optional
 
@@ -77,6 +78,25 @@ async def rank_model_cards_with_backend(
     return merge_ranked_cards(native_ranked_cards, fallback_ranked_cards)
 
 
+def _normalize_model_card_sort(raw_sort: Optional[str]) -> str:
+    sort = str(raw_sort or "updated_desc").strip().lower()
+    if sort not in {"updated_desc", "created_desc", "due_review"}:
+        return "updated_desc"
+    return sort
+
+
+def _model_card_sort_clauses(sort: str):
+    if sort == "created_desc":
+        return [ModelCard.created_at.desc(), ModelCard.updated_at.desc()]
+    if sort == "due_review":
+        return [
+            case((ReviewSchedule.model_card_id.is_(None), 1), else_=0).asc(),
+            ReviewSchedule.next_review_at.asc(),
+            ModelCard.updated_at.desc(),
+        ]
+    return [ModelCard.updated_at.desc(), ModelCard.created_at.desc()]
+
+
 @router.post("/", response_model=ModelCardResponse, status_code=201)
 async def create_model_card(
     card_data: ModelCardCreate,
@@ -131,48 +151,85 @@ async def create_model_card(
 async def list_model_cards(
     q: Optional[str] = Query(default=None),
     scheduled: Optional[bool] = Query(default=None),
+    origin_type: Optional[str] = Query(default=None),
+    attention: Optional[str] = Query(default=None),
+    sort: str = Query(default="updated_desc"),
     limit: int = Query(default=12, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(ModelCard)
-        .where(ModelCard.user_id == current_user.id)
-        .order_by(ModelCard.created_at.desc())
-    )
-    cards = list(result.scalars().all())
+    current_user_id = str(current_user.id)
+    normalized_origin_type = origin_type if origin_type in {"manual", "problem_concept_candidate"} else None
+    normalized_attention = attention if attention in {"due", "needs_reinforcement"} else None
+    normalized_sort = _normalize_model_card_sort(sort)
 
-    if scheduled is not None:
-        schedules_result = await db.execute(
-            select(ReviewSchedule.model_card_id).where(
-                ReviewSchedule.user_id == str(current_user.id)
-            )
+    query = select(ModelCard).where(ModelCard.user_id == current_user.id)
+    needs_schedule_join = (
+        scheduled is not None
+        or normalized_attention is not None
+        or normalized_sort == "due_review"
+    )
+
+    if needs_schedule_join:
+        query = query.outerjoin(
+            ReviewSchedule,
+            and_(
+                ReviewSchedule.model_card_id == ModelCard.id,
+                ReviewSchedule.user_id == current_user_id,
+            ),
         )
-        scheduled_ids = {row[0] for row in schedules_result.all()}
-        cards = [
-            card for card in cards
-            if (str(card.id) in scheduled_ids) == scheduled
-        ]
+
+    if normalized_origin_type:
+        query = query.where(ModelCard.origin_type == normalized_origin_type)
+
+    if scheduled is True:
+        query = query.where(ReviewSchedule.model_card_id.is_not(None))
+    elif scheduled is False:
+        query = query.where(ReviewSchedule.model_card_id.is_(None))
+
+    if normalized_attention == "due":
+        query = query.where(
+            ReviewSchedule.model_card_id.is_not(None),
+            ReviewSchedule.next_review_at <= datetime.utcnow(),
+        )
+    elif normalized_attention == "needs_reinforcement":
+        query = query.where(
+            ReviewSchedule.last_reviewed_at.is_not(None),
+            or_(
+                ReviewSchedule.repetitions <= 1,
+                ReviewSchedule.interval_days <= 1,
+            ),
+        )
 
     if q:
+        result = await db.execute(query.order_by(*_model_card_sort_clauses(normalized_sort)))
+        cards = list(result.scalars().all())
         cards = await rank_model_cards_with_backend(db, current_user, cards, q)
+        page_cards = cards[offset:offset + limit]
+    else:
+        result = await db.execute(
+            query
+            .order_by(*_model_card_sort_clauses(normalized_sort))
+            .offset(offset)
+            .limit(limit)
+        )
+        page_cards = list(result.scalars().all())
 
-    page_cards = cards[offset:offset + limit]
     card_ids = [str(card.id) for card in page_cards]
     schedules_by_card_id: dict[str, dict] = {}
 
     if card_ids:
         schedules_result = await db.execute(
             select(ReviewSchedule).where(
-                ReviewSchedule.user_id == str(current_user.id),
+                ReviewSchedule.user_id == current_user_id,
                 ReviewSchedule.model_card_id.in_(card_ids),
             )
         )
         schedule_rows = list(schedules_result.scalars().all())
         origins = await _load_review_origins(
             db,
-            user_id=str(current_user.id),
+            user_id=current_user_id,
             model_card_ids=card_ids,
         )
         card_map = {str(card.id): card for card in page_cards}
