@@ -1288,3 +1288,80 @@ async def test_cog_test_session_stop_and_report_flow(client, db_session):
     report_body = report_response.text
     assert "Memory Recall" in report_body
     assert "Confuses retrieval strength with storage strength." in report_body
+
+
+@pytest.mark.asyncio
+async def test_problem_learning_export_contains_paths_turns_and_candidates(client):
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    create_problem_response = await client.post(
+        "/api/problems/",
+        json={
+            "title": "Precision vs Recall",
+            "description": "Track how one learning session develops.",
+            "associated_concepts": ["precision", "recall"],
+            "learning_mode": "socratic",
+        },
+        headers=headers,
+    )
+    assert create_problem_response.status_code == 201
+    problem = create_problem_response.json()
+
+    socratic_question_response = await client.get(
+        f"/api/problems/{problem['id']}/socratic-question",
+        headers=headers,
+    )
+    assert socratic_question_response.status_code == 200
+    socratic_question = socratic_question_response.json()
+
+    answer_response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={
+            "problem_id": problem["id"],
+            "user_response": "Precision focuses on false positives and recall focuses on false negatives.",
+            "learning_mode": "socratic",
+            "question_kind": socratic_question["question_kind"],
+            "socratic_question": socratic_question["question"],
+        },
+        headers=headers,
+    )
+    assert answer_response.status_code == 200
+
+    update_problem_response = await client.put(
+        f"/api/problems/{problem['id']}",
+        json={"learning_mode": "exploration"},
+        headers=headers,
+    )
+    assert update_problem_response.status_code == 200
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "How would you explain the tradeoff in one short answer?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+
+    export_response = await client.get(
+        f"/api/problems/{problem['id']}/export",
+        headers=headers,
+    )
+    assert export_response.status_code == 200
+    assert export_response.headers["content-type"].startswith("text/markdown")
+    assert "attachment; filename=" in export_response.headers["content-disposition"]
+
+    export_body = export_response.text
+    assert "# Learning Export: Precision vs Recall" in export_body
+    assert "## Problem Overview" in export_body
+    assert "## Learning Paths" in export_body
+    assert "## Learning Timeline" in export_body
+    assert socratic_question["question"] in export_body
+    assert "Precision focuses on false positives and recall focuses on false negatives." in export_body
+    assert "How would you explain the tradeoff in one short answer?" in export_body
+    assert "stubbed contextual response" in export_body
+    assert "## Derived Concepts" in export_body
+    assert "## Derived Path Candidates" in export_body

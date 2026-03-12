@@ -42,6 +42,15 @@
                   <p class="section-subtitle">{{ t('problemDetail.workspaceOverviewSubtitle') }}</p>
                 </div>
                 <div class="workspace-overview-actions">
+                  <button
+                    type="button"
+                    class="btn btn-secondary workspace-link-action"
+                    :disabled="exportingLearningRecord"
+                    data-testid="export-learning-record"
+                    @click="exportLearningRecord"
+                  >
+                    {{ t('problemDetail.exportLearningRecord') }}
+                  </button>
                   <router-link to="/reviews" class="btn btn-secondary workspace-link-action">
                     {{ t('modelCards.openReviewHub') }}
                   </router-link>
@@ -754,6 +763,7 @@ const pathCandidateLoading = ref(false)
 const pathCandidateSubmittingId = ref<string | null>(null)
 const scheduledModelCardIds = ref<string[]>([])
 const scheduledReviews = ref<any[]>([])
+const exportingLearningRecord = ref(false)
 const workspaceNotes = ref<any[]>([])
 const noteSaving = ref(false)
 const workspaceResources = ref<any[]>([])
@@ -793,6 +803,36 @@ const clearActionError = () => {
 
 const onActionError = (message: string) => {
   workspaceActionError.value = message
+}
+
+const resolveExportFilename = (contentDisposition?: string) => {
+  const match = String(contentDisposition || '').match(/filename=\"?([^\";]+)\"?/)
+  if (match?.[1]) return match[1]
+  return `${String(problem.value?.title || 'learning-record').trim().replace(/\s+/g, '-') || 'learning-record'}.md`
+}
+
+const exportLearningRecord = async () => {
+  clearActionError()
+  exportingLearningRecord.value = true
+  try {
+    const response = await api.get(`/problems/${route.params.id}/export`, {
+      responseType: 'blob',
+    })
+    const filename = resolveExportFilename(response.headers['content-disposition'])
+    const url = URL.createObjectURL(new Blob([response.data], { type: 'text/markdown' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Failed to export learning record:', error)
+    onActionError(t('problemDetail.exportLearningFailed'))
+  } finally {
+    exportingLearningRecord.value = false
+  }
 }
 
 const clearCurrentInteractionContext = (mode: 'socratic' | 'exploration' = learningMode.value) => {
