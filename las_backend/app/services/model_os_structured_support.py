@@ -250,6 +250,20 @@ def sanitize_concept_candidate_text(concept: Optional[str]) -> str:
                     text = candidate
                     break
     else:
+        text = re.sub(
+            r"\s+(?:in|with)\s+(?:one|a|an)\s+(?:concise\s+|brief\s+|short\s+)?"
+            r"(?:explanation|summary|sentence|response|example)\b.*$",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"\s+and\s+(?:explain|describe|compare|summarize)\b.*$",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r"^(?:and|or)\s+", "", text, flags=re.IGNORECASE)
         lowered = text.casefold()
         for suffix in (" definition", " definitions"):
             if lowered.endswith(suffix):
@@ -259,6 +273,32 @@ def sanitize_concept_candidate_text(concept: Optional[str]) -> str:
                     break
 
     return re.sub(r"\s+", " ", text).strip()
+
+
+def expand_concept_candidate_variants(concept: Optional[str]) -> List[str]:
+    base = sanitize_concept_candidate_text(concept)
+    if not base:
+        return []
+
+    if not re.search(r"[,，、;；]", base):
+        return [base]
+
+    parts = [
+        sanitize_concept_candidate_text(part)
+        for part in re.split(r"\s*(?:,|，|、|;|；)\s*", base)
+    ]
+    parts = [part for part in parts if part]
+    if len(parts) <= 1 or len(parts) > 6:
+        return [base]
+
+    for part in parts:
+        if contains_cjk(part):
+            if len(re.sub(r"\s+", "", part)) > 14:
+                return [base]
+        else:
+            if len(part.split()) > 4:
+                return [base]
+    return parts
 
 
 def should_align_answer_language(question: Optional[str], answer: Optional[str]) -> bool:
@@ -307,18 +347,18 @@ def normalize_concepts(concepts: List[str], limit: int = 8) -> List[str]:
     normalized: List[str] = []
     seen = set()
     for raw in concepts or []:
-        concept = sanitize_concept_candidate_text(raw)
-        if not concept:
-            continue
-        if len(concept) > 80:
-            concept = concept[:80].rstrip()
-        key = concept.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        normalized.append(concept)
-        if len(normalized) >= limit:
-            break
+        for concept in expand_concept_candidate_variants(raw):
+            if not concept:
+                continue
+            if len(concept) > 80:
+                concept = concept[:80].rstrip()
+            key = concept.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(concept)
+            if len(normalized) >= limit:
+                return normalized
     return normalized
 
 
@@ -379,6 +419,22 @@ def is_low_signal_concept_candidate(concept: Optional[str]) -> bool:
         return True
     if lowered.startswith(("what is ", "explain ", "define ", "clarify ", "problem statement")):
         return True
+    if lowered.startswith(("please ", "compare ", "describe ", "summarize ", "show ", "give ")):
+        return True
+    if any(
+        marker in lowered
+        for marker in (
+            " concise explanation",
+            " brief explanation",
+            " short explanation",
+            " one concise explanation",
+            " one concise summary",
+            " one example",
+            " one sentence",
+            " each matters",
+        )
+    ):
+        return True
     return False
 
 
@@ -386,18 +442,18 @@ def filter_low_signal_concepts(concepts: List[str], limit: int = 8) -> List[str]
     filtered: List[str] = []
     seen = set()
     for raw in concepts or []:
-        concept = sanitize_concept_candidate_text(raw)
-        if not concept or is_low_signal_concept_candidate(concept):
-            continue
-        if len(concept) > 80:
-            concept = concept[:80].rstrip()
-        key = concept.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        filtered.append(concept)
-        if len(filtered) >= limit:
-            break
+        for concept in expand_concept_candidate_variants(raw):
+            if not concept or is_low_signal_concept_candidate(concept):
+                continue
+            if len(concept) > 80:
+                concept = concept[:80].rstrip()
+            key = concept.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            filtered.append(concept)
+            if len(filtered) >= limit:
+                return filtered
     return filtered
 
 

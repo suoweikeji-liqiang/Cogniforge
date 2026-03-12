@@ -58,15 +58,23 @@ def test_model_os_sanitizes_markdown_and_definition_fragments_in_concepts():
             "召回率的定义**",
             "在代码变更的缺陷检测中",
             "精确率",
+            "false negatives in one concise explanation",
+            "precision, recall, false positives",
         ],
-        limit=6,
+        limit=8,
     )
 
     assert "精确率" in concepts
     assert "召回率" in concepts
+    assert "false negatives" in concepts
+    assert "precision" in concepts
+    assert "recall" in concepts
+    assert "false positives" in concepts
     assert "1.**精确率" not in concepts
     assert "召回率的定义**" not in concepts
     assert "在代码变更的缺陷检测中" not in concepts
+    assert "false negatives in one concise explanation" not in concepts
+    assert "precision, recall, false positives" not in concepts
 
 
 def test_model_os_detects_when_answer_language_needs_alignment():

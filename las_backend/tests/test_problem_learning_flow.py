@@ -1288,6 +1288,70 @@ async def test_problem_ask_strips_markdown_fragments_from_extracted_concepts(cli
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_splits_enumerated_concepts_and_drops_instruction_tails(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(
+        client,
+        headers,
+        title="Metric tradeoffs",
+        description="Understand precision, recall, false positives, and false negatives.",
+    )
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "Precision measures the accuracy of predicted positives, recall measures the coverage of actual positives, "
+            "false positives are incorrect positive predictions, and false negatives are missed positives."
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "false negatives in one concise explanation",
+            "precision, recall, false positives",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "Please compare precision, recall, false positives, and false negatives in one concise explanation.",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+
+    turn_candidates = {item["name"] for item in body["derived_candidates"]}
+    assert "false negatives" in turn_candidates
+    assert "precision" in turn_candidates
+    assert "recall" in turn_candidates or "false positives" in turn_candidates
+    assert "false negatives in one concise explanation" not in turn_candidates
+    assert "precision, recall, false positives" not in turn_candidates
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/concept-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    stored_turn_candidates = [
+        item
+        for item in candidates_response.json()
+        if item["source_turn_id"] == body["turn_id"]
+    ]
+    stored_turn_candidate_names = {item["concept_text"] for item in stored_turn_candidates}
+    assert "false negatives" in stored_turn_candidate_names
+    assert "precision" in stored_turn_candidate_names
+    assert "false negatives in one concise explanation" not in stored_turn_candidate_names
+    assert "precision, recall, false positives" not in stored_turn_candidate_names
+
+
+@pytest.mark.asyncio
 async def test_problem_ask_caps_exploration_concept_candidates_to_three(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
