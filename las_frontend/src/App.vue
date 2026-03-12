@@ -59,7 +59,6 @@ const primaryNavItems = computed(() => {
   const items = [
     { key: 'home', to: '/dashboard', label: 'nav.home' },
     { key: 'problems', to: '/problems', label: 'nav.problems' },
-    { key: 'model-cards', to: '/model-cards', label: 'nav.modelCards' },
     { key: 'review', to: '/reviews', label: 'nav.reviews' },
   ]
 
@@ -70,8 +69,7 @@ const primaryNavItems = computed(() => {
   return items
 })
 
-const isRouteActive = (path: string) =>
-  route.path === path || route.path.startsWith(`${path}/`)
+const isRouteActive = (path: string) => route.path === path || route.path.startsWith(`${path}/`)
 
 const isAuthLayoutRoute = computed(() => authLayoutRoutes.has(String(route.name || '')))
 
@@ -205,9 +203,6 @@ const logout = async () => {
   border-radius: 999px;
   text-decoration: none;
   transition: all 0.2s ease;
-}
-
-.nav-pill {
   padding: 0.65rem 1rem;
   color: #d3d8df;
   background: rgba(255, 255, 255, 0.03);
@@ -238,12 +233,11 @@ const logout = async () => {
   }
 
   .nav-top {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: stretch;
   }
 
   .nav-meta {
-    width: 100%;
     justify-content: space-between;
   }
 
@@ -253,10 +247,6 @@ const logout = async () => {
 
   .main-content {
     padding: 1rem;
-  }
-
-  .main-content-auth {
-    padding: 0;
   }
 }
 </style>

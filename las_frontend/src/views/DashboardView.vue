@@ -16,12 +16,12 @@
     <template v-else>
       <section class="hero-shell">
         <div class="hero-copy">
-          <p class="hero-kicker">{{ t('dashboard.focusTitle') }}</p>
+          <p class="hero-kicker">{{ t('nav.home') }}</p>
           <h1>{{ t('dashboard.welcome') }}, {{ authStore.user?.username }}</h1>
           <p class="hero-subtitle">{{ t('dashboard.focusSubtitle') }}</p>
         </div>
 
-        <router-link :to="focusCard.to" class="focus-card" :class="focusCard.tone" data-testid="dashboard-focus-card">
+        <router-link :to="focusCard.to" class="focus-card" :class="focusCard.tone" data-testid="continue-focus-card">
           <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
           <h2>{{ focusCard.title }}</h2>
           <p>{{ focusCard.description }}</p>
@@ -44,7 +44,7 @@
         </div>
       </section>
 
-      <section class="dashboard-grid">
+      <section class="continue-grid">
         <section class="card-panel" data-testid="dashboard-problems-panel">
           <p class="section-meta">{{ t('dashboard.resumePanelMeta') }}</p>
           <h2>{{ t('dashboard.resumeSectionTitle') }}</h2>
@@ -62,7 +62,10 @@
               <span class="status">{{ problem.status }}</span>
             </router-link>
           </div>
-          <p v-else class="empty">{{ t('dashboard.noRecent') }}</p>
+          <div v-else class="empty-block">
+            <p class="empty">{{ t('dashboard.noRecent') }}</p>
+            <router-link to="/problems" class="inline-link">{{ t('dashboard.newProblem') }}</router-link>
+          </div>
         </section>
 
         <section class="card-panel" data-testid="dashboard-review-panel">
@@ -84,28 +87,9 @@
           </div>
           <div v-else class="empty-block">
             <p class="empty">{{ t('dashboard.noDueReviews') }}</p>
-            <router-link to="/model-cards" class="inline-link">
-              {{ t('dashboard.createModelCard') }}
-            </router-link>
+            <router-link to="/reviews" class="inline-link">{{ t('dashboard.openReviewHub') }}</router-link>
           </div>
         </section>
-      </section>
-
-      <section class="card-panel" data-testid="dashboard-model-cards-panel">
-        <p class="section-meta">{{ t('dashboard.modelsPanelMeta') }}</p>
-        <h2>{{ t('dashboard.modelCardsSectionTitle') }}</h2>
-        <div v-if="recentModelCards.length" class="model-grid">
-          <router-link
-            v-for="card in recentModelCards"
-            :key="card.id"
-            :to="`/model-cards/${card.id}`"
-            class="model-card"
-          >
-            <strong>{{ card.title }}</strong>
-            <p>{{ card.user_notes || t('dashboard.modelLibraryDescription') }}</p>
-          </router-link>
-        </div>
-        <p v-else class="empty">{{ t('dashboard.noRecentModelCards') }}</p>
       </section>
     </template>
   </div>
@@ -129,11 +113,8 @@ const pageState = ref<AsyncPageState>('loading')
 const pageError = ref('')
 
 const recentProblems = computed(() => problems.value.slice(0, 5))
-const recentModelCards = computed(() => modelCards.value.slice(0, 4))
 const dueReviewCount = computed(() => dueCards.value.length)
-const activeProblemCount = computed(() =>
-  problems.value.filter((problem) => problem.status !== 'completed').length
-)
+const activeProblemCount = computed(() => problems.value.filter((problem) => problem.status !== 'completed').length)
 
 const focusCard = computed(() => {
   if (dueCards.value.length > 0) {
@@ -225,8 +206,7 @@ onMounted(fetchDashboardData)
 
 .focus-card,
 .card-panel,
-.metric-card,
-.action-card {
+.metric-card {
   border-radius: 18px;
   border: 1px solid var(--border);
   background: rgba(18, 18, 34, 0.96);
@@ -270,9 +250,7 @@ onMounted(fetchDashboardData)
 }
 
 .metric-grid,
-.dashboard-grid,
-.model-grid,
-.actions-grid {
+.continue-grid {
   display: grid;
   gap: 1rem;
 }
@@ -297,7 +275,7 @@ onMounted(fetchDashboardData)
   font-size: 1.8rem;
 }
 
-.dashboard-grid {
+.continue-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -305,8 +283,7 @@ onMounted(fetchDashboardData)
   padding: 1.4rem;
 }
 
-.card-panel h2,
-.actions-section h2 {
+.card-panel h2 {
   margin-top: 0.35rem;
   margin-bottom: 0.9rem;
 }
@@ -318,16 +295,7 @@ onMounted(fetchDashboardData)
 }
 
 .resume-item,
-.review-item,
-.model-card,
-.action-card {
-  text-decoration: none;
-  color: var(--text);
-}
-
-.resume-item,
-.review-item,
-.model-card {
+.review-item {
   display: flex;
   justify-content: space-between;
   gap: 0.8rem;
@@ -335,11 +303,12 @@ onMounted(fetchDashboardData)
   border-radius: 12px;
   background: var(--bg-dark);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+  color: var(--text);
 }
 
 .resume-item p,
 .review-item p,
-.model-card p,
 .empty {
   color: var(--text-muted);
 }
@@ -347,36 +316,12 @@ onMounted(fetchDashboardData)
 .status {
   background: rgba(96, 165, 250, 0.14);
   color: #bfdbfe;
+  text-transform: capitalize;
 }
 
 .review-badge {
   background: rgba(74, 222, 128, 0.14);
   color: #bbf7d0;
-}
-
-.model-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.model-card {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.actions-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.action-card {
-  padding: 1rem 1.1rem;
-}
-
-.action-card h3 {
-  margin-bottom: 0.45rem;
-}
-
-.action-card p {
-  color: var(--text-muted);
 }
 
 .empty-block {
@@ -392,8 +337,7 @@ onMounted(fetchDashboardData)
 
 @media (max-width: 900px) {
   .metric-grid,
-  .dashboard-grid,
-  .actions-grid {
+  .continue-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -14,356 +14,541 @@
     <div v-else-if="loading" class="loading">{{ t('common.loading') }}</div>
 
     <template v-else-if="problem">
-      <div class="problem-header">
-        <router-link to="/problems" class="back-link">&larr; {{ t('common.back') }}</router-link>
-        <p class="problem-kicker">{{ t('problemDetail.workspaceKicker') }}</p>
-        <h1>{{ problem.title }}</h1>
-        <p>{{ problem.description }}</p>
-        <p class="problem-frame-copy">
-          {{ learningMode === 'exploration' ? t('problemDetail.workspaceFrameExploration') : t('problemDetail.workspaceFrameSocratic') }}
-        </p>
-        <div class="problem-meta">
-          <span class="status" :class="problem.status">{{ problem.status }}</span>
-          <span class="mode-badge">{{ t('problemDetail.currentMode') }}: {{ formatLearningMode(learningMode) }}</span>
-          <span v-if="totalSteps" class="progress-text">
-            {{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps }}
-          </span>
+      <section class="problem-learning-header card" data-testid="problem-learning-header">
+        <div class="learning-header-copy">
+          <router-link to="/problems" class="back-link">&larr; {{ t('common.back') }}</router-link>
+          <p class="problem-kicker">{{ t('problemDetail.learningHeaderKicker') }}</p>
+          <h1>{{ problem.title }}</h1>
+          <p>{{ problem.description }}</p>
         </div>
-      </div>
 
-      <div class="problem-content">
-        <div class="workspace-stage workspace-stage-unified">
-          <div class="workspace-main-column workspace-main-stack">
-            <section class="card workspace-overview-card" data-testid="workspace-overview">
-              <div class="workspace-overview-head">
-                <div>
-                  <p class="workspace-eyebrow">{{ t('nav.workspace') }}</p>
-                  <h2>{{ t('problemDetail.workspaceOverviewTitle') }}</h2>
-                  <p class="section-subtitle">{{ t('problemDetail.workspaceOverviewSubtitle') }}</p>
-                </div>
-                <div class="workspace-overview-actions">
-                  <button
-                    type="button"
-                    class="btn btn-secondary workspace-link-action"
-                    :disabled="exportingLearningRecord"
-                    data-testid="export-learning-record"
-                    @click="exportLearningRecord"
-                  >
-                    {{ t('problemDetail.exportLearningRecord') }}
-                  </button>
-                  <router-link to="/reviews" class="btn btn-secondary workspace-link-action">
-                    {{ t('modelCards.openReviewHub') }}
-                  </router-link>
-                  <router-link to="/model-cards" class="btn btn-secondary workspace-link-action">
-                    {{ t('reviews.openModelCards') }}
-                  </router-link>
-                </div>
-              </div>
+        <div class="learning-header-status">
+          <article class="header-pill">
+            <span class="workspace-summary-label">{{ t('problemDetail.currentPath') }}</span>
+            <strong>{{ workspacePathSummary }}</strong>
+            <p v-if="learningPath?.branch_reason">{{ learningPath.branch_reason }}</p>
+            <p v-else-if="learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined">
+              {{ t('problemDetail.returnStepLabel', { step: Number(learningPath.return_step_id) + 1 }) }}
+            </p>
+          </article>
+          <article class="header-pill">
+            <span class="workspace-summary-label">{{ t('problemDetail.currentMode') }}</span>
+            <strong>{{ formatLearningMode(learningMode) }}</strong>
+            <p>{{ modeSummary }}</p>
+          </article>
+          <article class="header-pill">
+            <span class="workspace-summary-label">{{ t('problemDetail.progress') }}</span>
+            <strong>{{ progressSummary }}</strong>
+            <p>{{ currentStepSummary }}</p>
+          </article>
+        </div>
 
-              <div class="workspace-mainline-grid">
-                <article class="workspace-summary-card workspace-mainline-card" data-testid="workspace-mainline-focus">
-                  <span class="workspace-summary-label">{{ t('problemDetail.currentStepTitle') }}</span>
-                  <strong>{{ workspaceFocusTitle }}</strong>
-                  <p>{{ workspaceFocusDescription }}</p>
-                </article>
-                <article class="workspace-summary-card workspace-mainline-card workspace-next-action-card" data-testid="workspace-next-action">
-                  <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
-                  <strong>{{ workspaceNextAction }}</strong>
-                  <p>{{ learningMode === 'exploration' ? t('problemDetail.modeExplorationHint') : t('problemDetail.modeSocraticHint') }}</p>
-                </article>
-              </div>
-
-            </section>
-
-            <section class="card workspace-context-card" data-testid="workspace-context-card">
-              <div class="workspace-status-strip">
-                <article class="workspace-status-pill" data-testid="workspace-path-summary">
-                  <span class="workspace-summary-label">{{ t('problemDetail.currentPath') }}</span>
-                  <strong>{{ workspacePathSummary }}</strong>
-                  <p v-if="learningPath?.branch_reason">{{ learningPath.branch_reason }}</p>
-                  <p v-if="learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined">
-                    {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
-                  </p>
-                  <p v-if="!learningPath?.branch_reason && !(learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined)">
-                    {{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}
-                  </p>
-                </article>
-                <article class="workspace-status-pill">
-                  <span class="workspace-summary-label">{{ t('problemDetail.currentMode') }}</span>
-                  <strong>{{ formatLearningMode(learningMode) }}</strong>
-                  <p>{{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}</p>
-                </article>
-                <article class="workspace-status-pill" data-testid="workspace-review-summary">
-                  <span class="workspace-summary-label">{{ t('problemDetail.reviewLoopTitle') }}</span>
-                  <strong>{{ workspaceReviewSummary }}</strong>
-                  <p>{{ workspaceReviewDescription }}</p>
-                </article>
-              </div>
-
-              <div class="workspace-mode-row">
-                <div class="workspace-mode-copy">
-                  <span class="workspace-summary-label">{{ t('problemDetail.turnResultTitle') }}</span>
-                  <strong>{{ workspaceTurnSummary }}</strong>
-                  <p class="section-subtitle">
-                    {{ learningMode === 'socratic' ? t('problemDetail.turnResultSubtitleSocratic') : t('problemDetail.turnResultSubtitleExploration') }}
-                  </p>
-                </div>
-                <div class="workspace-mode-toggle">
-                  <button
-                    type="button"
-                    class="btn btn-secondary"
-                    :class="{ active: learningMode === 'socratic' }"
-                    :disabled="switchingMode || submitting || askingQuestion || fetchingSocraticQuestion"
-                    data-testid="mode-switch-socratic"
-                    @click="setLearningMode('socratic')"
-                  >
-                    {{ t('problemDetail.modeSocratic') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-secondary"
-                    :class="{ active: learningMode === 'exploration' }"
-                    :disabled="switchingMode || submitting || askingQuestion || fetchingSocraticQuestion"
-                    data-testid="mode-switch-exploration"
-                    @click="setLearningMode('exploration')"
-                  >
-                    {{ t('problemDetail.modeExploration') }}
-                  </button>
-                </div>
-              </div>
-
-              <p v-if="workspaceActionError" class="workspace-action-error" data-testid="workspace-action-error">
-                {{ workspaceActionError }}
-              </p>
-            </section>
-
-            <section
-              v-if="activeReinforcementTarget && activeReinforcementEntry"
-              class="card reinforcement-target-card"
-              data-testid="workspace-reinforcement-target"
+        <div class="learning-header-controls">
+          <span class="workspace-summary-label">{{ t('problemDetail.modeSwitchTitle') }}</span>
+          <div class="workspace-mode-toggle compact-mode-toggle">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: learningMode === 'socratic' }"
+              :disabled="switchingMode || submitting || askingQuestion || fetchingSocraticQuestion"
+              data-testid="mode-switch-socratic"
+              @click="setLearningMode('socratic')"
             >
-              <details class="reinforcement-details">
-                <summary class="reinforcement-summary" data-testid="reinforcement-details-toggle">
-                  <div>
-                    <p class="workspace-eyebrow">{{ t('problemDetail.reinforcementTargetTitle') }}</p>
-                    <strong>{{ activeReinforcementTarget.concept_text || t('problemDetail.derivedConceptsTitle') }}</strong>
-                    <p class="section-subtitle">{{ formatReinforcementSummary(activeReinforcementEntry) }}</p>
-                  </div>
-                  <span class="reinforcement-priority" :class="`priority-${activeReinforcementTarget.priority || 'medium'}`">
-                    {{ t('problemDetail.needsReinforcementBadge') }}
-                  </span>
-                </summary>
+              {{ t('problemDetail.modeSocratic') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: learningMode === 'exploration' }"
+              :disabled="switchingMode || submitting || askingQuestion || fetchingSocraticQuestion"
+              data-testid="mode-switch-exploration"
+              @click="setLearningMode('exploration')"
+            >
+              {{ t('problemDetail.modeExploration') }}
+            </button>
+          </div>
+        </div>
+      </section>
 
-                <div class="reinforcement-details-body">
-                  <div class="reinforcement-grid">
-                    <article class="workspace-summary-card">
-                      <span class="workspace-summary-label">{{ t('problemDetail.reinforcementWorkspaceLabel') }}</span>
-                      <strong>{{ activeReinforcementTarget.problem_title || problem.title }}</strong>
-                      <p>{{ formatLearningMode(activeReinforcementEntry.origin?.learning_mode || learningMode) }}</p>
-                    </article>
-                    <article v-if="hasReinforcementPath(activeReinforcementTarget)" class="workspace-summary-card">
-                      <span class="workspace-summary-label">{{ t('problemDetail.reinforcementPathLabel') }}</span>
-                      <strong>{{ formatReinforcementPath(activeReinforcementTarget) }}</strong>
-                      <p>{{ t('problemDetail.reinforcementPathHint') }}</p>
-                    </article>
-                    <article class="workspace-summary-card">
-                      <span class="workspace-summary-label">{{ t('problemDetail.reinforcementResumeLabel') }}</span>
-                      <strong>{{ formatReinforcementResume(activeReinforcementTarget) }}</strong>
-                      <p>{{ t('problemDetail.reinforcementResumeHint') }}</p>
-                    </article>
-                    <article class="workspace-summary-card">
-                      <span class="workspace-summary-label">{{ t('problemDetail.nextActionTitle') }}</span>
-                      <strong>{{ formatRecommendedAction(activeReinforcementEntry.recommended_action) }}</strong>
-                      <p>{{ t('problemDetail.reinforcementActionHint') }}</p>
-                    </article>
-                  </div>
+      <section class="card learning-contract-card" data-testid="problem-learning-contract">
+        <div class="section-heading">
+          <div>
+            <p class="workspace-eyebrow">{{ t('problemDetail.contractTitle') }}</p>
+            <h2>{{ t('problemDetail.contractHeading') }}</h2>
+            <p class="section-subtitle">{{ t('problemDetail.contractSubtitle') }}</p>
+          </div>
+        </div>
 
-                  <article class="workspace-summary-card reinforcement-focus-card" data-testid="workspace-reinforcement-focus">
-                    <span class="workspace-summary-label">{{ t('problemDetail.reinforcementFocusTitle') }}</span>
-                    <strong>{{ reinforcementFocusTitle }}</strong>
-                    <p>{{ reinforcementFocusDescription }}</p>
-                    <p v-if="reinforcementFocusTurnPreview" class="reinforcement-preview">
-                      <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-                      {{ reinforcementFocusTurnPreview }}
+        <div class="contract-grid">
+          <article class="workspace-summary-card">
+            <span class="workspace-summary-label">{{ t('problemDetail.contractTaskLabel') }}</span>
+            <strong>{{ contractTask }}</strong>
+            <p>{{ currentStepSummary }}</p>
+          </article>
+          <article class="workspace-summary-card">
+            <span class="workspace-summary-label">{{ t('problemDetail.contractReasonLabel') }}</span>
+            <strong>{{ contractReason }}</strong>
+            <p>{{ workspaceNextAction }}</p>
+          </article>
+          <article class="workspace-summary-card">
+            <span class="workspace-summary-label">{{ t('problemDetail.contractDoneLabel') }}</span>
+            <strong>{{ contractDone }}</strong>
+            <p>{{ contractDoneSupport }}</p>
+          </article>
+        </div>
+
+        <details v-if="showContractControls" class="path-options-panel contract-controls-panel">
+          <summary>{{ t('problemDetail.pathControlsTitle') }}</summary>
+          <p class="section-subtitle contract-controls-copy">{{ t('problemDetail.pathControlsSubtitle') }}</p>
+
+          <div v-if="allLearningPaths.length > 1" class="path-nav-list">
+            <button
+              v-for="path in allLearningPaths"
+              :key="path.id"
+              type="button"
+              class="btn btn-secondary path-nav-button"
+              :class="{ active: path.is_active }"
+              :disabled="updatingPath"
+              data-testid="learning-path-button"
+              @click="activateLearningPathById(path.id)"
+            >
+              {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
+            </button>
+          </div>
+
+          <div class="contract-action-row">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="updatingPath || completedSteps === 0"
+              @click="updateCurrentStep(completedSteps - 1)"
+            >
+              {{ t('problemDetail.previousStep') }}
+            </button>
+            <button
+              v-if="!isPathCompleted && learningMode !== 'socratic'"
+              type="button"
+              class="btn btn-primary"
+              :disabled="updatingPath"
+              data-testid="mark-step-done"
+              @click="updateCurrentStep(completedSteps + 1)"
+            >
+              {{ t('problemDetail.markStepDone') }}
+            </button>
+            <button
+              v-if="canReturnToParent"
+              type="button"
+              class="btn btn-secondary"
+              :disabled="updatingPath"
+              data-testid="return-to-parent-path"
+              @click="returnToParentPath"
+            >
+              {{ t('problemDetail.returnToParentPath') }}
+            </button>
+          </div>
+        </details>
+      </section>
+
+      <section
+        v-if="activeReinforcementTarget && activeReinforcementEntry"
+        class="card reinforcement-strip"
+        data-testid="workspace-reinforcement-target"
+      >
+        <div class="reinforcement-strip-copy">
+          <p class="workspace-eyebrow">{{ t('problemDetail.reinforcementStripTitle') }}</p>
+          <strong>{{ reinforcementFocusTitle }}</strong>
+          <p>{{ formatReinforcementSummary(activeReinforcementEntry) }}</p>
+          <p class="section-subtitle">{{ formatReinforcementResume(activeReinforcementTarget) }}</p>
+          <router-link
+            v-if="activeReinforcementEntry.model_card_id"
+            :to="`/model-cards/${activeReinforcementEntry.model_card_id}`"
+            class="reinforcement-context-link"
+          >
+            {{ t('problemDetail.openModelCard') }}
+          </router-link>
+        </div>
+        <div class="reinforcement-strip-actions">
+          <button
+            v-if="reinforcementActionTemplate"
+            type="button"
+            class="btn btn-primary"
+            data-testid="apply-reinforcement-action-template"
+            @click="applyReinforcementActionTemplate"
+          >
+            {{ t('problemDetail.useReinforcementStarter') }}
+          </button>
+          <button
+            v-else-if="canSwitchToReinforcementPath"
+            type="button"
+            class="btn btn-primary"
+            data-testid="switch-to-reinforcement-path"
+            @click="switchToReinforcementPath"
+          >
+            {{ t('problemDetail.switchToReinforcementPath') }}
+          </button>
+        </div>
+      </section>
+
+      <section class="card primary-turn-card" data-testid="problem-turn-area">
+        <div class="section-heading">
+          <div>
+            <p class="workspace-eyebrow">{{ learningMode === 'socratic' ? t('problemDetail.progressSectionTitle') : t('problemDetail.askTitle') }}</p>
+            <h2>{{ learningMode === 'socratic' ? t('problemDetail.currentQuestionTitle') : t('problemDetail.askTitle') }}</h2>
+            <p class="section-subtitle">
+              {{ learningMode === 'socratic' ? t('problemDetail.modeSocraticHint') : t('problemDetail.askSubtitle') }}
+            </p>
+          </div>
+        </div>
+
+        <div v-if="currentStep" class="turn-step-card">
+          <div class="step-number">{{ currentStepNumber }}</div>
+          <div class="step-content">
+            <p class="workspace-summary-label">{{ t('problemDetail.currentStepTitle') }}</p>
+            <h3>{{ currentStep.concept }}</h3>
+            <p>{{ currentStep.description }}</p>
+          </div>
+        </div>
+        <div v-else-if="isPathCompleted && totalSteps" class="completion-banner">
+          {{ t('problemDetail.completedAll') }}
+        </div>
+        <p v-else class="empty">{{ t('problemDetail.noLearningPath') }}</p>
+
+        <p v-if="workspaceActionError" class="workspace-action-error" data-testid="workspace-action-error">
+          {{ workspaceActionError }}
+        </p>
+
+        <template v-if="learningMode === 'socratic'">
+          <p class="protocol-note" data-testid="socratic-protocol-note">{{ t('problemDetail.socraticProgressControlled') }}</p>
+
+          <div v-if="socraticQuestion" class="socratic-question-panel" data-testid="socratic-question-panel">
+            <div class="question-head">
+              <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
+              <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
+            </div>
+            <p class="question-copy">{{ socraticQuestion.question }}</p>
+          </div>
+          <div
+            v-else-if="fetchingSocraticQuestion && streamingSocraticQuestion"
+            class="socratic-question-panel"
+            data-testid="socratic-question-panel"
+          >
+            <div class="question-head">
+              <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
+              <span class="question-kind-badge">{{ t('common.loading') }}</span>
+            </div>
+            <p class="question-copy" data-testid="socratic-question-stream-preview">
+              {{ streamingSocraticQuestion }}<span class="streaming-cursor">|</span>
+            </p>
+          </div>
+
+          <form @submit.prevent="submitResponse" class="response-form">
+            <div class="form-group">
+              <label>{{ t('problemDetail.progressInputLabel') }}</label>
+              <textarea
+                v-model="responseText"
+                rows="5"
+                :placeholder="t('problemDetail.progressInputPlaceholder')"
+                data-testid="socratic-response-input"
+                required
+              ></textarea>
+            </div>
+            <div class="response-actions">
+              <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
+                {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
+              </button>
+              <button type="submit" class="btn btn-primary" :disabled="submitting" data-testid="submit-socratic-response">
+                {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
+              </button>
+            </div>
+          </form>
+          <div
+            v-if="submitting && (streamingSocraticStatus || streamingSocraticPreview)"
+            class="streaming-answer-panel"
+            data-testid="socratic-response-stream-preview"
+          >
+            <strong>{{ t('problemDetail.socraticStreamTitle') }}</strong>
+            <p class="section-subtitle">{{ streamingSocraticStatus || t('common.loading') }}</p>
+            <p v-if="streamingSocraticPreview" class="streaming-answer-copy">
+              {{ streamingSocraticPreview }}<span class="streaming-cursor">|</span>
+            </p>
+          </div>
+          <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
+          <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
+            <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
+              {{ t('problemDetail.undoAutoAdvance') }}
+            </button>
+          </div>
+
+          <div v-if="stepHint" class="hint-panel">
+            <h3>{{ t('problemDetail.hintTitle') }}</h3>
+            <p v-if="stepHint.focus"><strong>{{ t('problemDetail.hintFocus') }}:</strong> {{ stepHint.focus }}</p>
+            <ul v-if="stepHint.next_actions?.length">
+              <li v-for="(item, idx) in stepHint.next_actions" :key="`${idx}-${item}`">{{ item }}</li>
+            </ul>
+            <p v-if="stepHint.starter"><strong>{{ t('problemDetail.hintStarter') }}:</strong> {{ stepHint.starter }}</p>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="ask-mode-toggle">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: answerMode === 'direct' }"
+              :disabled="askingQuestion"
+              data-testid="exploration-answer-mode-direct"
+              @click="answerMode = 'direct'"
+            >
+              {{ t('problemDetail.askModeDirect') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :class="{ active: answerMode === 'guided' }"
+              :disabled="askingQuestion"
+              data-testid="exploration-answer-mode-guided"
+              @click="answerMode = 'guided'"
+            >
+              {{ t('problemDetail.askModeGuided') }}
+            </button>
+          </div>
+
+          <form @submit.prevent="askLearningQuestion" class="response-form">
+            <div class="form-group">
+              <label>{{ t('problemDetail.askInputLabel') }}</label>
+              <textarea
+                v-model="learningQuestion"
+                rows="3"
+                :placeholder="t('problemDetail.askInputPlaceholder')"
+                data-testid="exploration-question-input"
+                required
+              ></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()" data-testid="submit-exploration-question">
+              {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
+            </button>
+          </form>
+
+          <div
+            v-if="askingQuestion && streamingExplorationAnswer"
+            class="streaming-answer-panel"
+            data-testid="exploration-stream-preview"
+          >
+            <strong>{{ t('problemDetail.askStreamingTitle') }}</strong>
+            <p class="section-subtitle">{{ t('problemDetail.askStreamingHint') }}</p>
+            <p class="streaming-answer-copy">
+              {{ streamingExplorationAnswer }}<span class="streaming-cursor">|</span>
+            </p>
+          </div>
+        </template>
+      </section>
+
+      <section class="card turn-result-card" data-testid="problem-turn-result">
+        <div class="section-heading">
+          <div>
+            <p class="workspace-eyebrow">{{ t('problemDetail.turnResultTitle') }}</p>
+            <h2>{{ workspaceTurnSummary }}</h2>
+            <p class="section-subtitle">
+              {{ learningMode === 'socratic' ? t('problemDetail.turnResultSubtitleSocratic') : t('problemDetail.turnResultSubtitleExploration') }}
+            </p>
+          </div>
+        </div>
+
+        <div
+          v-if="!hasContextualInteractionOutput"
+          class="workspace-current-output-empty"
+          data-testid="workspace-current-output-empty"
+        >
+          <strong>{{ t('problemDetail.currentOutputEmptyTitle') }}</strong>
+          <p>
+            {{
+              learningMode === 'socratic'
+                ? t('problemDetail.currentOutputEmptyDescriptionSocratic')
+                : t('problemDetail.currentOutputEmptyDescriptionExploration')
+            }}
+          </p>
+        </div>
+
+        <ProblemTurnOutcomePanel
+          embedded
+          :learning-mode="learningMode"
+          :latest-response="latestResponse"
+          :latest-feedback="latestFeedback"
+          :latest-qa="latestQA"
+        />
+      </section>
+
+      <section class="card postturn-card" data-testid="problem-postturn-decisions">
+        <div class="section-heading">
+          <div>
+            <p class="workspace-eyebrow">{{ t('problemDetail.postTurnTitle') }}</p>
+            <h2>{{ t('problemDetail.postTurnHeading') }}</h2>
+            <p class="section-subtitle">{{ t('problemDetail.postTurnSubtitle') }}</p>
+          </div>
+        </div>
+
+        <div class="postturn-summary-strip">
+          <article class="workspace-summary-card">
+            <span class="workspace-summary-label">{{ t('problemDetail.derivedConceptsTitle') }}</span>
+            <strong>{{ currentTurnConceptCandidates.length }}</strong>
+            <p>{{ t('problemDetail.postTurnConceptSummary') }}</p>
+          </article>
+          <article class="workspace-summary-card">
+            <span class="workspace-summary-label">{{ t('problemDetail.pathCandidatesTitle') }}</span>
+            <strong>{{ currentTurnPathCandidates.length }}</strong>
+            <p>{{ t('problemDetail.postTurnPathSummary') }}</p>
+          </article>
+          <article class="workspace-summary-card" data-testid="workspace-review-summary">
+            <span class="workspace-summary-label">{{ t('problemDetail.postTurnFollowThroughLabel') }}</span>
+            <strong>{{ workspaceReviewSummary }}</strong>
+            <p>{{ workspaceReviewDescription }}</p>
+          </article>
+        </div>
+
+        <details class="postturn-details" :open="Boolean(hasContextualInteractionOutput && currentTurnConceptCandidates.length)">
+          <summary>{{ t('problemDetail.postTurnConceptActions') }}</summary>
+          <ProblemDerivedConceptsPanel
+            embedded
+            collapse-older
+            :older-only="!hasContextualInteractionOutput"
+            :candidates="conceptCandidates"
+            :loading="candidateLoading"
+            :current-turn-id="artifactFocusTurnId"
+            :focus-candidate-id="reinforcementFocusCandidateId"
+            :focus-turn-id="reinforcementFocusTurnId"
+            :focus-concept-text="activeReinforcementTarget?.concept_text || null"
+            :merge-targets="conceptMergeTargets"
+            :action-pending-id="candidateSubmittingId"
+            :handoff-pending-id="handoffSubmittingId"
+            :scheduled-model-card-ids="scheduledModelCardIds"
+            :scheduled-reviews-by-model-card-id="scheduledReviewsByModelCardId"
+            @accept="acceptCandidate"
+            @reject="rejectCandidate"
+            @postpone="postponeCandidate"
+            @merge="mergeCandidate"
+            @rollback="rollbackConcept"
+            @promote="promoteCandidateToModelCard"
+            @open-card="openModelCard"
+            @schedule-review="scheduleCandidateReview"
+          />
+        </details>
+
+        <details class="postturn-details" :open="Boolean(hasContextualInteractionOutput && currentTurnPathCandidates.length)">
+          <summary>{{ t('problemDetail.postTurnPathActions') }}</summary>
+          <ProblemDerivedPathsPanel
+            embedded
+            collapse-older
+            :older-only="!hasContextualInteractionOutput"
+            :candidates="pathCandidates"
+            :current-turn-id="artifactFocusTurnId"
+            :loading="pathCandidateLoading"
+            :submitting-id="pathCandidateSubmittingId"
+            @decide="handlePathCandidateDecision"
+          />
+        </details>
+      </section>
+
+      <section class="card secondary-tools-card" data-testid="problem-secondary-tools">
+        <div class="section-heading">
+          <div>
+            <p class="workspace-eyebrow">{{ t('problemDetail.secondaryToolsTitle') }}</p>
+            <h2>{{ t('problemDetail.secondaryToolsHeading') }}</h2>
+            <p class="section-subtitle">{{ t('problemDetail.secondaryToolsSubtitle') }}</p>
+          </div>
+        </div>
+
+        <div class="secondary-tools-grid">
+          <details class="secondary-detail">
+            <summary>{{ learningMode === 'socratic' ? t('problemDetail.historyTitle', { count: responses.length }) : t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
+            <div v-if="learningMode === 'socratic'">
+              <div v-if="responses.length" class="responses-list">
+                <div v-for="response in responseHistory" :key="response.id" class="response-item" data-testid="socratic-history-item">
+                  <div class="user-response">
+                    <p class="mode-line">
+                      <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
                     </p>
-                  </article>
-
-                  <article
-                    v-if="reinforcementActionTemplate"
-                    class="workspace-summary-card reinforcement-action-card"
-                    data-testid="workspace-reinforcement-action"
-                  >
-                    <span class="workspace-summary-label">{{ t('problemDetail.reinforcementActionTitle') }}</span>
-                    <strong>{{ reinforcementActionTemplate.title }}</strong>
-                    <p>{{ reinforcementActionTemplate.description }}</p>
-                    <div
-                      v-if="reinforcementActionTemplate.sourceCue"
-                      class="reinforcement-action-source"
-                      data-testid="reinforcement-starter-source-cue"
-                    >
-                      <strong>{{ t('problemDetail.reinforcementStarterGroundingLabel') }}</strong>
-                      <p>{{ reinforcementActionTemplate.sourceCue }}</p>
-                    </div>
-                    <div
-                      v-if="reinforcementActionTemplate.sourceClue"
-                      class="reinforcement-action-source"
-                      data-testid="reinforcement-starter-source-clue"
-                    >
-                      <strong>{{ t('problemDetail.reinforcementStarterClueLabel') }}</strong>
-                      <p>{{ reinforcementActionTemplate.sourceClue }}</p>
-                    </div>
-                    <div
-                      v-if="reinforcementActionTemplate.likelyConfusion"
-                      class="reinforcement-action-source reinforcement-action-warning"
-                      data-testid="reinforcement-likely-confusion"
-                    >
-                      <strong>{{ t('problemDetail.reinforcementLikelyConfusionLabel') }}</strong>
-                      <p>{{ reinforcementActionTemplate.likelyConfusion }}</p>
-                    </div>
-                    <div
-                      v-if="reinforcementActionTemplate.evidenceCue"
-                      class="reinforcement-action-source"
-                      data-testid="reinforcement-starter-evidence"
-                    >
-                      <strong>{{ t('problemDetail.reinforcementStarterEvidenceLabel') }}</strong>
-                      <p>{{ reinforcementActionTemplate.evidenceCue }}</p>
-                    </div>
-                    <div class="reinforcement-action-starter">
-                      <strong>{{ t('problemDetail.reinforcementStarterLabel') }}</strong>
-                      <p>{{ reinforcementActionTemplate.starter }}</p>
-                    </div>
-                    <button
-                      type="button"
-                      class="btn btn-primary"
-                      data-testid="apply-reinforcement-action-template"
-                      @click="applyReinforcementActionTemplate"
-                    >
-                      {{ t('problemDetail.useReinforcementStarter') }}
-                    </button>
-                  </article>
-
-                  <p
-                    v-if="activeReinforcementTarget.source_turn_preview && activeReinforcementTarget.source_turn_preview !== reinforcementFocusTurnPreview"
-                    class="reinforcement-preview"
-                  >
-                    <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-                    {{ activeReinforcementTarget.source_turn_preview }}
-                  </p>
-
-                  <div class="reinforcement-actions">
-                    <button
-                      v-if="canSwitchToReinforcementPath"
-                      type="button"
-                      class="btn btn-primary"
-                      data-testid="switch-to-reinforcement-path"
-                      @click="switchToReinforcementPath"
-                    >
-                      {{ t('problemDetail.switchToReinforcementPath') }}
-                    </button>
-                    <router-link
-                      v-if="activeReinforcementEntry.model_card_id"
-                      :to="`/model-cards/${activeReinforcementEntry.model_card_id}`"
-                      class="btn btn-secondary"
-                    >
-                      {{ t('problemDetail.openModelCard') }}
-                    </router-link>
-                    <router-link to="/reviews" class="btn btn-secondary">
-                      {{ t('modelCards.openReviewHub') }}
-                    </router-link>
+                    <p v-if="response.question_kind" class="mode-line">
+                      <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(response.question_kind) }}
+                    </p>
+                    <p v-if="response.socratic_question" class="mode-line">
+                      <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ response.socratic_question }}
+                    </p>
+                    <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
+                    <p>{{ response.user_response }}</p>
+                  </div>
+                  <div v-if="response.structured_feedback" class="history-feedback">
+                    <p v-if="response.structured_feedback.correctness">
+                      <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
+                    </p>
+                    <p v-if="response.structured_feedback.mastery_score !== undefined">
+                      <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
+                      · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
+                    </p>
+                    <p v-if="response.structured_feedback.misconceptions?.length">
+                      <strong>{{ t('feedback.misconceptions') }}:</strong> {{ response.structured_feedback.misconceptions.join(' / ') }}
+                    </p>
                   </div>
                 </div>
-              </details>
-            </section>
-
-            <section class="card current-step-section">
-              <h2>{{ t('problemDetail.currentStepTitle') }}</h2>
-              <div v-if="totalSteps" class="progress-overview">
-                <span>{{ t('problemDetail.stepIndicator', { current: currentStepNumber, total: totalSteps }) }}</span>
-                <div class="progress-track">
-                  <div class="progress-fill" :style="{ width: `${progressPercent}%` }"></div>
+              </div>
+              <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
+            </div>
+            <div v-else>
+              <div v-if="qaHistory.length" class="responses-list">
+                <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
+                  <p class="mode-line">
+                    <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
+                  </p>
+                  <p v-if="item.answer_type" class="mode-line">
+                    <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(item.answer_type) }}
+                  </p>
+                  <div class="qa-block">
+                    <strong>{{ t('problemDetail.questionLabel') }}</strong>
+                    <p>{{ item.question }}</p>
+                  </div>
+                  <div class="qa-block">
+                    <strong>{{ t('problemDetail.answerLabel') }}</strong>
+                    <p>{{ item.answer }}</p>
+                  </div>
                 </div>
               </div>
+              <p v-else class="empty">{{ t('problemDetail.noTurnResultExploration') }}</p>
+            </div>
+          </details>
 
-              <div v-if="learningPath" class="path-structure-panel" data-testid="current-learning-path">
-                <div class="path-structure-head">
-                  <span class="mode-badge">{{ t('problemDetail.currentPath') }}: {{ formatLearningPathKind(learningPath.kind) }}</span>
-                  <span class="candidate-status">{{ learningPath.title || t('problemDetail.unnamedPath') }}</span>
-                  <span
-                    v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
-                    class="candidate-source"
-                  >
-                    {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
-                  </span>
-                </div>
-                <p v-if="learningPath.branch_reason" class="section-subtitle">{{ learningPath.branch_reason }}</p>
-                <p
-                  v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
-                  class="section-subtitle"
-                >
-                  {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
-                </p>
-                <div v-if="allLearningPaths.length > 1" class="path-nav-list">
-                  <button
-                    v-for="path in allLearningPaths"
-                    :key="path.id"
-                    type="button"
-                    class="btn btn-secondary path-nav-button"
-                    :class="{ active: path.is_active }"
-                    :disabled="updatingPath"
-                    data-testid="learning-path-button"
-                    @click="activateLearningPathById(path.id)"
-                  >
-                    {{ formatLearningPathKind(path.kind) }} · {{ path.title || t('problemDetail.unnamedPath') }}
-                  </button>
-                </div>
-                <button
-                  v-if="canReturnToParent"
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="updatingPath"
-                  data-testid="return-to-parent-path"
-                  @click="returnToParentPath"
-                >
-                  {{ t('problemDetail.returnToParentPath') }}
-                </button>
-              </div>
+          <details class="secondary-detail" data-testid="workspace-assets-panel">
+            <summary data-testid="workspace-assets-toggle">{{ t('problemDetail.workspaceAssetsTitle') }}</summary>
+            <div class="workspace-assets-stack">
+              <ProblemWorkspaceNotesPanel
+                :notes="workspaceNotes"
+                :saving="noteSaving"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceNote"
+                @delete="deleteWorkspaceNote"
+              />
+              <ProblemWorkspaceResourcesPanel
+                :resources="workspaceResources"
+                :saving="resourceSaving"
+                :interpreting-id="resourceInterpretingId"
+                :current-turn-id="activeConceptTurnId"
+                @save="saveWorkspaceResource"
+                @delete="deleteWorkspaceResource"
+                @interpret="interpretWorkspaceResource"
+              />
+            </div>
+          </details>
 
-              <div v-if="currentStep" class="step-card">
-                <div class="step-number">{{ currentStepNumber }}</div>
-                <div class="step-content">
-                  <h3>{{ currentStep.concept }}</h3>
-                  <p>{{ currentStep.description }}</p>
-                  <ul v-if="currentStep.resources?.length" class="resources">
-                    <li v-for="resource in currentStep.resources" :key="resource">{{ resource }}</li>
-                  </ul>
-                </div>
-              </div>
-              <div v-else-if="isPathCompleted && totalSteps" class="completion-banner">
-                {{ t('problemDetail.completedAll') }}
-              </div>
-              <p v-else class="empty">{{ t('problemDetail.noLearningPath') }}</p>
-
-              <div v-if="totalSteps" class="path-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :disabled="updatingPath || completedSteps === 0"
-                  @click="updateCurrentStep(completedSteps - 1)"
-                >
-                  {{ t('problemDetail.previousStep') }}
-                </button>
-                <button
-                  v-if="!isPathCompleted && learningMode !== 'socratic'"
-                  type="button"
-                  class="btn btn-primary"
-                  :disabled="updatingPath"
-                  data-testid="mark-step-done"
-                  @click="updateCurrentStep(completedSteps + 1)"
-                >
-                  {{ t('problemDetail.markStepDone') }}
-                </button>
-                <span v-if="isPathCompleted" class="completed-badge">{{ t('problemDetail.completed') }}</span>
-              </div>
+          <details class="secondary-detail">
+            <summary>{{ t('nav.more') }}</summary>
+            <div class="secondary-actions-block">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                :disabled="exportingLearningRecord"
+                data-testid="export-learning-record"
+                @click="exportLearningRecord"
+              >
+                {{ t('problemDetail.exportLearningRecord') }}
+              </button>
 
               <details v-if="completedStepList.length" class="completed-panel">
                 <summary>{{ t('problemDetail.completedStepsTitle', { count: completedStepList.length }) }}</summary>
@@ -377,336 +562,10 @@
                   </div>
                 </div>
               </details>
-            </section>
-
-            <section v-if="learningMode === 'socratic'" class="card responses-section workspace-primary-action-card" data-testid="workspace-primary-action">
-              <h2>{{ t('problemDetail.progressSectionTitle') }}</h2>
-              <p class="section-subtitle" v-if="currentStep">{{ t('problemDetail.progressForStep', { concept: currentStep.concept }) }}</p>
-              <p class="protocol-note" data-testid="socratic-protocol-note">{{ t('problemDetail.socraticProgressControlled') }}</p>
-
-              <div v-if="socraticQuestion" class="socratic-question-panel" data-testid="socratic-question-panel">
-                <div class="question-head">
-                  <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
-                  <span class="question-kind-badge">{{ formatQuestionKind(socraticQuestion.question_kind) }}</span>
-                </div>
-                <p class="question-copy">{{ socraticQuestion.question }}</p>
-              </div>
-              <div
-                v-else-if="fetchingSocraticQuestion && streamingSocraticQuestion"
-                class="socratic-question-panel"
-                data-testid="socratic-question-panel"
-              >
-                <div class="question-head">
-                  <strong>{{ t('problemDetail.currentQuestionTitle') }}</strong>
-                  <span class="question-kind-badge">{{ t('common.loading') }}</span>
-                </div>
-                <p class="question-copy" data-testid="socratic-question-stream-preview">
-                  {{ streamingSocraticQuestion }}<span class="streaming-cursor">|</span>
-                </p>
-              </div>
-
-              <form @submit.prevent="submitResponse" class="response-form">
-                <div class="form-group">
-                  <label>{{ t('problemDetail.progressInputLabel') }}</label>
-                  <textarea
-                    v-model="responseText"
-                    rows="5"
-                    :placeholder="t('problemDetail.progressInputPlaceholder')"
-                    data-testid="socratic-response-input"
-                    required
-                  ></textarea>
-                </div>
-                <div class="response-actions">
-                  <button type="button" class="btn btn-secondary" :disabled="hintLoading || submitting" @click="prefillGuidedTemplate">
-                    {{ hintLoading ? t('common.loading') : t('problemDetail.needPrompt') }}
-                  </button>
-                  <button type="submit" class="btn btn-primary" :disabled="submitting" data-testid="submit-socratic-response">
-                    {{ submitting ? t('common.loading') : t('problemDetail.submitProgress') }}
-                  </button>
-                </div>
-              </form>
-              <div
-                v-if="submitting && (streamingSocraticStatus || streamingSocraticPreview)"
-                class="streaming-answer-panel"
-                data-testid="socratic-response-stream-preview"
-              >
-                <strong>{{ t('problemDetail.socraticStreamTitle') }}</strong>
-                <p class="section-subtitle">{{ streamingSocraticStatus || t('common.loading') }}</p>
-                <p v-if="streamingSocraticPreview" class="streaming-answer-copy">
-                  {{ streamingSocraticPreview }}<span class="streaming-cursor">|</span>
-                </p>
-              </div>
-              <p v-if="autoAdvanceMessage" class="auto-advance-notice">{{ autoAdvanceMessage }}</p>
-              <div v-if="canUndoAutoAdvance" class="undo-auto-wrap">
-                <button type="button" class="btn btn-secondary" :disabled="updatingPath" @click="undoAutoAdvance">
-                  {{ t('problemDetail.undoAutoAdvance') }}
-                </button>
-              </div>
-
-              <div v-if="stepHint" class="hint-panel">
-                <h3>{{ t('problemDetail.hintTitle') }}</h3>
-                <p v-if="stepHint.focus"><strong>{{ t('problemDetail.hintFocus') }}:</strong> {{ stepHint.focus }}</p>
-                <ul v-if="stepHint.next_actions?.length">
-                  <li v-for="(item, idx) in stepHint.next_actions" :key="`${idx}-${item}`">{{ item }}</li>
-                </ul>
-                <p v-if="stepHint.starter"><strong>{{ t('problemDetail.hintStarter') }}:</strong> {{ stepHint.starter }}</p>
-              </div>
-
-              <details v-if="responses.length" class="history-panel">
-                <summary>{{ t('problemDetail.historyTitle', { count: responses.length }) }}</summary>
-                <div class="responses-list">
-                  <div v-for="response in responseHistory" :key="response.id" class="response-item" data-testid="socratic-history-item">
-                    <div class="user-response">
-                      <p class="mode-line">
-                        <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(response.learning_mode) }}
-                      </p>
-                      <p v-if="response.question_kind" class="mode-line">
-                        <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(response.question_kind) }}
-                      </p>
-                      <p v-if="response.socratic_question" class="mode-line">
-                        <strong>{{ t('problemDetail.questionLabel') }}:</strong> {{ response.socratic_question }}
-                      </p>
-                      <strong>{{ t('problemDetail.myProgressRecord') }}:</strong>
-                      <p>{{ response.user_response }}</p>
-                    </div>
-                    <div v-if="response.structured_feedback" class="history-feedback">
-                      <p v-if="response.structured_feedback.correctness">
-                        <strong>{{ t('feedback.correctness') }}:</strong> {{ response.structured_feedback.correctness }}
-                      </p>
-                      <p v-if="response.structured_feedback.mastery_score !== undefined">
-                        <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
-                        · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
-                      </p>
-                      <p v-if="response.structured_feedback.misconceptions?.length">
-                        <strong>{{ t('feedback.misconceptions') }}:</strong> {{ response.structured_feedback.misconceptions.join(' / ') }}
-                      </p>
-                      <p v-if="response.structured_feedback.suggestions?.length">
-                        <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}
-                      </p>
-                      <p v-if="response.structured_feedback.next_question">
-                        <strong>{{ t('feedback.nextQuestion') }}:</strong> {{ response.structured_feedback.next_question }}
-                      </p>
-                      <p v-if="response.accepted_concepts?.length">
-                        <strong>{{ t('problemDetail.newConceptsTitle') }}:</strong> {{ response.accepted_concepts.join(' / ') }}
-                      </p>
-                      <p v-if="response.pending_concepts?.length">
-                        <strong>{{ t('problemDetail.pendingConceptsTitle') }}:</strong> {{ response.pending_concepts.join(' / ') }}
-                      </p>
-                      <p v-if="response.trace_id || response.llm_calls !== undefined" class="ops-meta-line">
-                        <strong>{{ t('problemDetail.traceId') }}:</strong> {{ response.trace_id || '-' }}
-                        · <strong>{{ t('problemDetail.llmCalls') }}:</strong> {{ response.llm_calls ?? '-' }}
-                        · <strong>{{ t('problemDetail.llmLatencyMs') }}:</strong> {{ response.llm_latency_ms ?? '-' }}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </details>
-              <p v-else class="empty">{{ t('problemDetail.noProgressRecords') }}</p>
-            </section>
-
-            <section v-else class="card qa-section workspace-primary-action-card" data-testid="workspace-primary-action">
-              <h2>{{ t('problemDetail.askTitle') }}</h2>
-              <p class="section-subtitle">{{ t('problemDetail.askSubtitle') }}</p>
-
-              <div class="ask-mode-toggle">
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :class="{ active: answerMode === 'direct' }"
-                  :disabled="askingQuestion"
-                  data-testid="exploration-answer-mode-direct"
-                  @click="answerMode = 'direct'"
-                >
-                  {{ t('problemDetail.askModeDirect') }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  :class="{ active: answerMode === 'guided' }"
-                  :disabled="askingQuestion"
-                  data-testid="exploration-answer-mode-guided"
-                  @click="answerMode = 'guided'"
-                >
-                  {{ t('problemDetail.askModeGuided') }}
-                </button>
-              </div>
-
-              <form @submit.prevent="askLearningQuestion" class="response-form">
-                <div class="form-group">
-                  <label>{{ t('problemDetail.askInputLabel') }}</label>
-                  <textarea
-                    v-model="learningQuestion"
-                    rows="3"
-                    :placeholder="t('problemDetail.askInputPlaceholder')"
-                    data-testid="exploration-question-input"
-                    required
-                  ></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary" :disabled="askingQuestion || !learningQuestion.trim()" data-testid="submit-exploration-question">
-                  {{ askingQuestion ? t('common.loading') : t('problemDetail.askSubmit') }}
-                </button>
-              </form>
-
-              <div
-                v-if="askingQuestion && streamingExplorationAnswer"
-                class="streaming-answer-panel"
-                data-testid="exploration-stream-preview"
-              >
-                <strong>{{ t('problemDetail.askStreamingTitle') }}</strong>
-                <p class="section-subtitle">{{ t('problemDetail.askStreamingHint') }}</p>
-                <p class="streaming-answer-copy">
-                  {{ streamingExplorationAnswer }}<span class="streaming-cursor">|</span>
-                </p>
-              </div>
-
-              <details v-if="qaHistory.length" class="history-panel">
-                <summary>{{ t('problemDetail.qaHistoryTitle', { count: qaHistory.length }) }}</summary>
-                <div class="responses-list">
-                  <div v-for="(item, index) in qaHistory" :key="`${index}-${item.question}`" class="response-item">
-                    <p class="mode-line">
-                      <strong>{{ t('problemDetail.currentMode') }}:</strong> {{ formatLearningMode(item.learning_mode) }}
-                    </p>
-                    <p v-if="item.answer_type" class="mode-line">
-                      <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(item.answer_type) }}
-                    </p>
-                    <div class="qa-block">
-                      <strong>{{ t('problemDetail.questionLabel') }}</strong>
-                      <p>{{ item.question }}</p>
-                    </div>
-                    <div class="qa-block">
-                      <strong>{{ t('problemDetail.answerLabel') }}</strong>
-                      <p>{{ item.answer }}</p>
-                    </div>
-                  </div>
-                </div>
-              </details>
-            </section>
-          </div>
-
-          <aside class="workspace-side-column workspace-side-stack">
-            <section class="card workspace-artifacts-card" data-testid="workspace-artifacts-panel">
-              <div class="workspace-artifacts-head">
-                <div>
-                  <p class="workspace-eyebrow">{{ t('problemDetail.workspaceArtifactsTitle') }}</p>
-                  <h2>{{ t('problemDetail.turnResultTitle') }}</h2>
-                  <p class="section-subtitle">{{ t('problemDetail.workspaceArtifactsSubtitle') }}</p>
-                </div>
-              </div>
-              <div class="workspace-artifacts-strip">
-                <article class="workspace-status-pill" data-testid="workspace-artifact-turn-summary">
-                  <span class="workspace-summary-label">{{ t('problemDetail.turnResultTitle') }}</span>
-                  <strong>{{ workspaceTurnSummary }}</strong>
-                  <p>{{ learningMode === 'exploration' ? t('problemDetail.turnResultSubtitleExploration') : t('problemDetail.turnResultSubtitleSocratic') }}</p>
-                </article>
-                <article class="workspace-status-pill" data-testid="workspace-artifact-concept-count">
-                  <span class="workspace-summary-label">{{ t('problemDetail.derivedConceptsTitle') }}</span>
-                  <strong>{{ currentTurnConceptCandidates.length }}</strong>
-                  <p>{{ t('problemDetail.workspaceArtifactConceptCountHint') }}</p>
-                </article>
-                <article class="workspace-status-pill" data-testid="workspace-artifact-path-count">
-                  <span class="workspace-summary-label">{{ t('problemDetail.pathCandidatesTitle') }}</span>
-                  <strong>{{ currentTurnPathCandidates.length }}</strong>
-                  <p>{{ t('problemDetail.workspaceArtifactPathCountHint') }}</p>
-                </article>
-              </div>
-              <div
-                v-if="!hasContextualInteractionOutput"
-                class="workspace-current-output-empty"
-                data-testid="workspace-current-output-empty"
-              >
-                <strong>{{ t('problemDetail.currentOutputEmptyTitle') }}</strong>
-                <p>
-                  {{
-                    learningMode === 'socratic'
-                      ? t('problemDetail.currentOutputEmptyDescriptionSocratic')
-                      : t('problemDetail.currentOutputEmptyDescriptionExploration')
-                  }}
-                </p>
-              </div>
-              <div v-if="hasAnyArtifacts" class="workspace-artifacts-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  data-testid="workspace-artifacts-toggle"
-                  @click="artifactsExpanded = !artifactsExpanded"
-                >
-                  {{ artifactsExpanded ? t('problemDetail.hideTurnOutput') : t('problemDetail.processTurnOutput') }}
-                </button>
-              </div>
-              <div v-if="artifactsExpanded" class="workspace-artifacts-sections">
-                <ProblemTurnOutcomePanel
-                  embedded
-                  :learning-mode="learningMode"
-                  :latest-response="latestResponse"
-                  :latest-feedback="latestFeedback"
-                  :latest-qa="latestQA"
-                />
-                <ProblemDerivedConceptsPanel
-                  embedded
-                  collapse-older
-                  :older-only="!hasContextualInteractionOutput"
-                  :candidates="conceptCandidates"
-                  :loading="candidateLoading"
-                  :current-turn-id="artifactFocusTurnId"
-                  :focus-candidate-id="reinforcementFocusCandidateId"
-                  :focus-turn-id="reinforcementFocusTurnId"
-                  :focus-concept-text="activeReinforcementTarget?.concept_text || null"
-                  :merge-targets="conceptMergeTargets"
-                  :action-pending-id="candidateSubmittingId"
-                  :handoff-pending-id="handoffSubmittingId"
-                  :scheduled-model-card-ids="scheduledModelCardIds"
-                  :scheduled-reviews-by-model-card-id="scheduledReviewsByModelCardId"
-                  @accept="acceptCandidate"
-                  @reject="rejectCandidate"
-                  @postpone="postponeCandidate"
-                  @merge="mergeCandidate"
-                  @rollback="rollbackConcept"
-                  @promote="promoteCandidateToModelCard"
-                  @open-card="openModelCard"
-                  @schedule-review="scheduleCandidateReview"
-                />
-                <ProblemDerivedPathsPanel
-                  embedded
-                  collapse-older
-                  :older-only="!hasContextualInteractionOutput"
-                  :candidates="pathCandidates"
-                  :current-turn-id="artifactFocusTurnId"
-                  :loading="pathCandidateLoading"
-                  :submitting-id="pathCandidateSubmittingId"
-                  @decide="handlePathCandidateDecision"
-                />
-              </div>
-            </section>
-            <details class="workspace-assets-details" data-testid="workspace-assets-panel">
-              <summary class="workspace-assets-summary" data-testid="workspace-assets-toggle">
-                <div>
-                  <span class="workspace-summary-label">{{ t('nav.notes') }} · {{ t('nav.resources') }}</span>
-                  <strong>{{ t('problemDetail.workspaceAssetsTitle') }}</strong>
-                  <p class="section-subtitle">{{ t('problemDetail.workspaceAssetsSubtitle') }}</p>
-                </div>
-              </summary>
-              <div class="workspace-assets-stack">
-                <ProblemWorkspaceNotesPanel
-                  :notes="workspaceNotes"
-                  :saving="noteSaving"
-                  :current-turn-id="activeConceptTurnId"
-                  @save="saveWorkspaceNote"
-                  @delete="deleteWorkspaceNote"
-                />
-                <ProblemWorkspaceResourcesPanel
-                  :resources="workspaceResources"
-                  :saving="resourceSaving"
-                  :interpreting-id="resourceInterpretingId"
-                  :current-turn-id="activeConceptTurnId"
-                  @save="saveWorkspaceResource"
-                  @delete="deleteWorkspaceResource"
-                  @interpret="interpretWorkspaceResource"
-                />
-              </div>
-            </details>
-          </aside>
+            </div>
+          </details>
         </div>
-      </div>
+      </section>
     </template>
   </div>
 </template>
@@ -798,11 +657,69 @@ const currentStepNumber = computed(() => {
   if (isPathCompleted.value) return totalSteps.value
   return Math.min(completedSteps.value + 1, totalSteps.value || 1)
 })
-const progressPercent = computed(() => {
-  if (!totalSteps.value) return 0
-  return Math.round((completedSteps.value / totalSteps.value) * 100)
-})
 const completedStepList = computed(() => (learningPath.value?.path_data || []).slice(0, completedSteps.value))
+const progressSummary = computed(() => (
+  totalSteps.value
+    ? t('problemDetail.stepIndicator', { current: currentStepNumber.value, total: totalSteps.value })
+    : t('problemDetail.noLearningPath')
+))
+const currentStepSummary = computed(() => {
+  if (currentStep.value?.description) return currentStep.value.description
+  if (isPathCompleted.value) return t('problemDetail.completedAll')
+  return t('problemDetail.noLearningPath')
+})
+const modeSummary = computed(() => (
+  learningMode.value === 'exploration'
+    ? t('problemDetail.modeExplorationHint')
+    : t('problemDetail.modeSocraticHint')
+))
+const contractTask = computed(() => {
+  if (isPathCompleted.value) return t('problemDetail.completedAll')
+  if (currentStep.value?.concept) {
+    return t('problemDetail.contractTaskConcept', { concept: currentStep.value.concept })
+  }
+  return t('problemDetail.contractTaskProblem', { title: problem.value?.title || t('problemDetail.title') })
+})
+const contractReason = computed(() => (
+  learningPath.value?.branch_reason
+    || currentStep.value?.description
+    || (
+      learningMode.value === 'exploration'
+        ? t('problemDetail.workspaceFrameExploration')
+        : t('problemDetail.workspaceFrameSocratic')
+    )
+))
+const contractDone = computed(() => {
+  if (isPathCompleted.value) return t('problemDetail.completedAll')
+  if (
+    learningPath.value?.kind === 'prerequisite'
+    && learningPath.value?.return_step_id !== null
+    && learningPath.value?.return_step_id !== undefined
+  ) {
+    return t('problemDetail.contractDonePrerequisite', {
+      step: Number(learningPath.value.return_step_id) + 1,
+      target: problem.value?.title || t('problemDetail.title'),
+    })
+  }
+  return learningMode.value === 'exploration'
+    ? t('problemDetail.contractDoneExploration')
+    : t('problemDetail.contractDoneSocratic')
+})
+const contractDoneSupport = computed(() => {
+  if (isPathCompleted.value) return t('problemDetail.contractDoneSupportCompleted')
+  if (learningPath.value?.kind === 'prerequisite') {
+    return t('problemDetail.contractDoneSupportPrerequisite')
+  }
+  return learningMode.value === 'exploration'
+    ? t('problemDetail.contractDoneSupportExploration')
+    : t('problemDetail.contractDoneSupportSocratic')
+})
+const showContractControls = computed(() => (
+  allLearningPaths.value.length > 1
+  || completedSteps.value > 0
+  || (!isPathCompleted.value && learningMode.value !== 'socratic')
+  || canReturnToParent.value
+))
 
 const buildCurrentInteractionStepKey = (mode: 'socratic' | 'exploration' = learningMode.value) => {
   return `${mode}:${String(learningPath.value?.id || 'no-path')}:${completedSteps.value}`
@@ -940,9 +857,6 @@ const currentTurnPathCandidates = computed(() => {
   if (!artifactFocusTurnId.value) return []
   return pathCandidates.value.filter((candidate: any) => String(candidate.source_turn_id || '') === String(artifactFocusTurnId.value))
 })
-const hasAnyArtifacts = computed(() => (
-  Boolean(conceptCandidates.value.length || pathCandidates.value.length || latestResponse.value || latestQA.value)
-))
 const {
   workspacePathSummary,
   workspaceTurnSummary,
@@ -958,14 +872,9 @@ const {
   reinforcementTargetPathId,
   canSwitchToReinforcementPath,
   reinforcementFocusTitle,
-  reinforcementFocusDescription,
-  reinforcementFocusTurnPreview,
   reinforcementActionTemplate,
   formatConfidence,
-  formatRecommendedAction,
   formatReinforcementResume,
-  hasReinforcementPath,
-  formatReinforcementPath,
   formatReinforcementSummary,
   formatLearningMode,
   formatLearningPathKind,
@@ -992,16 +901,6 @@ const {
   conceptCandidates,
   pathCandidates,
   scheduledReviews,
-})
-const workspaceFocusTitle = computed(() => {
-  if (currentStep.value?.concept) return currentStep.value.concept
-  if (isPathCompleted.value) return t('problemDetail.completed')
-  return problem.value?.title || t('problemDetail.title')
-})
-const workspaceFocusDescription = computed(() => {
-  if (currentStep.value?.description) return currentStep.value.description
-  if (isPathCompleted.value) return t('problemDetail.completedAll')
-  return t('problemDetail.noLearningPath')
 })
 const {
   fetchReviewSchedules,
@@ -2181,6 +2080,189 @@ onMounted(loadWorkspace)
 .candidate-dismissed {
   border-color: rgba(148, 163, 184, 0.28);
   opacity: 0.8;
+}
+
+.problem-detail {
+  display: grid;
+  gap: 1rem;
+}
+
+.problem-learning-header,
+.learning-contract-card,
+.primary-turn-card,
+.turn-result-card,
+.postturn-card,
+.secondary-tools-card,
+.reinforcement-strip {
+  display: grid;
+  gap: 1rem;
+}
+
+.problem-learning-header {
+  padding: 1.4rem;
+}
+
+.learning-header-copy {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.learning-header-copy h1,
+.learning-header-copy p {
+  margin: 0;
+}
+
+.learning-header-status,
+.contract-grid,
+.postturn-summary-strip,
+.secondary-tools-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.header-pill {
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.header-pill p {
+  color: var(--text-muted);
+}
+
+.learning-header-controls {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: end;
+}
+
+.compact-mode-toggle {
+  justify-content: flex-end;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.contract-grid .workspace-summary-card,
+.postturn-summary-strip .workspace-summary-card {
+  min-height: 100%;
+}
+
+.path-options-panel,
+.postturn-details,
+.secondary-detail {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.9rem 1rem;
+}
+
+.path-options-panel summary,
+.postturn-details summary,
+.secondary-detail summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.path-options-panel[open],
+.postturn-details[open],
+.secondary-detail[open] {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.contract-controls-panel {
+  margin-top: 0.1rem;
+}
+
+.contract-controls-copy {
+  margin: 0;
+}
+
+.contract-action-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.reinforcement-strip {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 1rem 1.1rem;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.reinforcement-strip-copy {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.reinforcement-context-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.reinforcement-strip-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.turn-step-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  background: rgba(74, 222, 128, 0.05);
+}
+
+.turn-step-card h3,
+.turn-step-card p {
+  margin: 0;
+}
+
+.step-content {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.secondary-actions-block {
+  display: grid;
+  gap: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .learning-header-controls,
+  .reinforcement-strip {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .learning-header-controls {
+    justify-items: start;
+  }
+
+  .compact-mode-toggle {
+    justify-content: flex-start;
+  }
+
+  .reinforcement-strip-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (min-width: 980px) {

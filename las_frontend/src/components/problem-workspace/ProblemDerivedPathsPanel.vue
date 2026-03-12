@@ -46,7 +46,7 @@
                   data-testid="path-candidate-insert-main"
                   @click="emit('decide', { candidateId: candidate.id, action: 'insert_before_current_main' })"
                 >
-                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
+                  {{ t('problemDetail.pathCandidateFollowNow') }}
                 </button>
                 <button
                   type="button"
@@ -55,7 +55,7 @@
                   data-testid="path-candidate-save-branch"
                   @click="emit('decide', { candidateId: candidate.id, action: 'save_as_side_branch' })"
                 >
-                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
+                  {{ t('problemDetail.pathCandidateExploreSeparately') }}
                 </button>
                 <button
                   type="button"
@@ -64,7 +64,7 @@
                   data-testid="path-candidate-bookmark"
                   @click="emit('decide', { candidateId: candidate.id, action: 'bookmark_for_later' })"
                 >
-                  {{ t('problemDetail.pathCandidateBookmark') }}
+                  {{ t('problemDetail.pathCandidateLater') }}
                 </button>
                 <button
                   type="button"
@@ -73,7 +73,7 @@
                   data-testid="path-candidate-dismiss"
                   @click="emit('decide', { candidateId: candidate.id, action: 'dismiss' })"
                 >
-                  {{ t('problemDetail.pathCandidateDismiss') }}
+                  {{ t('problemDetail.pathCandidateIgnoreNow') }}
                 </button>
               </div>
             </article>
@@ -112,7 +112,7 @@
                   data-testid="path-candidate-insert-main"
                   @click="emit('decide', { candidateId: candidate.id, action: 'insert_before_current_main' })"
                 >
-                  {{ t('problemDetail.pathCandidateInsertBeforeCurrent') }}
+                  {{ t('problemDetail.pathCandidateFollowNow') }}
                 </button>
                 <button
                   type="button"
@@ -121,7 +121,7 @@
                   data-testid="path-candidate-save-branch"
                   @click="emit('decide', { candidateId: candidate.id, action: 'save_as_side_branch' })"
                 >
-                  {{ t('problemDetail.pathCandidateSaveAsBranch') }}
+                  {{ t('problemDetail.pathCandidateExploreSeparately') }}
                 </button>
                 <button
                   type="button"
@@ -130,7 +130,7 @@
                   data-testid="path-candidate-bookmark"
                   @click="emit('decide', { candidateId: candidate.id, action: 'bookmark_for_later' })"
                 >
-                  {{ t('problemDetail.pathCandidateBookmark') }}
+                  {{ t('problemDetail.pathCandidateLater') }}
                 </button>
                 <button
                   type="button"
@@ -139,7 +139,7 @@
                   data-testid="path-candidate-dismiss"
                   @click="emit('decide', { candidateId: candidate.id, action: 'dismiss' })"
                 >
-                  {{ t('problemDetail.pathCandidateDismiss') }}
+                  {{ t('problemDetail.pathCandidateIgnoreNow') }}
                 </button>
               </div>
             </article>
