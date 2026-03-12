@@ -121,6 +121,27 @@
     "modelId": "模型 ID",
     "modelName": "模型名称",
     "defaultModel": "默认",
+    "taskRoutes": "任务路由",
+    "taskRoutesHint": "分别为主交互学习链路、重结构生成任务和非流式兜底任务指定模型。",
+    "routeProvider": "供应商",
+    "routeModel": "模型",
+    "routeUseProviderDefault": "使用该供应商默认模型",
+    "routeDisabled": "禁用",
+    "routeLabels": {
+      "interactive": "交互主链路",
+      "structured_heavy": "重结构任务",
+      "fallback": "兜底回退"
+    },
+    "routeDescriptions": {
+      "interactive": "用于主学习工作区里的解释回答、苏格拉底提问、步骤提示和结构化反馈。",
+      "structured_heavy": "用于概念抽取、学习路径生成、知识卡创建等更重的结构化产物。",
+      "fallback": "当非流式任务的主路由返回错误或空结果时，进行第二次模型尝试。"
+    },
+    "routeProviderOptions": {
+      "interactive": "使用全局默认供应商",
+      "structured_heavy": "使用全局默认供应商",
+      "fallback": "不启用回退路由"
+    },
     "saveSuccess": "配置已保存",
     "confirmDelete": "确定要删除吗？",
     "types": {

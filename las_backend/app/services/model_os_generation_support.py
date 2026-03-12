@@ -29,7 +29,7 @@ async def generate_socratic_question(
         recent_responses,
         latest_feedback,
     )
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="interactive")
     question = str(result or "").strip()
     if not question:
         return self.build_socratic_question_fallback(
@@ -62,8 +62,12 @@ async def stream_socratic_question(
         recent_responses,
         latest_feedback,
     )
+    route = await self.resolve_task_route("interactive")
     async for token in self.llm.stream_generate(
         messages=[{"role": "user", "content": prompt}],
+        provider_id=route.provider_id,
+        provider_type=route.provider_type,
+        model_id=route.model_id,
     ):
         yield token
 
@@ -97,10 +101,11 @@ Return ONLY a JSON array of strings, e.g.:
 {language_instruction}"""
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._related_concepts_schema(normalized_limit),
             schema_name="related_concepts",
+            lane="structured_heavy",
         )
     except Exception:
         structured_result = None
@@ -115,7 +120,7 @@ Return ONLY a JSON array of strings, e.g.:
         if normalized:
             return normalized
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="structured_heavy")
     try:
         parsed = json.loads(_clean_json_str(result))
         if isinstance(parsed, dict):
@@ -217,10 +222,11 @@ Return the response as a JSON object with the following structure:
 {language_instruction}"""
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._model_card_schema(),
             schema_name="model_card",
+            lane="structured_heavy",
         )
     except Exception:
         structured_result = None
@@ -229,7 +235,7 @@ Return the response as a JSON object with the following structure:
     if normalized_structured != self._default_model_card_payload():
         return normalized_structured
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="structured_heavy")
 
     try:
         model_data = json.loads(_clean_json_str(result))
@@ -267,10 +273,11 @@ Format as a JSON array of strings, each being a counter-example or challenging q
 {language_instruction}"""
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._counter_examples_schema(),
             schema_name="counter_examples",
+            lane="structured_heavy",
         )
     except Exception:
         structured_result = None
@@ -279,7 +286,7 @@ Format as a JSON array of strings, each being a counter-example or challenging q
     if normalized_structured:
         return normalized_structured
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="structured_heavy")
 
     try:
         counter_examples = json.loads(_clean_json_str(result))
@@ -314,10 +321,11 @@ Return as JSON array:
 {language_instruction}"""
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._migration_schema(),
             schema_name="migrations",
+            lane="structured_heavy",
         )
     except Exception:
         structured_result = None
@@ -326,7 +334,7 @@ Return as JSON array:
     if normalized_structured:
         return normalized_structured
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="structured_heavy")
 
     try:
         migrations = json.loads(_clean_json_str(result))
@@ -375,10 +383,11 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
 {language_instruction}"""
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._learning_path_schema(),
             schema_name="learning_path",
+            lane="structured_heavy",
         )
     except Exception:
         structured_result = None
@@ -387,7 +396,7 @@ Return ONLY a valid JSON array of steps exactly matching this format (with NO ex
     if normalized_structured:
         return normalized_structured
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="structured_heavy")
 
     try:
         path = json.loads(_clean_json_str(result))
@@ -459,7 +468,7 @@ Model Examples: {', '.join(model_examples)}
 
 {language_instruction}"""
 
-    return await self.llm.generate(prompt)
+    return await self.generate_text_for_lane(prompt, lane="interactive")
 
 
 async def generate_step_hint(
@@ -532,10 +541,11 @@ Constraints:
     )
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._step_hint_schema(),
             schema_name="step_hint",
+            lane="interactive",
         )
     except Exception:
         structured_result = None
@@ -547,7 +557,7 @@ Constraints:
             cjk_context=cjk_context,
         )
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="interactive")
     try:
         parsed = json.loads(_clean_json_str(result))
         if not isinstance(parsed, dict):
@@ -604,10 +614,11 @@ Return this exact JSON shape:
 """
 
     try:
-        structured_result = await self.llm.generate_structured_json(
+        structured_result = await self.generate_structured_for_lane(
             prompt,
             self._feedback_structured_schema(),
             schema_name="structured_feedback",
+            lane="interactive",
         )
     except Exception:
         structured_result = None
@@ -615,7 +626,7 @@ Return this exact JSON shape:
     if isinstance(structured_result, dict):
         return self.normalize_feedback_structured(structured_result)
 
-    result = await self.llm.generate(prompt)
+    result = await self.generate_text_for_lane(prompt, lane="interactive")
 
     try:
         parsed = json.loads(_clean_json_str(result))
@@ -653,4 +664,4 @@ Current state: {str(new_snapshot)}
 Provide a concise summary (2-3 sentences) of what changed and why it matters for the learner's understanding.
 
 {language_instruction}"""
-    return await self.llm.generate(prompt)
+    return await self.generate_text_for_lane(prompt, lane="structured_heavy")

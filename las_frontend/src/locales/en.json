@@ -121,6 +121,27 @@
     "modelId": "Model ID",
     "modelName": "Model Name",
     "defaultModel": "Default",
+    "taskRoutes": "Task Routes",
+    "taskRoutesHint": "Assign different models to the interactive learning loop, heavier structured generation, and non-stream fallback.",
+    "routeProvider": "Provider",
+    "routeModel": "Model",
+    "routeUseProviderDefault": "Use provider default model",
+    "routeDisabled": "Disabled",
+    "routeLabels": {
+      "interactive": "Interactive",
+      "structured_heavy": "Structured Heavy",
+      "fallback": "Fallback"
+    },
+    "routeDescriptions": {
+      "interactive": "Exploration answers, Socratic prompts, step hints, and structured feedback in the main workspace.",
+      "structured_heavy": "Concept extraction, learning path generation, model card creation, and other heavier structured artifacts.",
+      "fallback": "Second attempt for non-stream tasks when the primary lane returns an error or empty result."
+    },
+    "routeProviderOptions": {
+      "interactive": "Use global default provider",
+      "structured_heavy": "Use global default provider",
+      "fallback": "No fallback route"
+    },
     "saveSuccess": "Configuration saved",
     "confirmDelete": "Are you sure you want to delete this?",
     "types": {

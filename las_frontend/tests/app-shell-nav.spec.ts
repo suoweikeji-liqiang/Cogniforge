@@ -134,6 +134,57 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(page.locator('a[href="/resources"]')).toHaveCount(0)
 })
 
+test('admin llm config stays on the admin route after a hard refresh', async ({ page, request }) => {
+  await authenticate(page, request)
+
+  await page.route('**/api/auth/me', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'admin-test-user',
+        email: 'admin@example.com',
+        username: 'admin-test',
+        full_name: 'Admin Test',
+        role: 'admin',
+        is_active: true,
+      }),
+    })
+  })
+
+  await page.route('**/api/admin/llm-config/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/admin/llm-config/routes', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        interactive: { provider_id: null, model_record_id: null },
+        structured_heavy: { provider_id: null, model_record_id: null },
+        fallback: { provider_id: null, model_record_id: null },
+      }),
+    })
+  })
+
+  await page.goto('/admin/llm-config')
+  await expect(page).toHaveURL(/\/admin\/llm-config$/)
+  await expect(page.getByRole('heading', { name: /LLM Configuration|LLM 配置/i })).toBeVisible()
+  await expect(page.getByTestId('primary-nav-item-admin')).toBeVisible()
+
+  await page.reload()
+
+  await expect(page).toHaveURL(/\/admin\/llm-config$/)
+  await expect(page.getByRole('heading', { name: /LLM Configuration|LLM 配置/i })).toBeVisible()
+  await expect(page.getByTestId('primary-nav-item-admin')).toBeVisible()
+})
+
 test('standalone chat is marked as a secondary legacy surface', async ({ page, request }) => {
   await authenticate(page, request)
   await page.goto('/chat')

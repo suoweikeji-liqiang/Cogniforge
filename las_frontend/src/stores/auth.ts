@@ -16,6 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshTokenValue = ref<string | null>(localStorage.getItem('refresh_token'))
   const user = ref<User | null>(null)
   const refreshPromise = ref<Promise<string | null> | null>(null)
+  const userPromise = ref<Promise<void> | null>(null)
 
   const isAuthenticated = computed(() => !!token.value)
 
@@ -41,6 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
     setToken(null)
     setRefreshToken(null)
     user.value = null
+    userPromise.value = null
   }
 
   const getTokenExpiry = (jwt: string | null): number | null => {
@@ -90,23 +92,38 @@ export const useAuthStore = defineStore('auth', () => {
 
   const fetchUser = async () => {
     if (!token.value && !refreshTokenValue.value) return
-    
-    try {
-      if (!token.value && refreshTokenValue.value) {
-        const refreshed = await refreshToken()
-        if (!refreshed) return
-      }
-      const response = await api.get('/auth/me')
-      user.value = response.data
-    } catch {
-      const refreshed = await refreshToken()
-      if (!refreshed) {
-        clearAuth()
-        return
-      }
-      const response = await api.get('/auth/me')
-      user.value = response.data
+
+    if (userPromise.value) {
+      return userPromise.value
     }
+
+    userPromise.value = (async () => {
+      try {
+        if (!token.value && refreshTokenValue.value) {
+          const refreshed = await refreshToken()
+          if (!refreshed) return
+        }
+        const response = await api.get('/auth/me')
+        user.value = response.data
+      } catch {
+        const refreshed = await refreshToken()
+        if (!refreshed) {
+          clearAuth()
+          return
+        }
+        const response = await api.get('/auth/me')
+        user.value = response.data
+      } finally {
+        userPromise.value = null
+      }
+    })()
+
+    return userPromise.value
+  }
+
+  const ensureUserLoaded = async () => {
+    if (user.value || (!token.value && !refreshTokenValue.value)) return
+    await fetchUser()
   }
 
   const refreshToken = async () => {
@@ -182,6 +199,7 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
     fetchUser,
+    ensureUserLoaded,
     refreshToken,
     ensureFreshToken,
     clearAuth,

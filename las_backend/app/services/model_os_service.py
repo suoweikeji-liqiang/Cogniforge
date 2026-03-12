@@ -1,17 +1,33 @@
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+from sqlalchemy import select
+
+from app.core.database import AsyncSessionLocal
+from app.models.entities.llm_provider import LLMProvider, LLMModel
+from app.models.entities.system_settings import SystemSettings
 from app.services.llm_service import llm_service
 from app.core.config import get_settings
-from sqlalchemy import select
 
 from app.services import model_os_embedding_support as embedding_support
 from app.services import model_os_generation_support as generation_support
 from app.services import model_os_structured_support as structured_support
 
 
+LLM_TASK_ROUTES_KEY = "llm_task_routes"
+
+
+@dataclass(frozen=True)
+class LLMTaskRoute:
+    provider_id: Optional[int] = None
+    provider_type: Optional[str] = None
+    model_id: Optional[str] = None
+
+
 class ModelOSService:
     def __init__(self):
         self.llm = llm_service
-        self.embedding_dimensions = get_settings().MODEL_CARD_EMBEDDING_DIMENSIONS
+        self.settings = get_settings()
+        self.embedding_dimensions = self.settings.MODEL_CARD_EMBEDDING_DIMENSIONS
 
     _feedback_structured_schema = staticmethod(structured_support.feedback_structured_schema)
     _step_hint_schema = staticmethod(structured_support.step_hint_schema)
@@ -70,6 +86,180 @@ class ModelOSService:
     generate_step_hint = generation_support.generate_step_hint
     generate_feedback_structured = generation_support.generate_feedback_structured
     generate_evolution_summary = generation_support.generate_evolution_summary
+
+    def _normalize_route_value(self, value: Optional[str]) -> Optional[str]:
+        normalized = str(value or "").strip()
+        return normalized or None
+
+    def _build_route(
+        self,
+        provider_id: Optional[int],
+        provider_type: Optional[str],
+        model_id: Optional[str],
+    ) -> LLMTaskRoute:
+        return LLMTaskRoute(
+            provider_id=provider_id,
+            provider_type=self._normalize_route_value(provider_type),
+            model_id=self._normalize_route_value(model_id),
+        )
+
+    def _build_env_task_route(self, lane: str) -> LLMTaskRoute:
+        if lane == "structured_heavy":
+            return self._build_route(
+                None,
+                self.settings.LLM_STRUCTURED_HEAVY_PROVIDER_TYPE,
+                self.settings.LLM_STRUCTURED_HEAVY_MODEL_ID,
+            )
+        return self._build_route(
+            None,
+            self.settings.LLM_INTERACTIVE_PROVIDER_TYPE,
+            self.settings.LLM_INTERACTIVE_MODEL_ID,
+        )
+
+    def _build_env_fallback_route(self) -> LLMTaskRoute:
+        return self._build_route(
+            None,
+            self.settings.LLM_FALLBACK_PROVIDER_TYPE,
+            self.settings.LLM_FALLBACK_MODEL_ID,
+        )
+
+    async def _load_route_payloads(self) -> Dict[str, Any]:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(SystemSettings).where(SystemSettings.key == LLM_TASK_ROUTES_KEY)
+            )
+            setting = result.scalar_one_or_none()
+            value = setting.value if setting and isinstance(setting.value, dict) else {}
+            return value if isinstance(value, dict) else {}
+
+    async def _resolve_db_route(self, lane: str) -> Optional[LLMTaskRoute]:
+        payloads = await self._load_route_payloads()
+        assignment = payloads.get(lane)
+        if not isinstance(assignment, dict):
+            return None
+
+        provider_id = assignment.get("provider_id")
+        model_record_id = assignment.get("model_record_id")
+        if provider_id is None:
+            return None
+
+        try:
+            normalized_provider_id = int(provider_id)
+        except (TypeError, ValueError):
+            return None
+
+        normalized_model_record_id: Optional[int]
+        if model_record_id is None:
+            normalized_model_record_id = None
+        else:
+            try:
+                normalized_model_record_id = int(model_record_id)
+            except (TypeError, ValueError):
+                return None
+
+        async with AsyncSessionLocal() as db:
+            provider = await db.get(LLMProvider, normalized_provider_id)
+            if not provider or not provider.enabled:
+                return None
+
+            resolved_model_id: Optional[str] = None
+            if normalized_model_record_id is not None:
+                model = await db.get(LLMModel, normalized_model_record_id)
+                if not model or not model.enabled or model.provider_id != provider.id:
+                    return None
+                resolved_model_id = model.model_id
+
+            return self._build_route(
+                provider.id,
+                provider.provider_type,
+                resolved_model_id,
+            )
+
+    async def resolve_task_route(self, lane: str) -> LLMTaskRoute:
+        db_route = await self._resolve_db_route(lane)
+        return db_route or self._build_env_task_route(lane)
+
+    async def resolve_fallback_route(self) -> LLMTaskRoute:
+        db_route = await self._resolve_db_route("fallback")
+        return db_route or self._build_env_fallback_route()
+
+    def _routes_match(self, left: LLMTaskRoute, right: LLMTaskRoute) -> bool:
+        return (
+            left.provider_id == right.provider_id
+            and
+            left.provider_type == right.provider_type
+            and left.model_id == right.model_id
+        )
+
+    def _has_explicit_route(self, route: LLMTaskRoute) -> bool:
+        return bool(route.provider_id is not None or route.provider_type or route.model_id)
+
+    def _looks_like_llm_error(self, result: Any) -> bool:
+        text = str(result or "").strip()
+        return not text or text.startswith("Error:")
+
+    async def generate_text_for_lane(
+        self,
+        prompt: str,
+        *,
+        lane: str = "interactive",
+        allow_fallback: bool = True,
+    ) -> str:
+        primary = await self.resolve_task_route(lane)
+        result = await self.llm.generate(
+            prompt,
+            provider_id=primary.provider_id,
+            provider_type=primary.provider_type,
+            model_id=primary.model_id,
+        )
+        if not allow_fallback or not self._looks_like_llm_error(result):
+            return result
+
+        fallback = await self.resolve_fallback_route()
+        if not self._has_explicit_route(fallback) or self._routes_match(primary, fallback):
+            return result
+
+        fallback_result = await self.llm.generate(
+            prompt,
+            provider_id=fallback.provider_id,
+            provider_type=fallback.provider_type,
+            model_id=fallback.model_id,
+        )
+        return fallback_result if not self._looks_like_llm_error(fallback_result) else result
+
+    async def generate_structured_for_lane(
+        self,
+        prompt: str,
+        json_schema: Dict[str, Any],
+        *,
+        schema_name: str,
+        lane: str = "interactive",
+        allow_fallback: bool = True,
+    ) -> Optional[Dict[str, Any] | List[Any]]:
+        primary = await self.resolve_task_route(lane)
+        structured = await self.llm.generate_structured_json(
+            prompt,
+            json_schema,
+            schema_name=schema_name,
+            provider_id=primary.provider_id,
+            provider_type=primary.provider_type,
+            model_id=primary.model_id,
+        )
+        if structured is not None or not allow_fallback:
+            return structured
+
+        fallback = await self.resolve_fallback_route()
+        if not self._has_explicit_route(fallback) or self._routes_match(primary, fallback):
+            return structured
+
+        return await self.llm.generate_structured_json(
+            prompt,
+            json_schema,
+            schema_name=schema_name,
+            provider_id=fallback.provider_id,
+            provider_type=fallback.provider_type,
+            model_id=fallback.model_id,
+        )
 
     def build_embedding_text(
         self,
@@ -401,12 +591,18 @@ class ModelOSService:
         context: List[Dict[str, Any]],
         retrieval_context: Optional[str] = None,
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
+        model_id: Optional[str] = None,
+        lane: str = "interactive",
     ) -> str:
+        route = await self.resolve_task_route(lane)
         return await self.llm.generate_with_context(
             prompt=prompt,
             context=context,
             retrieval_context=retrieval_context,
-            provider_type=provider_type,
+            provider_id=provider_id or route.provider_id,
+            provider_type=provider_type or route.provider_type,
+            model_id=model_id or route.model_id,
         )
 
     async def stream_generate_with_context(
@@ -415,15 +611,19 @@ class ModelOSService:
         context: List[Dict[str, Any]],
         retrieval_context: Optional[str] = None,
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
         model_id: Optional[str] = None,
         temperature: float = 0.7,
+        lane: str = "interactive",
     ):
+        route = await self.resolve_task_route(lane)
         async for token in self.llm.stream_generate_with_context(
             prompt=prompt,
             context=context,
             retrieval_context=retrieval_context,
-            provider_type=provider_type,
-            model_id=model_id,
+            provider_id=provider_id or route.provider_id,
+            provider_type=provider_type or route.provider_type,
+            model_id=model_id or route.model_id,
             temperature=temperature,
         ):
             yield token

@@ -3,6 +3,58 @@
     <div class="config-header">
       <h1>{{ t('llm.title') }}</h1>
     </div>
+
+    <div class="routes-panel">
+      <div class="panel-header">
+        <div>
+          <h2>{{ t('llm.taskRoutes') }}</h2>
+          <p class="routes-hint">{{ t('llm.taskRoutesHint') }}</p>
+        </div>
+        <button class="btn btn-primary" @click="saveTaskRoutes">
+          {{ t('common.save') }}
+        </button>
+      </div>
+
+      <div class="route-grid">
+        <div v-for="route in routeCards" :key="route.key" class="route-card">
+          <h3>{{ t(`llm.routeLabels.${route.key}`) }}</h3>
+          <p class="route-description">{{ t(`llm.routeDescriptions.${route.key}`) }}</p>
+
+          <div class="form-group">
+            <label>{{ t('llm.routeProvider') }}</label>
+            <select v-model="taskRoutes[route.key].provider_id" @change="onTaskRouteProviderChange(route.key)">
+              <option :value="null">{{ t(`llm.routeProviderOptions.${route.key}`) }}</option>
+              <option
+                v-for="provider in enabledProviders"
+                :key="`route-provider-${route.key}-${provider.id}`"
+                :value="provider.id"
+              >
+                {{ provider.name }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t('llm.routeModel') }}</label>
+            <select
+              v-model="taskRoutes[route.key].model_record_id"
+              :disabled="!taskRoutes[route.key].provider_id"
+            >
+              <option :value="null">
+                {{ route.key === 'fallback' ? t('llm.routeDisabled') : t('llm.routeUseProviderDefault') }}
+              </option>
+              <option
+                v-for="model in getEnabledModels(taskRoutes[route.key].provider_id)"
+                :key="`route-model-${route.key}-${model.id}`"
+                :value="model.id"
+              >
+                {{ model.model_name }} ({{ model.model_id }})
+              </option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
     
     <div class="config-content">
       <div class="providers-panel">
@@ -197,7 +249,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 
@@ -209,6 +261,19 @@ const showProviderModal = ref(false)
 const showModelModal = ref(false)
 const editingProvider = ref(null)
 const editingModel = ref(null)
+const taskRoutes = ref({
+  interactive: { provider_id: null, model_record_id: null },
+  structured_heavy: { provider_id: null, model_record_id: null },
+  fallback: { provider_id: null, model_record_id: null },
+})
+
+const routeCards = [
+  { key: 'interactive' },
+  { key: 'structured_heavy' },
+  { key: 'fallback' },
+]
+
+const enabledProviders = computed(() => providers.value.filter(provider => provider.enabled))
 
 const providerForm = ref({
   name: '',
@@ -229,13 +294,69 @@ const loadProviders = async () => {
   try {
     const response = await api.get('/admin/llm-config/providers')
     providers.value = response.data
+    if (selectedProvider.value) {
+      selectedProvider.value = providers.value.find(p => p.id === selectedProvider.value.id) || null
+    }
   } catch (e) {
     console.error('Failed to load providers:', e)
   }
 }
 
+const normalizeTaskRoutes = (routes = {}) => ({
+  interactive: {
+    provider_id: routes.interactive?.provider_id ?? null,
+    model_record_id: routes.interactive?.model_record_id ?? null,
+  },
+  structured_heavy: {
+    provider_id: routes.structured_heavy?.provider_id ?? null,
+    model_record_id: routes.structured_heavy?.model_record_id ?? null,
+  },
+  fallback: {
+    provider_id: routes.fallback?.provider_id ?? null,
+    model_record_id: routes.fallback?.model_record_id ?? null,
+  },
+})
+
+const loadTaskRoutes = async () => {
+  try {
+    const response = await api.get('/admin/llm-config/routes')
+    taskRoutes.value = normalizeTaskRoutes(response.data)
+  } catch (e) {
+    console.error('Failed to load task routes:', e)
+  }
+}
+
+const saveTaskRoutes = async () => {
+  try {
+    const payload = normalizeTaskRoutes(taskRoutes.value)
+    const response = await api.put('/admin/llm-config/routes', payload)
+    taskRoutes.value = normalizeTaskRoutes(response.data)
+    alert(t('llm.saveSuccess'))
+  } catch (e) {
+    console.error('Failed to save task routes:', e)
+    alert(e.response?.data?.detail || 'Error saving task routes')
+  }
+}
+
 const selectProvider = (provider) => {
   selectedProvider.value = provider
+}
+
+const getEnabledModels = (providerId) => {
+  const provider = providers.value.find(item => item.id === providerId)
+  return provider?.models?.filter(model => model.enabled) || []
+}
+
+const onTaskRouteProviderChange = (routeKey) => {
+  if (!taskRoutes.value[routeKey]?.provider_id) {
+    taskRoutes.value[routeKey].model_record_id = null
+    return
+  }
+  const validModels = getEnabledModels(taskRoutes.value[routeKey].provider_id)
+  const stillValid = validModels.some(model => model.id === taskRoutes.value[routeKey].model_record_id)
+  if (!stillValid) {
+    taskRoutes.value[routeKey].model_record_id = null
+  }
 }
 
 const closeProviderModal = () => {
@@ -272,6 +393,7 @@ const saveProvider = async () => {
       await api.post('/admin/llm-config/providers', providerForm.value)
     }
     await loadProviders()
+    await loadTaskRoutes()
     closeProviderModal()
     if (editingProvider.value) {
       selectedProvider.value = providers.value.find(p => p.id === editingProvider.value.id)
@@ -288,6 +410,7 @@ const deleteProvider = async () => {
     await api.delete(`/admin/llm-config/providers/${selectedProvider.value.id}`)
     selectedProvider.value = null
     await loadProviders()
+    await loadTaskRoutes()
   } catch (e) {
     console.error('Failed to delete provider:', e)
   }
@@ -347,6 +470,7 @@ const saveModel = async () => {
     }
     await loadProviders()
     selectedProvider.value = providers.value.find(p => p.id === selectedProvider.value.id)
+    await loadTaskRoutes()
     showModelModal.value = false
     editingModel.value = null
     modelForm.value = { model_name: '', model_id: '', is_default: false }
@@ -372,6 +496,7 @@ const deleteModel = async (model) => {
     await api.delete(`/admin/llm-config/models/${model.id}`)
     await loadProviders()
     selectedProvider.value = providers.value.find(p => p.id === selectedProvider.value.id)
+    await loadTaskRoutes()
   } catch (e) {
     console.error('Failed to delete model:', e)
   }
@@ -383,7 +508,10 @@ const maskApiKey = (key) => {
   return key.slice(0, 4) + '****' + key.slice(-4)
 }
 
-onMounted(loadProviders)
+onMounted(async () => {
+  await loadProviders()
+  await loadTaskRoutes()
+})
 </script>
 
 <style scoped>
@@ -395,6 +523,46 @@ onMounted(loadProviders)
 .llm-config-page h1 {
   color: var(--text);
   margin-bottom: 1.5rem;
+}
+
+.routes-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.routes-hint {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.route-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-dark);
+}
+
+.route-card h3 {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.route-description {
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .config-content {
@@ -698,5 +866,17 @@ onMounted(loadProviders)
 .btn-sm {
   padding: 0.375rem 0.75rem;
   font-size: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .config-content {
+    grid-template-columns: 1fr;
+  }
+
+  .details-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
 }
 </style>
