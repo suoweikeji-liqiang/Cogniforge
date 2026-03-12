@@ -610,6 +610,12 @@ Return this exact JSON shape:
   "decision_reason": "why pass_stage is true/false"
 }}
 
+Rules:
+1. If "pass_stage" is false, "misconceptions" must contain at least one concrete missing point or mistaken assumption.
+2. Do not use generic items like "needs more detail" or "be clearer"; name the missing mechanism, boundary, comparison, or prerequisite.
+3. The first item in "suggestions" must directly help fix the first misconception.
+4. "next_question" must probe the first misconception instead of changing topic.
+
 {language_instruction}
 """
 

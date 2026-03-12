@@ -553,6 +553,7 @@
     "workspaceNextReviewRevisit": "概念“{concept}”在回忆后变脆，需要先回到工作区重新巩固。",
     "workspaceNextReviewReinforce": "概念“{concept}”目前回忆得比较吃力，建议在工作区里再强化一次。",
     "workspaceNextReviewExtend": "概念“{concept}”在回忆中已经站稳，可以利用待处理路径继续扩展或比较。",
+    "workspaceNextPrerequisiteBranch": "先补清“{concept}”，再返回主线第 {step} 步继续“{target}”。",
     "recallStateScheduled": "待回忆",
     "recallStateFragile": "脆弱",
     "recallStateRebuilding": "重建中",

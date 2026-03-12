@@ -553,6 +553,7 @@
     "workspaceNextReviewRevisit": "Recall weakened on {concept}. Revisit it in this workspace before pushing further.",
     "workspaceNextReviewReinforce": "Recall on {concept} held with effort. Reinforce it once more in the workspace.",
     "workspaceNextReviewExtend": "{concept} is holding in recall. Use the pending path options to extend or compare it.",
+    "workspaceNextPrerequisiteBranch": "Close the gap on '{concept}', then return to step {step} on the main path for '{target}'.",
     "recallStateScheduled": "Scheduled",
     "recallStateFragile": "Fragile",
     "recallStateRebuilding": "Rebuilding",

@@ -22,6 +22,18 @@
           <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ latestFeedback.mastery_score }}
           · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(latestFeedback.confidence) }}
         </p>
+        <div v-if="latestFeedback.misconceptions?.length" class="artifact-block">
+          <strong>{{ t('feedback.misconceptions') }}</strong>
+          <ul class="artifact-actions">
+            <li v-for="(item, index) in latestFeedback.misconceptions" :key="`misconception-${index}`">{{ item }}</li>
+          </ul>
+        </div>
+        <div v-if="latestFeedback.suggestions?.length" class="artifact-block">
+          <strong>{{ t('feedback.suggestions') }}</strong>
+          <ul class="artifact-actions">
+            <li v-for="(item, index) in latestFeedback.suggestions" :key="`suggestion-${index}`">{{ item }}</li>
+          </ul>
+        </div>
         <p v-if="latestResponse.decision" class="meta-line">
           <strong>{{ t('problemDetail.progressionDecision') }}:</strong>
           {{ latestResponse.decision.advance ? t('problemDetail.advanceYes') : t('problemDetail.advanceNo') }}

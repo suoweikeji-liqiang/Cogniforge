@@ -16,7 +16,6 @@ from app.api.routes.problem_learning_path_support import (
     _map_candidate_type_to_learning_path_kind,
     _normalize_path_insertion,
     _normalize_path_suggestion_type,
-    _renumber_learning_path_steps,
     _resolve_current_step,
     _set_active_learning_path,
 )
@@ -29,6 +28,14 @@ def _normalize_learning_mode(raw_mode: Optional[str], default: str = "socratic")
     if mode not in {"socratic", "exploration"}:
         return default
     return mode
+
+
+def _build_prerequisite_candidate_title(step_concept: str, cjk: bool) -> str:
+    concept = re.sub(r"\s+", " ", str(step_concept or "")).strip().strip("\"'“”")
+    concept = concept or ("当前主题" if cjk else "the current topic")
+    if cjk:
+        return f"{concept}前置基础"
+    return f"Prerequisites for '{concept}'"
 
 
 def serialize_problem_path_candidate(candidate: ProblemPathCandidate) -> dict:
@@ -161,11 +168,7 @@ def build_socratic_path_candidate_specs(
         candidate_specs.append(
             {
                 "type": "prerequisite",
-                "title": (
-                    f"先补“{step_concept}”的前置基础"
-                    if cjk
-                    else f"Fill prerequisite foundations for '{step_concept}' first"
-                ),
+                "title": _build_prerequisite_candidate_title(step_concept, cjk),
                 "reason": (
                     misconceptions[0]
                     if misconceptions
@@ -230,9 +233,6 @@ async def decide_problem_path_candidate_action(
     action: str,
 ) -> ProblemPathCandidateDecisionResult:
     normalized_action = str(action or "").strip().lower()
-    previous_status = str(candidate.status or "")
-    previous_selected_insertion = str(candidate.selected_insertion or "")
-    previous_reviewed_at = candidate.reviewed_at
     applied_path_id: Optional[str] = None
 
     if normalized_action == "dismiss":
@@ -244,72 +244,49 @@ async def decide_problem_path_candidate_action(
     elif normalized_action in {"insert_before_current_main", "save_as_side_branch"}:
         candidate.status = "planned"
         candidate.selected_insertion = _normalize_path_insertion(normalized_action)
-        if normalized_action == "insert_before_current_main":
-            if previous_reviewed_at and previous_selected_insertion == normalized_action and previous_status == "planned":
-                main_path = await _load_main_learning_path(db, problem_id=str(problem.id))
-                if main_path:
-                    await _set_active_learning_path(
-                        db=db,
-                        problem_id=str(problem.id),
-                        target_path_id=str(main_path.id),
-                    )
-                    applied_path_id = str(main_path.id)
-            else:
-                main_path = await _load_main_learning_path(db, problem_id=str(problem.id))
-                if not main_path:
+        existing_branch_result = await db.execute(
+            select(LearningPath).where(
+                LearningPath.problem_id == str(problem.id),
+                LearningPath.source_turn_id == candidate.source_turn_id,
+                LearningPath.title == candidate.title,
+                LearningPath.kind == _map_candidate_type_to_learning_path_kind(candidate.path_type),
+            )
+        )
+        branch_path = existing_branch_result.scalar_one_or_none()
+
+        if branch_path is None:
+            if normalized_action == "insert_before_current_main":
+                parent_path = await _load_main_learning_path(db, problem_id=str(problem.id))
+                if not parent_path:
                     raise HTTPException(status_code=404, detail="Main learning path not found")
-                _main_step_index, main_step_data = _resolve_current_step(main_path)
-                anchor_concept = (main_step_data or {}).get("concept") or problem.title
-                inserted_steps = _build_path_steps_from_candidate(candidate, anchor_concept=anchor_concept)
-                existing_steps = list(main_path.path_data or [])
-                insert_at = min(max(int(main_path.current_step or 0), 0), len(existing_steps))
-                main_path.path_data = _renumber_learning_path_steps(
-                    existing_steps[:insert_at] + inserted_steps + existing_steps[insert_at:]
-                )
-                main_path.current_step = insert_at
-                main_path.title = main_path.title or problem.title
-                await _set_active_learning_path(
-                    db=db,
-                    problem_id=str(problem.id),
-                    target_path_id=str(main_path.id),
-                )
-                applied_path_id = str(main_path.id)
-        else:
-            existing_branch_result = await db.execute(
-                select(LearningPath).where(
-                    LearningPath.problem_id == str(problem.id),
-                    LearningPath.source_turn_id == candidate.source_turn_id,
-                    LearningPath.title == candidate.title,
-                    LearningPath.kind == _map_candidate_type_to_learning_path_kind(candidate.path_type),
-                )
-            )
-            branch_path = existing_branch_result.scalar_one_or_none()
-            if branch_path is None:
-                active_path = await _load_active_learning_path(db, problem_id=str(problem.id))
-                if not active_path:
+            else:
+                parent_path = await _load_active_learning_path(db, problem_id=str(problem.id))
+                if not parent_path:
                     raise HTTPException(status_code=404, detail="Active learning path not found")
-                active_step_index, active_step_data = _resolve_current_step(active_path)
-                anchor_concept = (active_step_data or {}).get("concept") or problem.title
-                branch_path = LearningPath(
-                    problem_id=str(problem.id),
-                    title=candidate.title,
-                    kind=_map_candidate_type_to_learning_path_kind(candidate.path_type),
-                    parent_path_id=str(active_path.id),
-                    source_turn_id=candidate.source_turn_id,
-                    return_step_id=active_step_index,
-                    branch_reason=candidate.reason,
-                    is_active=True,
-                    path_data=_build_path_steps_from_candidate(candidate, anchor_concept=anchor_concept),
-                    current_step=0,
-                )
-                db.add(branch_path)
-                await db.flush()
-            await _set_active_learning_path(
-                db=db,
+
+            parent_step_index, parent_step_data = _resolve_current_step(parent_path)
+            anchor_concept = (parent_step_data or {}).get("concept") or problem.title
+            branch_path = LearningPath(
                 problem_id=str(problem.id),
-                target_path_id=str(branch_path.id),
+                title=candidate.title,
+                kind=_map_candidate_type_to_learning_path_kind(candidate.path_type),
+                parent_path_id=str(parent_path.id),
+                source_turn_id=candidate.source_turn_id,
+                return_step_id=parent_step_index,
+                branch_reason=candidate.reason,
+                is_active=True,
+                path_data=_build_path_steps_from_candidate(candidate, anchor_concept=anchor_concept),
+                current_step=0,
             )
-            applied_path_id = str(branch_path.id)
+            db.add(branch_path)
+            await db.flush()
+
+        await _set_active_learning_path(
+            db=db,
+            problem_id=str(problem.id),
+            target_path_id=str(branch_path.id),
+        )
+        applied_path_id = str(branch_path.id)
     else:
         raise HTTPException(status_code=400, detail="Unsupported path candidate action")
 

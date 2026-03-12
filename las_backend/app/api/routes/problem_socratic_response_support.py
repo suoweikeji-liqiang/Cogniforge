@@ -72,9 +72,9 @@ def _build_feedback_fallback(
         return model_os_service.normalize_feedback_structured(
             {
                 "correctness": "部分正确",
-                "misconceptions": [],
-                "suggestions": ["请用一个具体例子把你的关键假设说得更清楚。"],
-                "next_question": f"如果换一个边界情况，什么情况下你对“{step_concept}”的当前理解会失效？",
+                "misconceptions": [f"你还没有用一个具体例子说明“{step_concept}”为什么成立，以及它在什么边界下会失效。"],
+                "suggestions": [f"先补一个最小例子，再说明“{step_concept}”在什么情况下不成立。"],
+                "next_question": f"请给“{step_concept}”补一个具体例子，再说一个它会失效的边界情况。",
                 "mastery_score": 58,
                 "dimension_scores": {"accuracy": 60, "completeness": 56, "transfer": 57, "rigor": 59},
                 "confidence": 0.66,
@@ -85,9 +85,9 @@ def _build_feedback_fallback(
     return model_os_service.normalize_feedback_structured(
         {
             "correctness": "partially correct",
-            "misconceptions": [],
-            "suggestions": ["Please clarify your key assumptions with one concrete example."],
-            "next_question": f"What boundary case can falsify your current view of '{step_concept}'?",
+            "misconceptions": [f"You have not shown one concrete example for '{step_concept}' or explained the boundary where it breaks."],
+            "suggestions": [f"Add one minimal example and one failure boundary for '{step_concept}'."],
+            "next_question": f"Give one concrete example for '{step_concept}', then name a boundary case that breaks your explanation.",
             "mastery_score": 58,
             "dimension_scores": {"accuracy": 60, "completeness": 56, "transfer": 57, "rigor": 59},
             "confidence": 0.66,
@@ -95,6 +95,80 @@ def _build_feedback_fallback(
             "decision_reason": "The answer points in the right direction, but it is not stable enough for progression.",
         }
     )
+
+
+def _build_feedback_gap_diagnosis(
+    *,
+    step_concept: str,
+    suggestions: List[str],
+    next_question: str,
+    use_cjk: bool,
+) -> str:
+    normalized_text = " ".join([next_question, *suggestions]).casefold()
+    if any(marker in normalized_text for marker in ["example", "具体例子", "最小例子", "举例"]):
+        return (
+            f"你还没有用一个具体例子验证“{step_concept}”的理解。"
+            if use_cjk
+            else f"You still have not validated '{step_concept}' with one concrete example."
+        )
+    if any(marker in normalized_text for marker in ["boundary", "edge case", "失效", "边界"]):
+        return (
+            f"你还没有说明“{step_concept}”在什么边界下成立或失效。"
+            if use_cjk
+            else f"You have not explained the boundary where '{step_concept}' holds or fails."
+        )
+    if any(marker in normalized_text for marker in ["compare", "difference", "关系", "区分", "混淆"]):
+        return (
+            f"你还没有说清“{step_concept}”和相近概念之间的关键区别。"
+            if use_cjk
+            else f"You have not made the key distinction between '{step_concept}' and the nearby concept clear."
+        )
+    if any(marker in normalized_text for marker in ["prerequisite", "foundation", "前置", "基础"]):
+        return (
+            f"你还没有补清理解“{step_concept}”所需的前置基础。"
+            if use_cjk
+            else f"You have not closed the prerequisite gap needed for '{step_concept}'."
+        )
+    return (
+        f"你还没有说明“{step_concept}”成立的关键机制或判断条件。"
+        if use_cjk
+        else f"You have not named the key mechanism or decision condition behind '{step_concept}'."
+    )
+
+
+def _ensure_feedback_gap_diagnosis(
+    *,
+    structured_feedback: dict,
+    step_concept: str,
+    use_cjk: bool,
+) -> dict:
+    if bool(structured_feedback.get("pass_stage")):
+        return structured_feedback
+
+    misconceptions = [
+        str(item).strip()
+        for item in (structured_feedback.get("misconceptions") or [])
+        if str(item).strip()
+    ]
+    if misconceptions:
+        return structured_feedback
+
+    suggestions = [
+        str(item).strip()
+        for item in (structured_feedback.get("suggestions") or [])
+        if str(item).strip()
+    ]
+    next_question = str(structured_feedback.get("next_question") or "").strip()
+    diagnosis = _build_feedback_gap_diagnosis(
+        step_concept=step_concept,
+        suggestions=suggestions,
+        next_question=next_question,
+        use_cjk=use_cjk,
+    )
+    return {
+        **structured_feedback,
+        "misconceptions": [diagnosis],
+    }
 
 
 def _should_auto_advance(structured_feedback: dict, mode: str) -> bool:
@@ -343,6 +417,11 @@ async def complete_socratic_response(
         ),
     )
     structured_feedback = model_os_service.normalize_feedback_structured(structured_feedback)
+    structured_feedback = _ensure_feedback_gap_diagnosis(
+        structured_feedback=structured_feedback,
+        step_concept=step_concept,
+        use_cjk=has_cjk_context,
+    )
     await emit_progress(
         "preview",
         {
