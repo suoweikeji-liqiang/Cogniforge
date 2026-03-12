@@ -204,23 +204,110 @@ def contains_cjk(text: Optional[str]) -> bool:
     return bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", text))
 
 
+def count_cjk_chars(text: Optional[str]) -> int:
+    if not text:
+        return 0
+    return len(re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", text))
+
+
 def build_language_instruction(*texts: Optional[str], json_mode: bool = False) -> str:
     has_cjk = any(contains_cjk(text) for text in texts)
     if has_cjk:
         base = "Language requirement: Respond in Simplified Chinese."
     else:
-        base = "Language requirement: Respond in the same language as the user's input."
+        base = (
+            "Language requirement: Respond in the same language as the user's input. "
+            "If the user's input is not Chinese, do not switch to Chinese."
+        )
 
     if json_mode:
         return f"{base} Keep JSON keys exactly as requested."
     return base
 
 
+def sanitize_concept_candidate_text(concept: Optional[str]) -> str:
+    text = re.sub(r"\s+", " ", str(concept or "")).strip()
+    if not text:
+        return ""
+
+    text = re.sub(r"^\s*#+\s*", "", text)
+    text = re.sub(r"^\s*(?:[-*•]+|\d+(?:[.)、:：-]+)?)\s*", "", text)
+    text = re.sub(r"^\s*(?:第[一二三四五六七八九十0-9]+[点章节步部分项、:：-]*)", "", text)
+
+    previous = None
+    while text and text != previous:
+        previous = text
+        text = text.strip()
+        text = re.sub(r"^(?:\*{1,3}|_{1,3}|`+)+", "", text)
+        text = re.sub(r"(?:\*{1,3}|_{1,3}|`+)+$", "", text)
+        text = text.strip(" \t\r\n,.;:!?\"'()[]{}<>|/-")
+
+    if contains_cjk(text):
+        for suffix in ("的定义", "定义"):
+            if text.endswith(suffix):
+                candidate = text[:-len(suffix)].strip(" \t\r\n,.;:!?\"'()[]{}<>|/-*_`")
+                if candidate:
+                    text = candidate
+                    break
+    else:
+        lowered = text.casefold()
+        for suffix in (" definition", " definitions"):
+            if lowered.endswith(suffix):
+                candidate = text[:-len(suffix)].strip(" \t\r\n,.;:!?\"'()[]{}<>|/-*_`")
+                if candidate:
+                    text = candidate
+                    break
+
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def should_align_answer_language(question: Optional[str], answer: Optional[str]) -> bool:
+    question_text = str(question or "").strip()
+    answer_text = str(answer or "").strip()
+    if not question_text or not answer_text:
+        return False
+
+    question_has_cjk = contains_cjk(question_text)
+    answer_cjk_count = count_cjk_chars(answer_text)
+
+    if question_has_cjk:
+        return answer_cjk_count == 0
+    return answer_cjk_count >= 8
+
+
+def build_answer_language_rewrite_prompt(question: Optional[str], answer: Optional[str]) -> str:
+    question_text = str(question or "").strip()
+    answer_text = str(answer or "").strip()
+    if contains_cjk(question_text):
+        target_instruction = "Rewrite the draft answer in Simplified Chinese only."
+    else:
+        target_instruction = (
+            "Rewrite the draft answer in the same non-Chinese language as the learner question. "
+            "Do not use Chinese."
+        )
+
+    return f"""A draft learning answer used the wrong language.
+
+Learner question:
+{question_text}
+
+Draft answer:
+{answer_text}
+
+Requirements:
+1. Use the learner question as the source of truth for language.
+2. Preserve meaning, structure, markdown, formulas, and examples.
+3. Do not add, remove, or reorder ideas unless needed for fluent grammar.
+4. Output only the rewritten answer.
+
+{target_instruction}"""
+
+
 def normalize_concepts(concepts: List[str], limit: int = 8) -> List[str]:
     normalized: List[str] = []
     seen = set()
     for raw in concepts or []:
-        concept = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n,.;:|/-")
+        concept = sanitize_concept_candidate_text(raw)
         if not concept:
             continue
         if len(concept) > 80:
@@ -236,7 +323,8 @@ def normalize_concepts(concepts: List[str], limit: int = 8) -> List[str]:
 
 
 def is_low_signal_concept_candidate(concept: Optional[str]) -> bool:
-    text = re.sub(r"\s+", " ", str(concept or "")).strip(" \t\r\n,.;:!?\"'()[]{}")
+    text = sanitize_concept_candidate_text(concept)
+    text = re.sub(r"\s+", " ", text).strip(" \t\r\n,.;:!?\"'()[]{}")
     if not text:
         return True
 
@@ -267,8 +355,10 @@ def is_low_signal_concept_candidate(concept: Optional[str]) -> bool:
             return True
         if any(
             compact.startswith(prefix)
-            for prefix in ("中的", "关于", "对于", "根据", "通过", "利用", "使用", "用于", "用来", "把", "将", "从", "对", "但")
+            for prefix in ("中的", "关于", "对于", "根据", "通过", "利用", "使用", "用于", "用来", "把", "将", "从", "对", "但", "在")
         ):
+            return True
+        if compact.startswith("在") and compact.endswith("中") and len(compact) >= 6:
             return True
         if len(compact) >= 8 and any(
             marker in compact
@@ -296,7 +386,7 @@ def filter_low_signal_concepts(concepts: List[str], limit: int = 8) -> List[str]
     filtered: List[str] = []
     seen = set()
     for raw in concepts or []:
-        concept = re.sub(r"\s+", " ", str(raw or "")).strip(" \t\r\n,.;:|/-")
+        concept = sanitize_concept_candidate_text(raw)
         if not concept or is_low_signal_concept_candidate(concept):
             continue
         if len(concept) > 80:
@@ -312,7 +402,8 @@ def filter_low_signal_concepts(concepts: List[str], limit: int = 8) -> List[str]
 
 
 def normalize_concept_key(concept: str) -> str:
-    base = re.sub(r"\s+", " ", str(concept or "")).strip().casefold()
+    base = sanitize_concept_candidate_text(concept)
+    base = re.sub(r"\s+", " ", str(base or "")).strip().casefold()
     if not base:
         return ""
     return re.sub(r"[^\w\u4e00-\u9fff\s-]", "", base).strip()

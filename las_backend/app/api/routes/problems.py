@@ -139,6 +139,40 @@ def _normalize_problem_list_sort(raw_sort: Optional[str]) -> str:
     return sort
 
 
+def _split_answer_for_token_stream(answer: str, max_chars: int = 240) -> List[str]:
+    text = str(answer or "").strip()
+    if not text:
+        return []
+    return [chunk for chunk in re.findall(rf".{{1,{max_chars}}}(?:\s+|$)", text, flags=re.S) if chunk]
+
+
+async def _align_exploration_answer_language(
+    *,
+    question: str,
+    answer: str,
+    guarded_llm_call,
+) -> str:
+    normalized_answer = str(answer or "").strip()
+    if not normalized_answer:
+        return ""
+    if not model_os_service.should_align_answer_language(question, normalized_answer):
+        return normalized_answer
+
+    rewritten = await guarded_llm_call(
+        label="ask_answer_language_alignment",
+        call_factory=lambda: model_os_service.llm.generate(
+            model_os_service.build_answer_language_rewrite_prompt(question, normalized_answer)
+        ),
+        fallback=lambda: normalized_answer,
+    )
+    rewritten_text = str(rewritten or "").strip()
+    if not rewritten_text or rewritten_text.startswith("Error:"):
+        return normalized_answer
+    if model_os_service.should_align_answer_language(question, rewritten_text):
+        return normalized_answer
+    return rewritten_text
+
+
 def _problem_sort_clauses(sort: str):
     if sort == "created_asc":
         return [Problem.created_at.asc(), Problem.updated_at.asc()]
@@ -1611,6 +1645,11 @@ Learner question: {payload.question}
             )
             or ""
         ).strip()
+    answer = await _align_exploration_answer_language(
+        question=payload.question,
+        answer=answer,
+        guarded_llm_call=guarded_llm_call,
+    )
 
     response_payload = await _complete_exploration_learning_turn(
         db=db,
@@ -1733,6 +1772,7 @@ Learner question: {payload.question}
     async def event_generator():
         answer_chunks: List[str] = []
         answer = ""
+        replay_chunks: List[str] = []
         if llm_metrics["llm_calls"] >= max_llm_calls:
             fallback_reasons.append("budget_exceeded:ask_answer")
         else:
@@ -1747,7 +1787,6 @@ Learner question: {payload.question}
                     if not answer_chunks and token.startswith("Error:"):
                         raise RuntimeError(token)
                     answer_chunks.append(token)
-                    yield {"event": "token", "data": token}
             except Exception:
                 fallback_reasons.append("error:ask_answer")
             finally:
@@ -1755,6 +1794,7 @@ Learner question: {payload.question}
 
         if answer_chunks:
             answer = "".join(answer_chunks).strip()
+            replay_chunks = [chunk for chunk in answer_chunks if chunk]
 
         if not answer:
             if not any(reason.startswith(("error:ask_answer", "budget_exceeded:ask_answer")) for reason in fallback_reasons):
@@ -1766,8 +1806,18 @@ Learner question: {payload.question}
                     mode=mode,
                 )
             )
-            if answer:
-                yield {"event": "token", "data": answer}
+            replay_chunks = _split_answer_for_token_stream(str(answer or ""))
+
+        answer = await _align_exploration_answer_language(
+            question=payload.question,
+            answer=answer,
+            guarded_llm_call=guarded_llm_call,
+        )
+        if answer:
+            if "".join(replay_chunks).strip() != answer:
+                replay_chunks = _split_answer_for_token_stream(answer)
+            for chunk in replay_chunks:
+                yield {"event": "token", "data": chunk}
 
         try:
             response = await _complete_exploration_learning_turn(

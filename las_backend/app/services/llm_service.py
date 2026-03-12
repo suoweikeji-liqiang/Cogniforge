@@ -325,8 +325,10 @@ class LLMService:
         ])
         retrieval_block = f"\nRelevant knowledge:\n{retrieval_context}\n" if retrieval_context else ""
         language_instruction = (
-            "Language requirement: Respond in the same language as the current question. "
-            "If the question contains Chinese, respond in Simplified Chinese."
+            "Language requirement: Use the current question as the source of truth for language. "
+            "Respond in the same language as the current question. "
+            "If the current question contains Chinese, respond in Simplified Chinese. "
+            "If the current question does not contain Chinese, do not respond in Chinese even if other context does."
         )
 
         return f"""Context:

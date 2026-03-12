@@ -49,6 +49,43 @@ def test_model_os_fallback_cjk_concepts_avoid_question_fragments():
     assert "根据当前误差大小成比例地" not in concepts
 
 
+def test_model_os_sanitizes_markdown_and_definition_fragments_in_concepts():
+    from app.services.model_os_service import model_os_service
+
+    concepts = model_os_service.filter_low_signal_concepts(
+        [
+            "1.**精确率",
+            "召回率的定义**",
+            "在代码变更的缺陷检测中",
+            "精确率",
+        ],
+        limit=6,
+    )
+
+    assert "精确率" in concepts
+    assert "召回率" in concepts
+    assert "1.**精确率" not in concepts
+    assert "召回率的定义**" not in concepts
+    assert "在代码变更的缺陷检测中" not in concepts
+
+
+def test_model_os_detects_when_answer_language_needs_alignment():
+    from app.services.model_os_service import model_os_service
+
+    assert model_os_service.should_align_answer_language(
+        "What is the difference between precision and recall?",
+        "1. **精确率**：预测为正例的样本中实际为正例的比例。",
+    ) is True
+    assert model_os_service.should_align_answer_language(
+        "精确率和召回率有什么区别？",
+        "Precision focuses on false positives while recall focuses on false negatives.",
+    ) is True
+    assert model_os_service.should_align_answer_language(
+        "What is the difference between precision and recall?",
+        "Precision focuses on false positives while recall focuses on false negatives.",
+    ) is False
+
+
 def test_model_os_fallback_learning_path_uses_chinese_copy_for_cjk_problem():
     from app.services.model_os_service import model_os_service
 
