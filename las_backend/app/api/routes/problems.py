@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, desc
@@ -82,6 +83,7 @@ from app.api.routes.problem_concept_candidate_moderation_support import (
 from app.api.routes.problem_learning_path_support import (
     _default_path_insertion,
     _load_active_learning_path,
+    _normalize_learning_path_kind,
     _resolve_current_step,
 )
 from app.api.routes.problem_learning_path_routes import router as problem_learning_path_router
@@ -179,6 +181,258 @@ def _problem_sort_clauses(sort: str):
     if sort == "created_desc":
         return [Problem.created_at.desc(), Problem.updated_at.desc()]
     return [Problem.updated_at.desc(), Problem.created_at.desc()]
+
+
+def _format_export_timestamp(value: Optional[datetime]) -> str:
+    if not value:
+        return "Unknown"
+    return value.replace(microsecond=0).isoformat(sep=" ")
+
+
+def _slugify_export_filename(raw_value: str) -> str:
+    cleaned = re.sub(r"[^\w\-]+", "-", str(raw_value or "").strip(), flags=re.UNICODE)
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-_")
+    return cleaned or "learning-export"
+
+
+def _format_learning_mode_label(mode: Optional[str]) -> str:
+    return "Socratic" if str(mode or "").strip().lower() == "socratic" else "Exploration"
+
+
+def _format_question_kind_label(kind: Optional[str]) -> str:
+    normalized = str(kind or "").strip().lower()
+    if normalized == "checkpoint":
+        return "Checkpoint"
+    return "Probe"
+
+
+def _format_path_kind_label(kind: Optional[str]) -> str:
+    normalized = _normalize_learning_path_kind(kind, "main")
+    labels = {
+        "main": "Main",
+        "branch": "Branch",
+        "prerequisite": "Prerequisite",
+        "comparison": "Comparison",
+    }
+    return labels.get(normalized, normalized.title())
+
+
+def _format_path_candidate_type_label(path_type: Optional[str]) -> str:
+    normalized = str(path_type or "").strip().lower()
+    labels = {
+        "prerequisite": "Prerequisite",
+        "branch_deep_dive": "Branch Deep Dive",
+        "comparison_path": "Comparison Path",
+    }
+    return labels.get(normalized, normalized.replace("_", " ").title())
+
+
+def _format_candidate_status_label(status: Optional[str]) -> str:
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return "Unknown"
+    return normalized.replace("_", " ").title()
+
+
+def _path_export_title(path: LearningPath) -> str:
+    first_step = (path.path_data or [{}])[0] if path.path_data else {}
+    step_concept = str(first_step.get("concept") or "").strip()
+    if path.title:
+        return path.title
+    if step_concept:
+        return step_concept
+    return f"{_format_path_kind_label(path.kind)} Path"
+
+
+def _append_markdown_block(lines: List[str], label: str, value: Optional[str]) -> None:
+    text = str(value or "").strip()
+    if not text:
+        return
+    lines.append(f"**{label}**")
+    lines.extend([f"> {segment}" if segment else ">" for segment in text.splitlines()])
+    lines.append("")
+
+
+def _build_problem_learning_export_markdown(
+    *,
+    problem: Problem,
+    learning_paths: List[LearningPath],
+    turns: List[ProblemTurn],
+    concept_candidates: List[ProblemConceptCandidate],
+    path_candidates: List[ProblemPathCandidate],
+) -> str:
+    sorted_paths = sorted(
+        learning_paths,
+        key=lambda item: (
+            0 if _normalize_learning_path_kind(item.kind, "main") == "main" else 1,
+            0 if bool(getattr(item, "is_active", False)) else 1,
+            getattr(item, "created_at", datetime.utcnow()),
+        ),
+    )
+    path_titles = {str(path.id): _path_export_title(path) for path in sorted_paths}
+    turn_number_by_id = {str(turn.id): index + 1 for index, turn in enumerate(turns)}
+    lines: List[str] = [
+        f"# Learning Export: {problem.title}",
+        "",
+        "## Problem Overview",
+        "",
+        f"- Title: {problem.title}",
+        f"- Status: {problem.status}",
+        f"- Current learning mode: {_format_learning_mode_label(problem.learning_mode)}",
+        f"- Created at: {_format_export_timestamp(problem.created_at)}",
+        f"- Updated at: {_format_export_timestamp(problem.updated_at)}",
+    ]
+    if problem.description:
+        lines.append(f"- Description: {problem.description}")
+    if problem.associated_concepts:
+        lines.append(f"- Associated concepts: {', '.join(problem.associated_concepts)}")
+
+    lines.extend([
+        "",
+        f"## Learning Paths ({len(sorted_paths)})",
+        "",
+    ])
+    if not sorted_paths:
+        lines.append("- No learning paths recorded.")
+    for index, path in enumerate(sorted_paths, start=1):
+        steps = path.path_data or []
+        parent_title = path_titles.get(str(path.parent_path_id)) if path.parent_path_id else None
+        source_turn = turn_number_by_id.get(str(path.source_turn_id)) if path.source_turn_id else None
+        active_suffix = " [active]" if path.is_active else ""
+        lines.extend([
+            f"### Path {index}: {_path_export_title(path)}{active_suffix}",
+            f"- Kind: {_format_path_kind_label(path.kind)}",
+            f"- Current step: {min(int(path.current_step or 0) + 1, max(len(steps), 1)) if steps else 0}/{len(steps)}",
+        ])
+        if parent_title:
+            lines.append(f"- Parent path: {parent_title}")
+        if path.return_step_id is not None:
+            lines.append(f"- Return step: {int(path.return_step_id) + 1}")
+        if path.branch_reason:
+            lines.append(f"- Branch reason: {path.branch_reason}")
+        if source_turn:
+            lines.append(f"- Source turn: Turn {source_turn}")
+        if not steps:
+            lines.append("- Steps: None")
+        else:
+            lines.append("- Steps:")
+            for step in steps:
+                concept = str(step.get("concept") or "Untitled step").strip()
+                description = str(step.get("description") or "").strip()
+                resources = [str(item).strip() for item in (step.get("resources") or []) if str(item).strip()]
+                lines.append(f"  {int(step.get('step') or 0)}. {concept}")
+                if description:
+                    lines.append(f"     - {description}")
+                if resources:
+                    lines.append(f"     - Resources: {', '.join(resources)}")
+        lines.append("")
+
+    lines.extend([
+        f"## Learning Timeline ({len(turns)})",
+        "",
+    ])
+    if not turns:
+        lines.append("- No learning turns recorded.")
+    for index, turn in enumerate(turns, start=1):
+        path_title = path_titles.get(str(turn.path_id), "Current workspace")
+        step_number = int(turn.step_index) + 1 if turn.step_index is not None else None
+        lines.extend([
+            f"### Turn {index}: {_format_learning_mode_label(turn.learning_mode)}",
+            f"- Time: {_format_export_timestamp(turn.created_at)}",
+            f"- Path: {path_title}",
+        ])
+        if step_number is not None:
+            lines.append(f"- Step: {step_number}")
+        if turn.learning_mode == "socratic":
+            lines.append(f"- Question type: {_format_question_kind_label((turn.mode_metadata or {}).get('question_kind'))}")
+            _append_markdown_block(lines, "Teacher question", (turn.mode_metadata or {}).get("socratic_question"))
+            _append_markdown_block(lines, "Learner answer", turn.user_text)
+            _append_markdown_block(lines, "System feedback", turn.assistant_text)
+            evaluation = (turn.mode_metadata or {}).get("evaluation") or {}
+            if evaluation:
+                correctness = str(evaluation.get("correctness") or "").strip()
+                mastery = evaluation.get("mastery_score")
+                confidence = evaluation.get("confidence")
+                lines.append(
+                    f"- Evaluation: mastery {mastery if mastery is not None else 'N/A'}"
+                    f", correctness {correctness or 'N/A'}"
+                    f", confidence {confidence if confidence is not None else 'N/A'}"
+                )
+            decision = (turn.mode_metadata or {}).get("decision") or {}
+            if decision:
+                lines.append(
+                    f"- Progression: {'advance' if decision.get('advance') else 'stay'}"
+                    f" ({decision.get('reason') or 'no reason recorded'})"
+                )
+            follow_up = (turn.mode_metadata or {}).get("follow_up") or {}
+            if follow_up.get("question"):
+                lines.append(f"- Follow-up: {follow_up['question']}")
+        else:
+            answer_mode = str((turn.mode_metadata or {}).get("answer_mode") or "direct").strip()
+            lines.append(f"- Answer mode: {answer_mode}")
+            _append_markdown_block(lines, "Learner question", turn.user_text)
+            _append_markdown_block(lines, "System answer", turn.assistant_text)
+        accepted_concepts = [str(item).strip() for item in ((turn.mode_metadata or {}).get("accepted_concepts") or []) if str(item).strip()]
+        pending_concepts = [str(item).strip() for item in ((turn.mode_metadata or {}).get("pending_concepts") or []) if str(item).strip()]
+        if accepted_concepts:
+            lines.append(f"- Accepted concepts: {', '.join(accepted_concepts)}")
+        if pending_concepts:
+            lines.append(f"- Pending concepts: {', '.join(pending_concepts)}")
+        derived_path_payloads = (turn.mode_metadata or {}).get("derived_path_candidates") or []
+        if derived_path_payloads:
+            path_titles_for_turn = [str(item.get("title") or "").strip() for item in derived_path_payloads if str(item.get("title") or "").strip()]
+            if path_titles_for_turn:
+                lines.append(f"- Derived paths: {', '.join(path_titles_for_turn)}")
+        lines.append("")
+
+    lines.extend([
+        f"## Derived Concepts ({len(concept_candidates)})",
+        "",
+    ])
+    if not concept_candidates:
+        lines.append("- No concept candidates recorded.")
+    for candidate in concept_candidates:
+        source_turn = turn_number_by_id.get(str(candidate.source_turn_id)) if candidate.source_turn_id else None
+        lines.append(
+            f"- {candidate.concept_text} | status: {_format_candidate_status_label(candidate.status)}"
+            f" | mode: {_format_learning_mode_label(candidate.learning_mode)}"
+            f" | confidence: {round(float(candidate.confidence or 0.0), 2)}"
+        )
+        if source_turn:
+            lines.append(f"  - Source turn: Turn {source_turn}")
+        if candidate.evidence_snippet:
+            lines.append(f"  - Evidence: {candidate.evidence_snippet}")
+        if candidate.merged_into_concept:
+            lines.append(f"  - Merged into: {candidate.merged_into_concept}")
+        if candidate.linked_model_card_id:
+            lines.append(f"  - Linked model card: {candidate.linked_model_card_id}")
+
+    lines.extend([
+        "",
+        f"## Derived Path Candidates ({len(path_candidates)})",
+        "",
+    ])
+    if not path_candidates:
+        lines.append("- No path candidates recorded.")
+        for candidate in path_candidates:
+            source_turn = turn_number_by_id.get(str(candidate.source_turn_id)) if candidate.source_turn_id else None
+            lines.append(
+            f"- {candidate.title} | type: {_format_path_candidate_type_label(candidate.path_type)}"
+                f" | status: {_format_candidate_status_label(candidate.status)}"
+            )
+        if source_turn:
+            lines.append(f"  - Source turn: Turn {source_turn}")
+        if candidate.reason:
+            lines.append(f"  - Reason: {candidate.reason}")
+        if candidate.recommended_insertion:
+            lines.append(f"  - Recommended placement: {candidate.recommended_insertion}")
+        if candidate.selected_insertion:
+            lines.append(f"  - Selected placement: {candidate.selected_insertion}")
+        if candidate.evidence_snippet:
+            lines.append(f"  - Evidence: {candidate.evidence_snippet}")
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 async def _list_turn_concept_candidates(
@@ -966,6 +1220,67 @@ async def list_problem_turns(
 
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+@router.get("/{problem_id}/export")
+async def export_problem_learning_record(
+    problem_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    problem_result = await db.execute(
+        select(Problem).where(
+            Problem.id == str(problem_id),
+            Problem.user_id == str(current_user.id),
+        )
+    )
+    problem = problem_result.scalar_one_or_none()
+    if not problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+
+    learning_paths_result = await db.execute(
+        select(LearningPath)
+        .where(LearningPath.problem_id == str(problem_id))
+        .order_by(LearningPath.created_at.asc())
+    )
+    turns_result = await db.execute(
+        select(ProblemTurn)
+        .where(
+            ProblemTurn.problem_id == str(problem_id),
+            ProblemTurn.user_id == str(current_user.id),
+        )
+        .order_by(ProblemTurn.created_at.asc())
+    )
+    concept_candidates_result = await db.execute(
+        select(ProblemConceptCandidate)
+        .where(
+            ProblemConceptCandidate.problem_id == str(problem_id),
+            ProblemConceptCandidate.user_id == str(current_user.id),
+        )
+        .order_by(ProblemConceptCandidate.created_at.asc())
+    )
+    path_candidates_result = await db.execute(
+        select(ProblemPathCandidate)
+        .where(
+            ProblemPathCandidate.problem_id == str(problem_id),
+            ProblemPathCandidate.user_id == str(current_user.id),
+        )
+        .order_by(ProblemPathCandidate.created_at.asc())
+    )
+
+    content = _build_problem_learning_export_markdown(
+        problem=problem,
+        learning_paths=list(learning_paths_result.scalars().all()),
+        turns=list(turns_result.scalars().all()),
+        concept_candidates=list(concept_candidates_result.scalars().all()),
+        path_candidates=list(path_candidates_result.scalars().all()),
+    )
+    filename = f"{_slugify_export_filename(problem.title)}-learning-record.md"
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{problem_id}/path-candidates", response_model=List[ProblemPathCandidateResponse])
