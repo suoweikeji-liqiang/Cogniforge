@@ -977,6 +977,23 @@ async def test_admin_users_and_llm_config_flow(client, db_session, monkeypatch):
     assert create_model_response.status_code == 200
     llm_model_id = create_model_response.json()["id"]
 
+    update_routes_response = await client.put(
+        "/api/admin/llm-config/routes",
+        json={
+            "interactive": {"provider_id": provider_id, "model_record_id": llm_model_id},
+            "structured_heavy": {"provider_id": provider_id, "model_record_id": None},
+            "fallback": {"provider_id": None, "model_record_id": None},
+        },
+        headers=headers,
+    )
+    assert update_routes_response.status_code == 200
+    assert update_routes_response.json()["interactive"]["provider_id"] == provider_id
+    assert update_routes_response.json()["interactive"]["model_record_id"] == llm_model_id
+
+    routes_response = await client.get("/api/admin/llm-config/routes", headers=headers)
+    assert routes_response.status_code == 200
+    assert routes_response.json()["structured_heavy"]["provider_id"] == provider_id
+
     update_model_response = await client.put(
         f"/api/admin/llm-config/models/{llm_model_id}",
         json={"model_name": "Qwen Plus Updated", "enabled": False},
@@ -1017,11 +1034,19 @@ async def test_admin_users_and_llm_config_flow(client, db_session, monkeypatch):
     )
     assert delete_model_response.status_code == 200
 
+    routes_after_model_delete_response = await client.get("/api/admin/llm-config/routes", headers=headers)
+    assert routes_after_model_delete_response.status_code == 200
+    assert routes_after_model_delete_response.json()["interactive"]["model_record_id"] is None
+
     delete_provider_response = await client.delete(
         f"/api/admin/llm-config/providers/{provider_id}",
         headers=headers,
     )
     assert delete_provider_response.status_code == 200
+
+    routes_after_provider_delete_response = await client.get("/api/admin/llm-config/routes", headers=headers)
+    assert routes_after_provider_delete_response.status_code == 200
+    assert routes_after_provider_delete_response.json()["structured_heavy"]["provider_id"] is None
 
     self_delete_response = await client.delete(
         f"/api/admin/users/{(await promote_user_to_admin(db_session)).id}",

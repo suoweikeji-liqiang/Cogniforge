@@ -8,13 +8,16 @@ from sqlalchemy.orm import selectinload
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.entities.llm_provider import LLMProvider, LLMModel
+from app.models.entities.system_settings import SystemSettings
 from app.models.entities.user import User
 from app.api.deps import require_admin
 from app.services.llm_service import DEFAULT_BASE_URLS, OPENAI_COMPATIBLE_PROVIDERS
+from app.services.model_os_service import LLM_TASK_ROUTES_KEY
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 router = APIRouter(prefix="/admin/llm-config", tags=["Admin"])
+TASK_ROUTE_KEYS = ("interactive", "structured_heavy", "fallback")
 
 
 def _provider_test_timeout_seconds() -> float:
@@ -58,6 +61,159 @@ class ModelUpdate(BaseModel):
     is_default: Optional[bool] = None
 
 
+class TaskRouteSelection(BaseModel):
+    provider_id: Optional[int] = None
+    model_record_id: Optional[int] = None
+
+
+class TaskRouteConfigUpdate(BaseModel):
+    interactive: TaskRouteSelection = TaskRouteSelection()
+    structured_heavy: TaskRouteSelection = TaskRouteSelection()
+    fallback: TaskRouteSelection = TaskRouteSelection()
+
+
+async def _get_task_routes_setting(db: AsyncSession) -> Optional[SystemSettings]:
+    result = await db.execute(
+        select(SystemSettings).where(SystemSettings.key == LLM_TASK_ROUTES_KEY)
+    )
+    return result.scalar_one_or_none()
+
+
+def _empty_task_routes_payload() -> Dict[str, Dict[str, Optional[int]]]:
+    return {
+        key: {"provider_id": None, "model_record_id": None}
+        for key in TASK_ROUTE_KEYS
+    }
+
+
+def _normalize_route_payload(raw_value: Any) -> Dict[str, Dict[str, Optional[int]]]:
+    payload = _empty_task_routes_payload()
+    if not isinstance(raw_value, dict):
+        return payload
+
+    for key in TASK_ROUTE_KEYS:
+        entry = raw_value.get(key)
+        if not isinstance(entry, dict):
+            continue
+        provider_id = entry.get("provider_id")
+        model_record_id = entry.get("model_record_id")
+        payload[key] = {
+            "provider_id": int(provider_id) if isinstance(provider_id, int) else None,
+            "model_record_id": int(model_record_id) if isinstance(model_record_id, int) else None,
+        }
+    return payload
+
+
+async def _load_task_routes_payload(db: AsyncSession) -> Dict[str, Dict[str, Optional[int]]]:
+    setting = await _get_task_routes_setting(db)
+    value = setting.value if setting else {}
+    return _normalize_route_payload(value)
+
+
+async def _validate_task_routes_payload(
+    db: AsyncSession,
+    payload: Dict[str, Dict[str, Optional[int]]],
+) -> Dict[str, Dict[str, Optional[int]]]:
+    normalized = _empty_task_routes_payload()
+
+    for route_key in TASK_ROUTE_KEYS:
+        entry = payload.get(route_key, {})
+        provider_id = entry.get("provider_id")
+        model_record_id = entry.get("model_record_id")
+
+        if provider_id is None:
+            normalized[route_key] = {"provider_id": None, "model_record_id": None}
+            continue
+
+        provider = await db.get(LLMProvider, int(provider_id))
+        if not provider or not provider.enabled:
+            raise HTTPException(status_code=400, detail=f"Invalid provider for route '{route_key}'")
+
+        if model_record_id is None:
+            normalized[route_key] = {"provider_id": provider.id, "model_record_id": None}
+            continue
+
+        model = await db.get(LLMModel, int(model_record_id))
+        if not model or not model.enabled or model.provider_id != provider.id:
+            raise HTTPException(status_code=400, detail=f"Invalid model for route '{route_key}'")
+
+        normalized[route_key] = {"provider_id": provider.id, "model_record_id": model.id}
+
+    return normalized
+
+
+async def _save_task_routes_payload(
+    db: AsyncSession,
+    payload: Dict[str, Dict[str, Optional[int]]],
+) -> None:
+    setting = await _get_task_routes_setting(db)
+    if setting:
+        setting.value = payload
+        setting.description = "Task-based LLM routing for interactive, structured-heavy, and fallback lanes."
+    else:
+        db.add(
+            SystemSettings(
+                key=LLM_TASK_ROUTES_KEY,
+                value=payload,
+                description="Task-based LLM routing for interactive, structured-heavy, and fallback lanes.",
+            )
+        )
+    await db.commit()
+
+
+async def _build_task_routes_response(
+    db: AsyncSession,
+    payload: Dict[str, Dict[str, Optional[int]]],
+) -> Dict[str, Dict[str, Optional[Any]]]:
+    response = _empty_task_routes_payload()
+
+    for route_key in TASK_ROUTE_KEYS:
+        entry = payload.get(route_key, {})
+        provider_id = entry.get("provider_id")
+        model_record_id = entry.get("model_record_id")
+        provider = await db.get(LLMProvider, provider_id) if provider_id is not None else None
+        model = await db.get(LLMModel, model_record_id) if model_record_id is not None else None
+        response[route_key] = {
+            "provider_id": provider.id if provider else None,
+            "provider_name": provider.name if provider else None,
+            "model_record_id": model.id if model else None,
+            "model_name": model.model_name if model else None,
+            "model_id": model.model_id if model else None,
+        }
+
+    return response
+
+
+async def _cleanup_task_routes_for_provider(
+    db: AsyncSession,
+    provider_id: int,
+) -> None:
+    payload = await _load_task_routes_payload(db)
+    changed = False
+    for route_key in TASK_ROUTE_KEYS:
+        entry = payload.get(route_key, {})
+        if entry.get("provider_id") == provider_id:
+            payload[route_key] = {"provider_id": None, "model_record_id": None}
+            changed = True
+    if changed:
+        await _save_task_routes_payload(db, payload)
+
+
+async def _cleanup_task_routes_for_model(
+    db: AsyncSession,
+    model_record_id: int,
+) -> None:
+    payload = await _load_task_routes_payload(db)
+    changed = False
+    for route_key in TASK_ROUTE_KEYS:
+        entry = payload.get(route_key, {})
+        if entry.get("model_record_id") == model_record_id:
+            payload[route_key]["model_record_id"] = None
+            changed = True
+    if changed:
+        await _save_task_routes_payload(db, payload)
+
+
 @router.get("/providers")
 async def get_providers(
     db: AsyncSession = Depends(get_db),
@@ -89,6 +245,27 @@ async def get_providers(
         }
         for p in providers
     ]
+
+
+@router.get("/routes")
+async def get_task_routes(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    payload = await _load_task_routes_payload(db)
+    return await _build_task_routes_response(db, payload)
+
+
+@router.put("/routes")
+async def update_task_routes(
+    routes: TaskRouteConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    payload = routes.model_dump()
+    normalized = await _validate_task_routes_payload(db, payload)
+    await _save_task_routes_payload(db, normalized)
+    return await _build_task_routes_response(db, normalized)
 
 
 @router.post("/providers")
@@ -137,7 +314,8 @@ async def update_provider(
         db_provider.enabled = provider.enabled
     if provider.priority is not None:
         db_provider.priority = provider.priority
-    
+    if provider.enabled is False:
+        await _cleanup_task_routes_for_provider(db, db_provider.id)
     await db.commit()
     return {"status": "success"}
 
@@ -154,7 +332,7 @@ async def delete_provider(
     db_provider = result.scalar_one_or_none()
     if not db_provider:
         raise HTTPException(status_code=404, detail="Provider not found")
-    
+    await _cleanup_task_routes_for_provider(db, db_provider.id)
     await db.delete(db_provider)
     await db.commit()
     return {"status": "deleted"}
@@ -224,7 +402,8 @@ async def update_model(
         db_model.enabled = model.enabled
     if model.is_default is not None:
         db_model.is_default = model.is_default
-    
+    if model.enabled is False:
+        await _cleanup_task_routes_for_model(db, db_model.id)
     await db.commit()
     return {"status": "success"}
 
@@ -241,7 +420,7 @@ async def delete_model(
     db_model = result.scalar_one_or_none()
     if not db_model:
         raise HTTPException(status_code=404, detail="Model not found")
-    
+    await _cleanup_task_routes_for_model(db, db_model.id)
     await db.delete(db_model)
     await db.commit()
     return {"status": "deleted"}

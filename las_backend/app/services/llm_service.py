@@ -31,6 +31,15 @@ class LLMService:
         query = query.order_by(LLMProvider.priority.desc())
         result = await db.execute(query)
         return result.scalar_one_or_none()
+
+    async def _get_provider_by_id(self, db: AsyncSession, provider_id: int):
+        result = await db.execute(
+            select(LLMProvider).where(
+                LLMProvider.id == provider_id,
+                LLMProvider.enabled == True,
+            )
+        )
+        return result.scalar_one_or_none()
     
     async def _get_default_model(self, db: AsyncSession, provider_id: int):
         result = await db.execute(
@@ -46,9 +55,14 @@ class LLMService:
         self,
         db: AsyncSession,
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
         model_id: Optional[str] = None,
     ) -> tuple[Optional[LLMProvider], str]:
-        provider = await self._get_active_provider(db, provider_type)
+        provider = None
+        if provider_id is not None:
+            provider = await self._get_provider_by_id(db, provider_id)
+        if not provider:
+            provider = await self._get_active_provider(db, provider_type)
         if not provider:
             return None, ""
 
@@ -70,6 +84,7 @@ class LLMService:
         self,
         prompt: str,
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
         model_id: Optional[str] = None,
         **kwargs
     ) -> str:
@@ -77,6 +92,7 @@ class LLMService:
             provider, resolved_model = await self._resolve_provider_and_model(
                 db,
                 provider_type=provider_type,
+                provider_id=provider_id,
                 model_id=model_id,
             )
             if not provider:
@@ -98,12 +114,14 @@ class LLMService:
         *,
         schema_name: str = "structured_response",
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
         model_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any] | List[Any]]:
         async with AsyncSessionLocal() as db:
             provider, resolved_model = await self._resolve_provider_and_model(
                 db,
                 provider_type=provider_type,
+                provider_id=provider_id,
                 model_id=model_id,
             )
             if not provider:
@@ -230,6 +248,7 @@ class LLMService:
         messages: list[dict],
         system_prompt: str = "",
         provider_type: str | None = None,
+        provider_id: int | None = None,
         model_id: str | None = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
@@ -237,6 +256,7 @@ class LLMService:
             provider, resolved_model = await self._resolve_provider_and_model(
                 db,
                 provider_type=provider_type,
+                provider_id=provider_id,
                 model_id=model_id,
             )
             if not provider:
@@ -345,13 +365,20 @@ Current question: {prompt}
         context: List[Dict[str, Any]],
         retrieval_context: Optional[str] = None,
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
+        model_id: Optional[str] = None,
     ) -> str:
         full_prompt = self._build_context_prompt(
             prompt=prompt,
             context=context,
             retrieval_context=retrieval_context,
         )
-        return await self.generate(full_prompt, provider_type)
+        return await self.generate(
+            full_prompt,
+            provider_type=provider_type,
+            provider_id=provider_id,
+            model_id=model_id,
+        )
 
     async def stream_generate_with_context(
         self,
@@ -359,6 +386,7 @@ Current question: {prompt}
         context: List[Dict[str, Any]],
         retrieval_context: Optional[str] = None,
         provider_type: Optional[str] = None,
+        provider_id: Optional[int] = None,
         model_id: Optional[str] = None,
         temperature: float = 0.7,
     ) -> AsyncGenerator[str, None]:
@@ -370,6 +398,7 @@ Current question: {prompt}
         async for token in self.stream_generate(
             messages=[{"role": "user", "content": full_prompt}],
             provider_type=provider_type,
+            provider_id=provider_id,
             model_id=model_id,
             temperature=temperature,
         ):

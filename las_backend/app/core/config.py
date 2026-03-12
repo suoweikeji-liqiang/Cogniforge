@@ -35,6 +35,12 @@ class Settings(BaseSettings):
 
     # LLM runtime controls
     LLM_REQUEST_TIMEOUT_SECONDS: int = 25
+    LLM_INTERACTIVE_PROVIDER_TYPE: str = ""
+    LLM_INTERACTIVE_MODEL_ID: str = ""
+    LLM_STRUCTURED_HEAVY_PROVIDER_TYPE: str = ""
+    LLM_STRUCTURED_HEAVY_MODEL_ID: str = ""
+    LLM_FALLBACK_PROVIDER_TYPE: str = ""
+    LLM_FALLBACK_MODEL_ID: str = ""
     LEARNING_PATH_TIMEOUT_SECONDS: int = 8
     PROBLEM_AUTO_ADVANCE_MODE: str = "balanced"
     PROBLEM_AUTO_ADVANCE_V2_ENABLED: bool = False

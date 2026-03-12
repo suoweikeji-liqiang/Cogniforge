@@ -153,17 +153,23 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
-  
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-  } else if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
-    next('/dashboard')
-  } else if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
-    next('/dashboard')
-  } else {
-    next()
+    return '/login'
+  }
+
+  if (to.meta.requiresAdmin && authStore.isAuthenticated) {
+    await authStore.ensureUserLoaded()
+  }
+
+  if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
+    return '/dashboard'
+  }
+
+  if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
+    return '/dashboard'
   }
 })
 
