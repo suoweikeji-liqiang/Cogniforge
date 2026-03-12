@@ -113,6 +113,7 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(page.getByTestId('resume-dashboard')).toBeVisible()
   const primaryNav = page.getByTestId('primary-nav')
   await expect(primaryNav.getByTestId('primary-nav-item-home')).toBeVisible()
+  await expect(primaryNav.getByTestId('primary-nav-item-home')).toContainText(/Continue Learning/i)
   await expect(primaryNav.getByTestId('primary-nav-item-problems')).toBeVisible()
   await expect(primaryNav.getByTestId('primary-nav-item-model-cards')).toBeVisible()
   await expect(primaryNav.getByTestId('primary-nav-item-review')).toBeVisible()
@@ -131,8 +132,6 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(page.locator('.actions-grid a[href="/srs-review"]')).toHaveCount(0)
   await expect(page.locator('a[href="/notes"]')).toHaveCount(0)
   await expect(page.locator('a[href="/resources"]')).toHaveCount(0)
-  await expect(page.getByTestId('dashboard-review-action')).toHaveAttribute('href', '/reviews')
-  await expect(page.getByTestId('dashboard-exploration-action')).toHaveAttribute('href', /\/problems/)
 })
 
 test('standalone chat is marked as a secondary legacy surface', async ({ page, request }) => {
@@ -179,12 +178,34 @@ test('reviews page centers model-card review and evolution work', async ({ page,
   await scheduleReview(request, tokens.access_token, card.id)
   await createReview(request, tokens.access_token)
 
+  await page.route('**/api/srs/due', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          schedule_id: 'due-card-review-hub',
+          model_card_id: card.id,
+          title: card.title,
+          user_notes: card.user_notes,
+          next_review_at: new Date().toISOString(),
+          origin: {
+            problem_title: 'Review Hub Problem',
+            concept_text: card.title,
+            learning_mode: 'exploration',
+          },
+        },
+      ]),
+    })
+  })
+
   await page.goto('/reviews')
 
   await expect(page.getByTestId('review-lifecycle-page')).toBeVisible()
-  await expect(page.getByTestId('reviews-focus-card')).toHaveAttribute('href', /\/model-cards\//)
-  await expect(page.getByTestId('review-queue-panel')).toContainText('No due reviews right now.')
+  await expect(page.getByTestId('reviews-focus-card')).toHaveAttribute('href', '/srs-review')
+  await expect(page.getByTestId('review-queue-panel')).toContainText('Review Hub Card')
   await expect(page.getByTestId('review-model-cards-panel')).toContainText('Review Hub Card')
+  await page.getByTestId('review-archive-toggle').click()
   await expect(page.getByTestId('review-archive-panel')).toContainText('Review archive summary')
 })
 

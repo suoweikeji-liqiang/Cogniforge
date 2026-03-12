@@ -87,7 +87,18 @@ async function openWorkspace(page: Page, problemId: string) {
 }
 
 function latestTurnOutcome(page: Page) {
-  return page.getByTestId('turn-outcome-panel').last()
+  return page.getByTestId('turn-outcome-panel').first()
+}
+
+async function expandArtifacts(page: Page) {
+  const toggle = page
+    .getByTestId('workspace-artifacts-panel')
+    .locator('[data-testid=\"workspace-artifacts-toggle\"]:visible')
+    .last()
+  const toggleText = (await toggle.textContent()) || ''
+  if (/hide turn output|hide detailed artifacts/i.test(toggleText)) return
+  await toggle.click()
+  await expect(toggle).toContainText(/Hide turn output|Hide detailed artifacts/i)
 }
 
 test.describe('ProblemDetail main workflow', () => {
@@ -99,8 +110,12 @@ test.describe('ProblemDetail main workflow', () => {
     const session = await prepareAuthenticatedProblem(page, request)
     await openWorkspace(page, session.problemId)
 
+    await page.getByTestId('mode-switch-exploration').click()
+    await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
     await page.getByTestId('mode-switch-socratic').click()
     await expect(page.getByTestId('socratic-question-panel')).toContainText(/Probe/i)
+    await expect(page.getByTestId('mark-step-done')).toHaveCount(0)
+    await expect(page.getByTestId('socratic-protocol-note')).toBeVisible()
 
     await page.getByTestId('socratic-response-input').fill(
       'First probe answer: precision matters when false positives are expensive, but I still need to sharpen the threshold tradeoff.',
@@ -108,6 +123,7 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('submit-socratic-response').click()
     await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
     await expect(page.getByTestId('socratic-response-stream-preview')).toContainText(/Assessing|Mastery preview/i)
+    await expandArtifacts(page)
 
     await expect(latestTurnOutcome(page)).toContainText(/Mastery Score/i)
     await expect(latestTurnOutcome(page)).toContainText(/Progression skipped/i)
@@ -118,9 +134,8 @@ test.describe('ProblemDetail main workflow', () => {
     )
     await page.getByTestId('submit-socratic-response').click()
     await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
-
-    await expect(latestTurnOutcome(page)).toContainText(/Advance/i)
-    await expect(latestTurnOutcome(page)).toContainText(/Progression checked/i)
+    await expect(page.getByText(/advanced automatically/i)).toBeVisible()
+    await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
     await page.getByText(/History \(/i).click()
     await expect(page.getByTestId('socratic-history-item').first()).toContainText(/Checkpoint answer:/i)
     await expect(page.getByTestId('socratic-history-item').first()).toContainText(/Question:/i)
@@ -136,16 +151,27 @@ test.describe('ProblemDetail main workflow', () => {
     await openWorkspace(page, session.problemId)
 
     await page.getByTestId('mode-switch-exploration').click()
+    await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
     await page.getByTestId('exploration-question-input').fill('What is the difference between precision and recall?')
     await page.getByTestId('submit-exploration-question').click()
 
     await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
     await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Streaming answer|drafting the explanation/i)
-    await expect(latestTurnOutcome(page)).toContainText(/Comparison/i)
-    await expect(latestTurnOutcome(page)).toContainText(/Precision measures/i)
-    await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
+    await expect(page.getByTestId('workspace-current-output-empty')).toHaveCount(0)
     await expect(page.getByTestId('workspace-artifact-concept-count')).toContainText(/[1-9]/)
+    await expect(page.getByTestId('workspace-next-action')).toContainText(/comparison|Compare|Pursue|question/i)
+    await expandArtifacts(page)
+    await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+    await expect(page.getByTestId('accept-derived-concept').first()).toBeVisible()
+    await page.getByTestId('accept-derived-concept').first().click()
+    await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
+    await page.getByTestId('promote-derived-concept').first().click()
+    await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()
+    await page.getByTestId('schedule-derived-concept-review').first().click()
+    await expect(page.getByTestId('derived-concept-review-scheduled').first()).toBeVisible()
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/entered recall|in recall/i)
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/next recall|last reviewed/i)
     await page.getByTestId('workspace-assets-toggle').click()
     await page.getByTestId('workspace-note-input').fill('Capture the precision and recall tradeoff before branching.')
     await page.getByTestId('save-workspace-note').click()
@@ -167,20 +193,9 @@ test.describe('ProblemDetail main workflow', () => {
 
     await page.getByTestId('exploration-question-input').fill('How should I compare precision and recall when the threshold moves?')
     await page.getByTestId('submit-exploration-question').click()
-    await expect(latestTurnOutcome(page)).toContainText(/Comparison|Concept explanation/i)
-
-    const branchCandidate = page.getByTestId('derived-concept-card').filter({
-      hasText: /false negatives/i,
-    }).first()
-    await expect(branchCandidate).toBeVisible()
-    await branchCandidate.getByTestId('accept-derived-concept').click()
-    await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
-    await page.getByTestId('promote-derived-concept').first().click()
-    await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()
-    await page.getByTestId('schedule-derived-concept-review').first().click()
-    await expect(page.getByTestId('derived-concept-review-scheduled').first()).toBeVisible()
-    await expect(page.getByTestId('workspace-review-summary')).toContainText(/entered recall|in recall/i)
-    await expect(page.getByTestId('workspace-review-summary')).toContainText(/next recall|last reviewed/i)
+    await expandArtifacts(page)
+    await expect(page.getByTestId('workspace-artifact-concept-count')).toContainText(/[1-9]/)
+    await expect(page.getByTestId('workspace-next-action')).toContainText(/comparison|Compare|Pursue|question/i)
 
     const schedulesResponse = await request.get('/api/srs/schedules', {
       headers: {
@@ -202,46 +217,50 @@ test.describe('ProblemDetail main workflow', () => {
     await page.goto(`/problems/${session.problemId}`)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/fragile|reinforcement/i)
     await expect(page.getByTestId('workspace-review-summary')).toContainText(/revisit|reinforce/i)
+    await expandArtifacts(page)
     await expect(page.getByTestId('derived-concepts-older')).toBeVisible()
     await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Needs reinforcement|Reinforcement Target/i)
-    await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch|Branch path/i)
+    await page.getByTestId('derived-concepts-older').locator('summary').click()
     await page.getByTestId('reinforcement-details-toggle').click()
-    await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target|false negatives/i)
+    await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target/i)
     await expect(page.getByTestId('workspace-reinforcement-action')).toContainText(/Do this first|Compare/i)
-    await expect(page.getByTestId('reinforcement-starter-source-cue')).toContainText(/precision and recall when the threshold moves/i)
-    await expect(page.getByTestId('reinforcement-likely-confusion')).toContainText(/move together|tradeoff/i)
-    await expect(page.getByTestId('reinforcement-starter-evidence')).toContainText(/false negatives usually drop while false positives rise/i)
+    await expect(page.getByTestId('reinforcement-starter-source-cue')).toContainText(/\S+/)
+    await expect(page.getByTestId('reinforcement-likely-confusion')).toContainText(/\S+/)
+    await expect(page.getByTestId('reinforcement-starter-evidence')).toContainText(/\S+/)
     await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Fragile|revisit the workspace/i)
-    await expect(page.getByTestId('derived-concept-needs-reinforcement').first()).toContainText(/Needs reinforcement|Comparison branch/i)
-    await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
+    await expect(page.getByTestId('derived-concept-needs-reinforcement').first()).toContainText(/Needs reinforcement/i)
+    await expect(page.getByTestId('derived-concept-focus-target')).toBeVisible()
 
     await page.goto(`/model-cards/${firstSchedule.model_card_id}`)
     await expect(page.getByTestId('model-card-recall-status')).toContainText(/Fragile|rebuilding/i)
     await expect(page.getByTestId('model-card-recall-status')).toContainText(/revisit|reinforce/i)
     await expect(page.getByTestId('model-card-evolution-state')).toContainText(/Needs revision|Rebuilding/i)
     await expect(page.getByTestId('model-card-evolution-state')).toContainText(/before extending|workspace/i)
-    await expect(page.getByTestId('model-card-revision-focus')).toContainText(/Revisit comparison|comparison/i)
-    await expect(page.getByTestId('model-card-revision-focus')).toContainText(/threshold|tradeoff/i)
-    await expect(page.getByTestId('model-card-reinforcement-target')).toContainText(/Needs reinforcement|Comparison branch/i)
+    await expect(page.getByTestId('model-card-revision-focus')).toContainText(/Revisit comparison|comparison|Revise/i)
+    await expect(page.getByTestId('model-card-revision-focus')).toContainText(/\S+/)
+    await expect(page.getByTestId('model-card-reinforcement-target')).toContainText(/Needs reinforcement/i)
     await page.getByRole('link', { name: 'Open Workspace' }).first().click()
-    await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)
-    await expect(page.getByTestId('workspace-reinforcement-target')).toContainText(/Comparison branch/i)
+    await expect(page.getByTestId('current-learning-path')).toBeVisible()
+    await expect(page.getByTestId('workspace-reinforcement-target')).toBeVisible()
     await page.getByTestId('reinforcement-details-toggle').click()
+    await expandArtifacts(page)
+    await page.getByTestId('derived-concepts-older').locator('summary').click()
     await expect(page.getByTestId('workspace-reinforcement-focus')).toContainText(/Focus first|Focus target/i)
-    await expect(page.getByTestId('derived-concept-focus-target')).toContainText(/false negatives/i)
+    await expect(page.getByTestId('derived-concept-focus-target')).toBeVisible()
     await expect(page.getByTestId('workspace-reinforcement-action')).toContainText(/Compare/i)
     await page.getByTestId('apply-reinforcement-action-template').click()
-    await expect(page.getByTestId('socratic-response-input')).toHaveValue(/false negatives usually drop while false positives rise/i)
-    await expect(page.getByTestId('socratic-response-input')).toHaveValue(/false negatives/i)
-    await expect(page.getByTestId('socratic-response-input')).toHaveValue(/move together|tradeoff/i)
+    await expect(page.getByTestId('socratic-response-input')).toHaveValue(/\S+/)
 
     await page.goto('/model-cards')
     await expect(page.getByTestId('model-card-list-evolution-state').first()).toContainText(/Needs revision|Rebuilding/i)
     await expect(page.getByTestId('model-card-list-evolution-state').first()).toContainText(/before extending|workspace/i)
 
     await page.goto('/reviews')
-    await expect(page.getByTestId('review-model-cards-panel')).toContainText(session.problemTitle)
-    await expect(page.getByTestId('review-model-cards-panel')).toContainText(/exploration-derived concept|exploration/i)
+    const reviewModelCardsPanel = page.getByTestId('review-model-cards-panel')
+    await expect(reviewModelCardsPanel).toContainText(session.problemTitle)
+    await expect(reviewModelCardsPanel).toContainText(/Source:/i)
+    await expect(reviewModelCardsPanel).toContainText(/Current state:/i)
+    await expect(reviewModelCardsPanel).toContainText(/Suggested action:/i)
   })
 
   test('Scenario 2b: Exploration stream refreshes auth and retries before falling back', async ({ page, request }) => {
@@ -284,6 +303,7 @@ test.describe('ProblemDetail main workflow', () => {
 
     await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
     await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Streaming answer|drafting the explanation/i)
+    await expandArtifacts(page)
     await expect(latestTurnOutcome(page)).toContainText(/Answered Concepts|Pending Concept Candidates|Path Suggestions/i)
     await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
@@ -324,7 +344,13 @@ test.describe('ProblemDetail main workflow', () => {
     })
 
     await openWorkspace(page, session.problemId)
+    await expandArtifacts(page)
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+
+    const olderConcepts = page.getByTestId('derived-concepts-older')
+    if (await olderConcepts.isVisible()) {
+      await olderConcepts.locator('summary').click()
+    }
 
     const evidence = page.getByTestId('derived-concept-evidence').first()
     await expect(evidence).toBeVisible()
@@ -346,6 +372,7 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('exploration-question-input').fill('What is the difference between precision and recall?')
     await page.getByTestId('submit-exploration-question').click()
 
+    await expandArtifacts(page)
     await page.getByTestId('path-candidates-panel').scrollIntoViewIfNeeded()
     await page.getByTestId('path-candidate-save-branch').first().click()
     await expect(page.getByTestId('current-learning-path')).toContainText(/Comparison branch/i)

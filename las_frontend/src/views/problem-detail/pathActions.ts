@@ -21,6 +21,9 @@ type ProblemDetailPathActionDeps = {
   autoAdvanceMessage: RefLike<string>
   canUndoAutoAdvance: RefLike<boolean>
   undoTargetStep: RefLike<number | null>
+  clearCurrentInteractionContext: (mode?: 'socratic' | 'exploration') => void
+  onActionError: (message: string) => void
+  clearActionError: () => void
   fetchLearningPath: () => Promise<void>
   fetchLearningPaths: () => Promise<void>
   fetchSocraticQuestion: () => Promise<void>
@@ -38,6 +41,9 @@ export const createProblemDetailPathActions = ({
   autoAdvanceMessage,
   canUndoAutoAdvance,
   undoTargetStep,
+  clearCurrentInteractionContext,
+  onActionError,
+  clearActionError,
   fetchLearningPath,
   fetchLearningPaths,
   fetchSocraticQuestion,
@@ -64,16 +70,19 @@ export const createProblemDetailPathActions = ({
   const updateCurrentStep = async (nextStep: number) => {
     if (!learningPath.value) return
 
+    clearActionError()
     updatingPath.value = true
     try {
       const response = await api.put(`/problems/${problemId}/learning-path`, {
         current_step: nextStep,
       })
       learningPath.value = response.data
+      clearCurrentInteractionContext(learningMode.value)
       await refreshPathViews()
       updateProblemStatusForStep(nextStep)
     } catch (e) {
       console.error('Failed to update learning path:', e)
+      onActionError(t('problemDetail.actionErrorStepChange'))
     } finally {
       updatingPath.value = false
     }
@@ -93,13 +102,16 @@ export const createProblemDetailPathActions = ({
   const activateLearningPathById = async (pathId: string) => {
     if (updatingPath.value) return
 
+    clearActionError()
     updatingPath.value = true
     try {
       const response = await api.post(`/problems/${problemId}/learning-paths/${pathId}/activate`)
       learningPath.value = response.data
+      clearCurrentInteractionContext(learningMode.value)
       await refreshPathViews()
     } catch (e) {
       console.error('Failed to activate learning path:', e)
+      onActionError(t('problemDetail.actionErrorPathSwitch'))
     } finally {
       updatingPath.value = false
     }
@@ -108,14 +120,17 @@ export const createProblemDetailPathActions = ({
   const returnToParentPath = async () => {
     if (updatingPath.value || !learningPath.value?.parent_path_id) return
 
+    clearActionError()
     updatingPath.value = true
     try {
       const response = await api.post(`/problems/${problemId}/learning-path/return`)
       learningPath.value = response.data
+      clearCurrentInteractionContext(learningMode.value)
       await refreshPathViews()
       await fetchLearningPath()
     } catch (e) {
       console.error('Failed to return to parent learning path:', e)
+      onActionError(t('problemDetail.actionErrorReturnPath'))
     } finally {
       updatingPath.value = false
     }

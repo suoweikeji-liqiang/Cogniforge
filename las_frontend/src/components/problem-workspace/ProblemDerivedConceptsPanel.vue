@@ -338,6 +338,7 @@ const props = defineProps<{
   focusConceptText?: string | null
   embedded?: boolean
   collapseOlder?: boolean
+  olderOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -366,7 +367,10 @@ const renderEvidenceSnippet = (value: string | undefined | null) => {
   return evidenceMarkdown.render(source)
 }
 
-const isCurrentTurnCandidate = (candidate: any) => Boolean(props.currentTurnId && candidate.source_turn_id === props.currentTurnId)
+const isCurrentTurnCandidate = (candidate: any) => (
+  Boolean(props.currentTurnId)
+  && String(candidate.source_turn_id || '') === String(props.currentTurnId)
+)
 const isFocusTarget = (candidate: any) => {
   if (!candidate) return false
   if (props.focusCandidateId && String(candidate.id) === String(props.focusCandidateId)) return true
@@ -406,6 +410,9 @@ const sortedCandidates = computed(() => {
 
 const candidateGroups = computed(() => {
   if (!props.currentTurnId) {
+    if (props.olderOnly) {
+      return [{ key: 'older', title: t('problemDetail.earlierDerivedConcepts'), items: sortedCandidates.value }]
+    }
     return [{ key: 'all', title: '', items: sortedCandidates.value }]
   }
 

@@ -1,125 +1,113 @@
 <template>
   <div class="dashboard" data-testid="resume-dashboard">
-    <section class="hero-shell">
-      <div class="hero-copy">
-        <p class="hero-kicker">{{ t('dashboard.focusTitle') }}</p>
-        <h1>{{ t('dashboard.welcome') }}, {{ authStore.user?.username }}</h1>
-        <p class="hero-subtitle">{{ t('dashboard.focusSubtitle') }}</p>
-      </div>
+    <PrimaryAsyncStateCard
+      v-if="pageState === 'error'"
+      kind="error"
+      :title="t('dashboard.errorTitle')"
+      :message="pageError || t('dashboard.errorMessage')"
+      :retry-label="t('common.retry')"
+      test-id="dashboard-error-state"
+      retry-test-id="dashboard-error-retry"
+      @retry="fetchDashboardData"
+    />
 
-      <router-link :to="focusCard.to" class="focus-card" :class="focusCard.tone" data-testid="dashboard-focus-card">
-        <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
-        <h2>{{ focusCard.title }}</h2>
-        <p>{{ focusCard.description }}</p>
-        <span class="focus-cta">{{ focusCard.cta }}</span>
-      </router-link>
+    <div v-else-if="pageState === 'loading'" class="loading">{{ t('common.loading') }}</div>
 
-      <div class="metric-grid">
-        <div class="metric-card">
-          <span>{{ t('dashboard.activeProblems') }}</span>
-          <strong>{{ activeProblemCount }}</strong>
+    <template v-else>
+      <section class="hero-shell">
+        <div class="hero-copy">
+          <p class="hero-kicker">{{ t('dashboard.focusTitle') }}</p>
+          <h1>{{ t('dashboard.welcome') }}, {{ authStore.user?.username }}</h1>
+          <p class="hero-subtitle">{{ t('dashboard.focusSubtitle') }}</p>
         </div>
-        <div class="metric-card">
-          <span>{{ t('dashboard.openReviews') }}</span>
-          <strong>{{ dueReviewCount }}</strong>
-        </div>
-        <div class="metric-card">
-          <span>{{ t('dashboard.modelCards') }}</span>
-          <strong>{{ modelCards.length }}</strong>
-        </div>
-      </div>
-    </section>
 
-    <section class="dashboard-grid">
-      <section class="card-panel" data-testid="dashboard-problems-panel">
-        <p class="section-meta">{{ t('dashboard.resumePanelMeta') }}</p>
-        <h2>{{ t('dashboard.resumeSectionTitle') }}</h2>
-        <div v-if="recentProblems.length" class="resume-list">
-          <router-link
-            v-for="problem in recentProblems"
-            :key="problem.id"
-            :to="`/problems/${problem.id}`"
-            class="resume-item"
-          >
-            <div>
-              <strong>{{ problem.title }}</strong>
-              <p>{{ problem.description || t('dashboard.resumeLatestProblemDescription') }}</p>
-            </div>
-            <span class="status">{{ problem.status }}</span>
-          </router-link>
+        <router-link :to="focusCard.to" class="focus-card" :class="focusCard.tone" data-testid="dashboard-focus-card">
+          <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
+          <h2>{{ focusCard.title }}</h2>
+          <p>{{ focusCard.description }}</p>
+          <span class="focus-cta">{{ focusCard.cta }}</span>
+        </router-link>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <span>{{ t('dashboard.activeProblems') }}</span>
+            <strong>{{ activeProblemCount }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>{{ t('dashboard.openReviews') }}</span>
+            <strong>{{ dueReviewCount }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>{{ t('dashboard.modelCards') }}</span>
+            <strong>{{ modelCards.length }}</strong>
+          </div>
         </div>
-        <p v-else class="empty">{{ t('dashboard.noRecent') }}</p>
       </section>
 
-      <section class="card-panel" data-testid="dashboard-review-panel">
-        <p class="section-meta">{{ t('dashboard.reviewPanelMeta') }}</p>
-        <h2>{{ t('dashboard.reviewQueueTitle') }}</h2>
-        <div v-if="dueCards.length" class="review-list">
-          <router-link
-            v-for="card in dueCards.slice(0, 4)"
-            :key="card.schedule_id"
-            to="/reviews"
-            class="review-item"
-          >
-            <div>
-              <strong>{{ card.title }}</strong>
-              <p>{{ card.user_notes || t('dashboard.reviewQueueDescription') }}</p>
-            </div>
-            <span class="review-badge">{{ t('dashboard.openReviewHub') }}</span>
-          </router-link>
-        </div>
-        <div v-else class="empty-block">
-          <p class="empty">{{ t('dashboard.noDueReviews') }}</p>
-          <router-link to="/model-cards" class="inline-link">
-            {{ t('dashboard.createModelCard') }}
-          </router-link>
-        </div>
+      <section class="dashboard-grid">
+        <section class="card-panel" data-testid="dashboard-problems-panel">
+          <p class="section-meta">{{ t('dashboard.resumePanelMeta') }}</p>
+          <h2>{{ t('dashboard.resumeSectionTitle') }}</h2>
+          <div v-if="recentProblems.length" class="resume-list">
+            <router-link
+              v-for="problem in recentProblems"
+              :key="problem.id"
+              :to="`/problems/${problem.id}`"
+              class="resume-item"
+            >
+              <div>
+                <strong>{{ problem.title }}</strong>
+                <p>{{ problem.description || t('dashboard.resumeLatestProblemDescription') }}</p>
+              </div>
+              <span class="status">{{ problem.status }}</span>
+            </router-link>
+          </div>
+          <p v-else class="empty">{{ t('dashboard.noRecent') }}</p>
+        </section>
+
+        <section class="card-panel" data-testid="dashboard-review-panel">
+          <p class="section-meta">{{ t('dashboard.reviewPanelMeta') }}</p>
+          <h2>{{ t('dashboard.reviewQueueTitle') }}</h2>
+          <div v-if="dueCards.length" class="review-list">
+            <router-link
+              v-for="card in dueCards.slice(0, 4)"
+              :key="card.schedule_id"
+              to="/srs-review"
+              class="review-item"
+            >
+              <div>
+                <strong>{{ card.title }}</strong>
+                <p>{{ card.user_notes || t('dashboard.reviewQueueDescription') }}</p>
+              </div>
+              <span class="review-badge">{{ t('dashboard.startReviewNow') }}</span>
+            </router-link>
+          </div>
+          <div v-else class="empty-block">
+            <p class="empty">{{ t('dashboard.noDueReviews') }}</p>
+            <router-link to="/model-cards" class="inline-link">
+              {{ t('dashboard.createModelCard') }}
+            </router-link>
+          </div>
+        </section>
       </section>
-    </section>
 
-    <section class="card-panel" data-testid="dashboard-model-cards-panel">
-      <p class="section-meta">{{ t('dashboard.modelsPanelMeta') }}</p>
-      <h2>{{ t('dashboard.modelCardsSectionTitle') }}</h2>
-      <div v-if="recentModelCards.length" class="model-grid">
-        <router-link
-          v-for="card in recentModelCards"
-          :key="card.id"
-          :to="`/model-cards/${card.id}`"
-          class="model-card"
-        >
-          <strong>{{ card.title }}</strong>
-          <p>{{ card.user_notes || t('dashboard.modelLibraryDescription') }}</p>
-        </router-link>
-      </div>
-      <p v-else class="empty">{{ t('dashboard.noRecentModelCards') }}</p>
-    </section>
-
-    <section class="actions-section">
-      <div class="section-heading">
-        <div>
-          <p class="section-meta">{{ t('dashboard.quickActions') }}</p>
-          <h2>{{ t('dashboard.nextMovesTitle') }}</h2>
+      <section class="card-panel" data-testid="dashboard-model-cards-panel">
+        <p class="section-meta">{{ t('dashboard.modelsPanelMeta') }}</p>
+        <h2>{{ t('dashboard.modelCardsSectionTitle') }}</h2>
+        <div v-if="recentModelCards.length" class="model-grid">
+          <router-link
+            v-for="card in recentModelCards"
+            :key="card.id"
+            :to="`/model-cards/${card.id}`"
+            class="model-card"
+          >
+            <strong>{{ card.title }}</strong>
+            <p>{{ card.user_notes || t('dashboard.modelLibraryDescription') }}</p>
+          </router-link>
         </div>
-      </div>
-      <div class="actions-grid">
-        <router-link to="/problems" class="action-card">
-          <h3>{{ t('dashboard.newProblem') }}</h3>
-          <p>{{ t('dashboard.startLearning') }}</p>
-        </router-link>
-        <router-link :to="explorationAction.to" class="action-card" data-testid="dashboard-exploration-action">
-          <h3>{{ explorationAction.title }}</h3>
-          <p>{{ explorationAction.description }}</p>
-        </router-link>
-        <router-link to="/model-cards" class="action-card">
-          <h3>{{ t('dashboard.modelLibrary') }}</h3>
-          <p>{{ t('dashboard.browseModels') }}</p>
-        </router-link>
-        <router-link to="/reviews" class="action-card" data-testid="dashboard-review-action">
-          <h3>{{ t('dashboard.reviewQueueTitle') }}</h3>
-          <p>{{ t('dashboard.reviewQueueDescription') }}</p>
-        </router-link>
-      </div>
-    </section>
+        <p v-else class="empty">{{ t('dashboard.noRecentModelCards') }}</p>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -128,6 +116,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
+import PrimaryAsyncStateCard from '@/components/PrimaryAsyncStateCard.vue'
+import type { AsyncPageState } from '@/types/ui'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -135,6 +125,8 @@ const authStore = useAuthStore()
 const problems = ref<any[]>([])
 const modelCards = ref<any[]>([])
 const dueCards = ref<any[]>([])
+const pageState = ref<AsyncPageState>('loading')
+const pageError = ref('')
 
 const recentProblems = computed(() => problems.value.slice(0, 5))
 const recentModelCards = computed(() => modelCards.value.slice(0, 4))
@@ -149,8 +141,8 @@ const focusCard = computed(() => {
       eyebrow: t('dashboard.priorityNow'),
       title: t('dashboard.reviewQueueReady', { count: dueCards.value.length }),
       description: t('dashboard.reviewQueueDescription'),
-      cta: t('dashboard.openReviewHub'),
-      to: '/reviews',
+      cta: t('dashboard.startReviewNow'),
+      to: '/srs-review',
       tone: 'tone-alert',
     }
   }
@@ -176,37 +168,24 @@ const focusCard = computed(() => {
   }
 })
 
-const explorationAction = computed(() => {
-  if (recentProblems.value.length > 0) {
-    return {
-      to: `/problems/${recentProblems.value[0].id}`,
-      title: t('dashboard.exploreInWorkspace'),
-      description: t('dashboard.exploreInWorkspaceDescription', {
-        title: recentProblems.value[0].title,
-      }),
-    }
-  }
-
-  return {
-    to: '/problems',
-    title: t('dashboard.exploreInWorkspace'),
-    description: t('dashboard.exploreInWorkspaceFallback'),
-  }
-})
-
 const fetchDashboardData = async () => {
+  pageError.value = ''
+  pageState.value = 'loading'
   try {
     const [problemsRes, cardsRes, dueRes] = await Promise.all([
       api.get('/problems/'),
       api.get('/model-cards/'),
-      api.get('/srs/due').catch(() => ({ data: [] })),
+      api.get('/srs/due'),
     ])
 
     problems.value = problemsRes.data || []
     modelCards.value = cardsRes.data || []
     dueCards.value = dueRes.data || []
+    pageState.value = 'ready'
   } catch (error) {
     console.error('Failed to fetch dashboard data:', error)
+    pageError.value = t('dashboard.errorMessage')
+    pageState.value = 'error'
   }
 }
 

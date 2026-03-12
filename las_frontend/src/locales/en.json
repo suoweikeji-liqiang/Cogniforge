@@ -16,7 +16,9 @@
     "submit": "Submit",
     "close": "Close",
     "download": "Download",
-    "loadMore": "Load More"
+    "loadMore": "Load More",
+    "retry": "Retry",
+    "empty": "Empty"
   },
   "feedback": {
     "correctness": "Correctness",
@@ -25,7 +27,7 @@
     "nextQuestion": "Next Question"
   },
   "nav": {
-    "home": "Learn",
+    "home": "Continue Learning",
     "dashboard": "Dashboard",
     "problems": "Problems",
     "modelCards": "Model Cards",
@@ -160,6 +162,7 @@
     "activeProblems": "Active problems",
     "reviewQueueReady": "You have {count} reviews ready to clear",
     "reviewQueueDescription": "Clearing due reviews before new work keeps the learning loop steady.",
+    "startReviewNow": "Start Review Now",
     "resumeLatestProblem": "Resume your latest problem",
     "resumeLatestProblemDescription": "If the next move is unclear, push one concrete problem forward first.",
     "resumePanelMeta": "Resume Learning",
@@ -205,6 +208,8 @@
     "viewReviewHistory": "View Review History",
     "reviewCreated": "Review generated and saved.",
     "reviewCreateFailed": "Failed to generate review.",
+    "errorTitle": "Dashboard unavailable",
+    "errorMessage": "The dashboard could not load. Retry to restore the current learning focus.",
     "retrievalObserver": "Retrieval Observer",
     "retrievalTitle": "RAG Retrieval Activity",
     "retrievalDescription": "A compact view of what context retrieval is pulling in, so retrieval stops being a black box.",
@@ -258,7 +263,13 @@
     "viewDetail": "View",
     "openWorkspace": "Open Workspace",
     "deleteProblem": "Delete",
-    "confirmDelete": "Are you sure you want to delete this problem?"
+    "confirmDelete": "Are you sure you want to delete this problem?",
+    "errorTitle": "Problem list unavailable",
+    "errorMessage": "The problem list could not load. Retry to restore your learning queue.",
+    "startModeTitle": "Choose how to begin",
+    "startModeMessage": "The problem is created. Pick the learning protocol you want to start with before entering the workspace.",
+    "startModeSocratic": "Start in Socratic",
+    "startModeExploration": "Start in Exploration"
   },
   "problemDetail": {
     "title": "Problem Details",
@@ -540,7 +551,22 @@
     "noProgressRecords": "No progress records yet",
     "previousStep": "Previous Step",
     "markStepDone": "Mark Step Done",
-    "completed": "Completed"
+    "completed": "Completed",
+    "processTurnOutput": "Process turn artifacts",
+    "hideTurnOutput": "Hide detailed artifacts",
+    "currentOutputEmptyTitle": "No output in this mode yet",
+    "currentOutputEmptyDescriptionSocratic": "This mode has no current-turn output yet. Answer the current question to create a fresh evaluated turn.",
+    "currentOutputEmptyDescriptionExploration": "This mode has no current-turn output yet. Ask a question to generate concepts, paths, and next-step suggestions.",
+    "socraticProgressControlled": "Step progression in Socratic mode is decided by the evaluation result, not by manual advance.",
+    "errorTitle": "Workspace unavailable",
+    "errorMessage": "The workspace could not load. Retry to restore the current problem.",
+    "actionErrorModeSwitch": "The learning mode could not be changed. Retry the switch.",
+    "actionErrorFetchQuestion": "The next Socratic question could not be loaded. Retry the step action.",
+    "actionErrorSubmitResponse": "The Socratic answer could not be submitted. Your current draft is still here.",
+    "actionErrorAskQuestion": "The exploration question could not be submitted. Retry when ready.",
+    "actionErrorStepChange": "The current step could not be updated. Retry the step change.",
+    "actionErrorPathSwitch": "The learning path could not be switched. Retry the path change.",
+    "actionErrorReturnPath": "The workspace could not return to the parent path. Retry the return action."
   },
   "modelCards": {
     "title": "Model Cards",
@@ -704,7 +730,23 @@
     "nextSteps": "Next Steps",
     "misconceptions": "Misconceptions",
     "generate": "Generate with AI",
-    "generating": "Generating..."
+    "generating": "Generating...",
+    "errorTitle": "Review hub unavailable",
+    "errorMessage": "The review hub could not load. Retry to restore the recall queue and model-card context.",
+    "archiveHint": "Archive and manually generated reviews stay secondary. Use them after the current recall decision is clear.",
+    "lifecycleSourceLabel": "Source",
+    "lifecycleStateLabel": "Current state",
+    "lifecycleActionLabel": "Suggested action",
+    "modelLifecycleSourceNone": "No workspace source is linked yet.",
+    "modelLifecycleStateUnscheduled": "Not yet in spaced recall.",
+    "modelLifecycleStateScheduled": "Scheduled and waiting for its next recall.",
+    "modelLifecycleStateReviewed": "Already reviewed and staying in recall.",
+    "modelLifecycleStateDue": "Due now for recall.",
+    "modelLifecycleStateReinforcement": "Needs reinforcement after weak recall.",
+    "modelLifecycleActionSchedule": "Open the card and schedule its first recall.",
+    "modelLifecycleActionOpen": "Open the card and inspect its current recall status.",
+    "modelLifecycleActionRecallNow": "Start recall now before opening archive work.",
+    "modelLifecycleActionRevisit": "Open the originating workspace or card and rebuild it before extending."
   },
   "chat": {
     "title": "Legacy Conversations",
@@ -767,7 +809,10 @@
     "forgot": "Forgot",
     "ok": "OK",
     "perfect": "Perfect",
-    "allDone": "All reviews done for today!"
+    "allDone": "All reviews done for today!",
+    "errorTitle": "SRS review unavailable",
+    "errorMessage": "The review queue could not load. Retry to restore due cards.",
+    "submitErrorMessage": "This recall result could not be submitted. The current card is still ready for rating."
   },
   "graph": {
     "title": "Knowledge Graph",

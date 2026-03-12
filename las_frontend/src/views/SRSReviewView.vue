@@ -12,117 +12,131 @@
     />
     <h1>{{ t('srs.title') }}</h1>
 
-    <div class="srs-stats">
-      <div class="stat-card">
-        <h3>{{ t('srs.dueToday') }}</h3>
-        <p class="stat-number">{{ dueCards.length }}</p>
-      </div>
-      <div class="stat-card">
-        <h3>{{ t('srs.totalScheduled') }}</h3>
-        <p class="stat-number">{{ allSchedules.length }}</p>
-      </div>
-    </div>
+    <PrimaryAsyncStateCard
+      v-if="pageState === 'error'"
+      kind="error"
+      :title="t('srs.errorTitle')"
+      :message="pageError || t('srs.errorMessage')"
+      :retry-label="t('common.retry')"
+      test-id="srs-error-state"
+      retry-test-id="srs-error-retry"
+      @retry="fetchData"
+    />
 
-    <section v-if="lastReviewOutcome" class="review-outcome-card" data-testid="srs-last-review-outcome">
-      <span class="outcome-eyebrow">{{ t('srs.lastReviewTitle') }}</span>
-      <strong>{{ lastReviewOutcome.title }}</strong>
-      <p>{{ formatReviewOutcome(lastReviewOutcome) }}</p>
-      <div class="outcome-meta-grid">
-        <span>{{ t('srs.recallStateLabel') }}: {{ formatRecallState(lastReviewOutcome.recall_state) }}</span>
-        <span>{{ t('srs.nextActionLabel') }}: {{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</span>
+    <div v-else-if="pageState === 'loading'" class="empty">{{ t('common.loading') }}</div>
+
+    <template v-else>
+      <div class="srs-stats">
+        <div class="stat-card">
+          <h3>{{ t('srs.dueToday') }}</h3>
+          <p class="stat-number">{{ dueCards.length }}</p>
+        </div>
+        <div class="stat-card">
+          <h3>{{ t('srs.totalScheduled') }}</h3>
+          <p class="stat-number">{{ allSchedules.length }}</p>
+        </div>
       </div>
-      <div
-        v-if="lastReviewOutcome.needs_reinforcement"
-        class="reinforcement-outcome"
-        data-testid="srs-reinforcement-target"
-      >
-        <span class="outcome-eyebrow">{{ t('srs.needsReinforcementBadge') }}</span>
-        <strong>{{ formatReinforcementResume(lastReviewOutcome) }}</strong>
-        <p>{{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</p>
-      </div>
-      <div class="origin-links">
-        <router-link
-          v-if="lastReviewOutcome.origin?.problem_id"
-          :to="buildWorkspaceRoute(lastReviewOutcome)"
-          class="btn btn-secondary"
+
+      <section v-if="lastReviewOutcome" class="review-outcome-card" data-testid="srs-last-review-outcome">
+        <span class="outcome-eyebrow">{{ t('srs.lastReviewTitle') }}</span>
+        <strong>{{ lastReviewOutcome.title }}</strong>
+        <p>{{ formatReviewOutcome(lastReviewOutcome) }}</p>
+        <div class="outcome-meta-grid">
+          <span>{{ t('srs.recallStateLabel') }}: {{ formatRecallState(lastReviewOutcome.recall_state) }}</span>
+          <span>{{ t('srs.nextActionLabel') }}: {{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</span>
+        </div>
+        <div
+          v-if="lastReviewOutcome.needs_reinforcement"
+          class="reinforcement-outcome"
+          data-testid="srs-reinforcement-target"
         >
-          {{ t('srs.openWorkspace') }}
-        </router-link>
-        <router-link :to="`/model-cards/${lastReviewOutcome.model_card_id}`" class="btn btn-secondary">
-          {{ t('problemDetail.openModelCard') }}
-        </router-link>
-      </div>
-    </section>
-
-    <!-- Review Card -->
-    <div v-if="currentCard" class="review-card">
-      <h2>{{ currentCard.title }}</h2>
-      <div v-if="currentCard.origin" class="origin-card" data-testid="srs-origin-panel">
-        <div class="origin-head">
-          <div>
-            <span class="outcome-eyebrow">{{ t('srs.originLabel') }}</span>
-            <strong>{{ formatOriginHeading(currentCard) }}</strong>
-          </div>
-          <div class="origin-links">
-            <router-link
-              v-if="currentCard.origin?.problem_id"
-              :to="buildWorkspaceRoute(currentCard)"
-              class="btn btn-secondary"
-            >
-              {{ t('srs.openWorkspace') }}
-            </router-link>
-            <router-link :to="`/model-cards/${currentCard.model_card_id}`" class="btn btn-secondary">
-              {{ t('problemDetail.openModelCard') }}
-            </router-link>
-          </div>
+          <span class="outcome-eyebrow">{{ t('srs.needsReinforcementBadge') }}</span>
+          <strong>{{ formatReinforcementResume(lastReviewOutcome) }}</strong>
+          <p>{{ formatRecommendedAction(lastReviewOutcome.recommended_action) }}</p>
         </div>
-        <p class="origin-copy">{{ formatOriginReason(currentCard) }}</p>
-        <p v-if="currentCard.origin?.source_turn_preview" class="origin-copy">{{ currentCard.origin.source_turn_preview }}</p>
-        <p v-if="currentCard.origin?.evidence_snippet" class="origin-copy">{{ currentCard.origin.evidence_snippet }}</p>
-      </div>
-      <p class="review-prompt">{{ t('srs.recallPrompt') }}</p>
+        <div class="origin-links">
+          <router-link
+            v-if="lastReviewOutcome.origin?.problem_id"
+            :to="buildWorkspaceRoute(lastReviewOutcome)"
+            class="btn btn-secondary"
+          >
+            {{ t('srs.openWorkspace') }}
+          </router-link>
+          <router-link :to="`/model-cards/${lastReviewOutcome.model_card_id}`" class="btn btn-secondary">
+            {{ t('problemDetail.openModelCard') }}
+          </router-link>
+        </div>
+      </section>
 
-      <div v-if="!showAnswer" class="review-action">
-        <button class="btn btn-primary" @click="showAnswer = true">
-          {{ t('srs.showAnswer') }}
-        </button>
-      </div>
+      <div v-if="currentCard" class="review-card">
+        <h2>{{ currentCard.title }}</h2>
+        <div v-if="currentCard.origin" class="origin-card" data-testid="srs-origin-panel">
+          <div class="origin-head">
+            <div>
+              <span class="outcome-eyebrow">{{ t('srs.originLabel') }}</span>
+              <strong>{{ formatOriginHeading(currentCard) }}</strong>
+            </div>
+            <div class="origin-links">
+              <router-link
+                v-if="currentCard.origin?.problem_id"
+                :to="buildWorkspaceRoute(currentCard)"
+                class="btn btn-secondary"
+              >
+                {{ t('srs.openWorkspace') }}
+              </router-link>
+              <router-link :to="`/model-cards/${currentCard.model_card_id}`" class="btn btn-secondary">
+                {{ t('problemDetail.openModelCard') }}
+              </router-link>
+            </div>
+          </div>
+          <p class="origin-copy">{{ formatOriginReason(currentCard) }}</p>
+          <p v-if="currentCard.origin?.source_turn_preview" class="origin-copy">{{ currentCard.origin.source_turn_preview }}</p>
+          <p v-if="currentCard.origin?.evidence_snippet" class="origin-copy">{{ currentCard.origin.evidence_snippet }}</p>
+        </div>
+        <p class="review-prompt">{{ t('srs.recallPrompt') }}</p>
+        <p v-if="submitError" class="submit-error">{{ submitError }}</p>
 
-      <div v-else>
-        <div class="answer-panel">
-          <div v-if="currentCard.user_notes" class="answer-section">
-            <h3>{{ t('modelCards.notes') }}</h3>
-            <p>{{ currentCard.user_notes }}</p>
-          </div>
-          <div v-if="currentCard.examples?.length" class="answer-section">
-            <h3>{{ t('modelCards.examples') }}</h3>
-            <ul>
-              <li v-for="(example, index) in currentCard.examples" :key="index">{{ example }}</li>
-            </ul>
-          </div>
-          <div v-if="currentCard.counter_examples?.length" class="answer-section">
-            <h3>{{ t('modelCards.counterExamples') }}</h3>
-            <ul>
-              <li v-for="(example, index) in currentCard.counter_examples" :key="index">{{ example }}</li>
-            </ul>
-          </div>
+        <div v-if="!showAnswer" class="review-action">
+          <button class="btn btn-primary" @click="showAnswer = true">
+            {{ t('srs.showAnswer') }}
+          </button>
         </div>
 
-        <div class="quality-buttons">
-          <p class="quality-label">{{ t('srs.rateRecall') }}</p>
-          <div class="quality-grid">
-            <button class="btn q-btn q-0" @click="submitReview(0)">0 - {{ t('srs.forgot') }}</button>
-            <button class="btn q-btn q-1" @click="submitReview(1)">1</button>
-            <button class="btn q-btn q-2" @click="submitReview(2)">2</button>
-            <button class="btn q-btn q-3" @click="submitReview(3)">3 - {{ t('srs.ok') }}</button>
-            <button class="btn q-btn q-4" @click="submitReview(4)">4</button>
-            <button class="btn q-btn q-5" @click="submitReview(5)">5 - {{ t('srs.perfect') }}</button>
+        <div v-else>
+          <div class="answer-panel">
+            <div v-if="currentCard.user_notes" class="answer-section">
+              <h3>{{ t('modelCards.notes') }}</h3>
+              <p>{{ currentCard.user_notes }}</p>
+            </div>
+            <div v-if="currentCard.examples?.length" class="answer-section">
+              <h3>{{ t('modelCards.examples') }}</h3>
+              <ul>
+                <li v-for="(example, index) in currentCard.examples" :key="index">{{ example }}</li>
+              </ul>
+            </div>
+            <div v-if="currentCard.counter_examples?.length" class="answer-section">
+              <h3>{{ t('modelCards.counterExamples') }}</h3>
+              <ul>
+                <li v-for="(example, index) in currentCard.counter_examples" :key="index">{{ example }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="quality-buttons">
+            <p class="quality-label">{{ t('srs.rateRecall') }}</p>
+            <div class="quality-grid">
+              <button class="btn q-btn q-0" :disabled="submittingReview" @click="submitReview(0)">0 - {{ t('srs.forgot') }}</button>
+              <button class="btn q-btn q-1" :disabled="submittingReview" @click="submitReview(1)">1</button>
+              <button class="btn q-btn q-2" :disabled="submittingReview" @click="submitReview(2)">2</button>
+              <button class="btn q-btn q-3" :disabled="submittingReview" @click="submitReview(3)">3 - {{ t('srs.ok') }}</button>
+              <button class="btn q-btn q-4" :disabled="submittingReview" @click="submitReview(4)">4</button>
+              <button class="btn q-btn q-5" :disabled="submittingReview" @click="submitReview(5)">5 - {{ t('srs.perfect') }}</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <p v-else-if="!loading" class="empty">{{ t('srs.allDone') }}</p>
+      <p v-else class="empty">{{ t('srs.allDone') }}</p>
+    </template>
   </div>
 </template>
 
@@ -131,12 +145,18 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 import SecondarySurfaceBanner from '@/components/SecondarySurfaceBanner.vue'
+import PrimaryAsyncStateCard from '@/components/PrimaryAsyncStateCard.vue'
+import type { AsyncPageState } from '@/types/ui'
 
 const { t } = useI18n()
 
 const dueCards = ref<any[]>([])
 const allSchedules = ref<any[]>([])
 const loading = ref(true)
+const pageState = ref<AsyncPageState>('loading')
+const pageError = ref('')
+const submitError = ref('')
+const submittingReview = ref(false)
 const showAnswer = ref(false)
 const currentIndex = ref(0)
 const lastReviewOutcome = ref<any | null>(null)
@@ -266,6 +286,9 @@ const buildWorkspaceRoute = (entry: any) => {
 }
 
 const fetchData = async () => {
+  pageError.value = ''
+  pageState.value = 'loading'
+  loading.value = true
   try {
     const [dueRes, allRes] = await Promise.all([
       api.get('/srs/due'),
@@ -273,8 +296,13 @@ const fetchData = async () => {
     ])
     dueCards.value = dueRes.data
     allSchedules.value = allRes.data
+    pageState.value = 'ready'
   } catch (e) {
     console.error('Failed to fetch SRS data:', e)
+    dueCards.value = []
+    allSchedules.value = []
+    pageError.value = t('srs.errorMessage')
+    pageState.value = 'error'
   } finally {
     loading.value = false
   }
@@ -283,6 +311,8 @@ const fetchData = async () => {
 const submitReview = async (quality: number) => {
   const card = currentCard.value
   if (!card) return
+  submitError.value = ''
+  submittingReview.value = true
   try {
     const response = await api.post(`/srs/review/${card.schedule_id}?quality=${quality}`)
     lastReviewOutcome.value = {
@@ -306,6 +336,9 @@ const submitReview = async (quality: number) => {
     currentIndex.value++
   } catch (e) {
     console.error('Failed to submit review:', e)
+    submitError.value = t('srs.submitErrorMessage')
+  } finally {
+    submittingReview.value = false
   }
 }
 
@@ -313,6 +346,11 @@ onMounted(fetchData)
 </script>
 
 <style scoped>
+.srs-review {
+  display: grid;
+  gap: 1rem;
+}
+
 .srs-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -409,6 +447,10 @@ onMounted(fetchData)
 .review-card h2 { margin-bottom: 1rem; }
 .review-prompt { color: var(--text-muted); margin-bottom: 1.5rem; }
 .review-action { margin-top: 1rem; }
+.submit-error {
+  margin-bottom: 1rem;
+  color: #fca5a5;
+}
 
 .answer-panel {
   text-align: left;
