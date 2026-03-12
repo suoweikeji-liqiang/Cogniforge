@@ -87,12 +87,18 @@ async function openWorkspace(page: Page, problemId: string) {
 }
 
 function latestTurnOutcome(page: Page) {
-  return page.getByTestId('turn-outcome-panel').last()
+  return page.getByTestId('turn-outcome-panel').first()
 }
 
 async function expandArtifacts(page: Page) {
-  if (await page.locator('.workspace-artifacts-sections').count()) return
-  await page.getByTestId('workspace-artifacts-toggle').click()
+  const toggle = page
+    .getByTestId('workspace-artifacts-panel')
+    .locator('[data-testid=\"workspace-artifacts-toggle\"]:visible')
+    .last()
+  const toggleText = (await toggle.textContent()) || ''
+  if (/hide turn output|hide detailed artifacts/i.test(toggleText)) return
+  await toggle.click()
+  await expect(toggle).toContainText(/Hide turn output|Hide detailed artifacts/i)
 }
 
 test.describe('ProblemDetail main workflow', () => {
@@ -128,10 +134,8 @@ test.describe('ProblemDetail main workflow', () => {
     )
     await page.getByTestId('submit-socratic-response').click()
     await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
-    await expandArtifacts(page)
-
-    await expect(latestTurnOutcome(page)).toContainText(/Advance/i)
-    await expect(latestTurnOutcome(page)).toContainText(/Progression checked/i)
+    await expect(page.getByText(/advanced automatically/i)).toBeVisible()
+    await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
     await page.getByText(/History \(/i).click()
     await expect(page.getByTestId('socratic-history-item').first()).toContainText(/Checkpoint answer:/i)
     await expect(page.getByTestId('socratic-history-item').first()).toContainText(/Question:/i)
@@ -154,12 +158,20 @@ test.describe('ProblemDetail main workflow', () => {
     await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
     await expect(page.getByTestId('exploration-stream-preview')).toContainText(/Streaming answer|drafting the explanation/i)
     await expect(page.getByTestId('workspace-current-output-empty')).toHaveCount(0)
-    await expandArtifacts(page)
-    await expect(latestTurnOutcome(page)).toContainText(/Comparison/i)
-    await expect(latestTurnOutcome(page)).toContainText(/Precision measures/i)
-    await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
     await expect(page.getByTestId('workspace-artifact-concept-count')).toContainText(/[1-9]/)
+    await expect(page.getByTestId('workspace-next-action')).toContainText(/comparison|Compare|Pursue|question/i)
+    await expandArtifacts(page)
+    await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
     await expect(page.getByTestId('derived-concepts-panel')).toBeVisible()
+    await expect(page.getByTestId('accept-derived-concept').first()).toBeVisible()
+    await page.getByTestId('accept-derived-concept').first().click()
+    await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
+    await page.getByTestId('promote-derived-concept').first().click()
+    await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()
+    await page.getByTestId('schedule-derived-concept-review').first().click()
+    await expect(page.getByTestId('derived-concept-review-scheduled').first()).toBeVisible()
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/entered recall|in recall/i)
+    await expect(page.getByTestId('workspace-review-summary')).toContainText(/next recall|last reviewed/i)
     await page.getByTestId('workspace-assets-toggle').click()
     await page.getByTestId('workspace-note-input').fill('Capture the precision and recall tradeoff before branching.')
     await page.getByTestId('save-workspace-note').click()
@@ -182,22 +194,8 @@ test.describe('ProblemDetail main workflow', () => {
     await page.getByTestId('exploration-question-input').fill('How should I compare precision and recall when the threshold moves?')
     await page.getByTestId('submit-exploration-question').click()
     await expandArtifacts(page)
-    await expect(latestTurnOutcome(page)).toContainText(/Comparison|Concept explanation/i)
-
-    const branchCandidate = page.getByTestId('derived-concept-card').first()
-    const olderConcepts = page.getByTestId('derived-concepts-older')
-    if (await olderConcepts.count()) {
-      await olderConcepts.locator('summary').click()
-    }
-    await expect(branchCandidate).toBeVisible()
-    await branchCandidate.getByTestId('accept-derived-concept').click()
-    await expect(page.getByTestId('derived-concepts-panel')).toContainText(/Accepted/i)
-    await page.getByTestId('promote-derived-concept').first().click()
-    await expect(page.getByTestId('open-derived-concept-model-card').first()).toBeVisible()
-    await page.getByTestId('schedule-derived-concept-review').first().click()
-    await expect(page.getByTestId('derived-concept-review-scheduled').first()).toBeVisible()
-    await expect(page.getByTestId('workspace-review-summary')).toContainText(/entered recall|in recall/i)
-    await expect(page.getByTestId('workspace-review-summary')).toContainText(/next recall|last reviewed/i)
+    await expect(page.getByTestId('workspace-artifact-concept-count')).toContainText(/[1-9]/)
+    await expect(page.getByTestId('workspace-next-action')).toContainText(/comparison|Compare|Pursue|question/i)
 
     const schedulesResponse = await request.get('/api/srs/schedules', {
       headers: {

@@ -45,6 +45,7 @@ async function createProblem(request: APIRequestContext, accessToken: string, ti
       title,
       description: '验证中文主工作区在较长文案下仍能保持主次清晰。',
       associated_concepts: ['精确率', '召回率'],
+      learning_mode: 'socratic',
     },
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -139,7 +140,25 @@ test('zh mainline surfaces stay localized across dashboard reviews and workspace
 
   await page.goto(`/problems/${problem.id}`)
   await expect(page.getByTestId('problem-detail-workspace')).toBeVisible()
-  await expect(page.getByTestId('current-learning-path')).toContainText(/精确率与召回率|阈值决策/)
+  await expect(page.getByTestId('current-learning-path')).toContainText(/精确率与召回率/)
+
+  await page.getByTestId('mode-switch-exploration').click()
+  await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
+  await page.getByTestId('mode-switch-socratic').click()
+  await expect(page.getByTestId('socratic-question-panel')).toBeVisible()
+  await page.getByTestId('socratic-response-input').fill('第一次回答：阈值越严格，通常精确率会上升，但召回率可能下降。')
+  await page.getByTestId('submit-socratic-response').click()
+  await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
+  await expect(page.getByTestId('socratic-response-stream-preview')).toBeHidden()
+  await expect(page.getByTestId('socratic-question-panel')).toContainText(/检查题|检查点/)
+
+  await page.getByTestId('socratic-response-input').fill('第二步回答：如果更怕漏掉真正的正例，就要降低阈值来换取更高召回率。')
+  await page.getByTestId('submit-socratic-response').click()
+  await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
+  await expect(page.getByTestId('socratic-response-stream-preview')).toBeHidden()
+  await expect(page.getByText(/已自动推进到下一步/)).toBeVisible()
+  await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
+  await expect(page.getByTestId('problem-detail-workspace')).toContainText(/阈值决策/)
 
   await page.getByTestId('mode-switch-exploration').click()
   await page.getByTestId('exploration-question-input').fill('精确率和召回率有什么区别？请给一个阈值变化的具体例子。')

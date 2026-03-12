@@ -42,6 +42,14 @@ def _stream_chunks(response: str) -> list[str]:
     return list(response)
 
 
+def _has_pass_signal(user_response: str) -> bool:
+    lowered = (user_response or "").casefold()
+    return any(token in lowered for token in ("checkpoint", "second", "threshold")) or any(
+        token in (user_response or "")
+        for token in ("检查点", "第二", "第二步", "阈值", "下一步")
+    )
+
+
 def _normalized_seed(title: str, description: str, existing_knowledge: list[str]) -> list[str]:
     cjk = _contains_cjk_text(title, description, *existing_knowledge)
     seed_terms = ["精确率", "召回率"] if cjk else ["precision", "recall"]
@@ -163,9 +171,8 @@ async def fake_generate_feedback_structured(
     retrieval_context: Optional[str] = None,
 ):
     await asyncio.sleep(0.08)
-    lowered = (user_response or "").casefold()
     cjk = _contains_cjk_text(user_response, concept, retrieval_context)
-    if "checkpoint" in lowered or "second" in lowered or "threshold" in lowered:
+    if _has_pass_signal(user_response):
         return {
             "correctness": "correct",
             "misconceptions": [],

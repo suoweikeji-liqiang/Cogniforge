@@ -590,7 +590,7 @@
                 </article>
               </div>
               <div
-                v-if="!hasCurrentInteractionOutput"
+                v-if="!hasContextualInteractionOutput"
                 class="workspace-current-output-empty"
                 data-testid="workspace-current-output-empty"
               >
@@ -624,7 +624,7 @@
                 <ProblemDerivedConceptsPanel
                   embedded
                   collapse-older
-                  :older-only="!hasCurrentInteractionOutput"
+                  :older-only="!hasContextualInteractionOutput"
                   :candidates="conceptCandidates"
                   :loading="candidateLoading"
                   :current-turn-id="artifactFocusTurnId"
@@ -648,7 +648,7 @@
                 <ProblemDerivedPathsPanel
                   embedded
                   collapse-older
-                  :older-only="!hasCurrentInteractionOutput"
+                  :older-only="!hasContextualInteractionOutput"
                   :candidates="pathCandidates"
                   :current-turn-id="artifactFocusTurnId"
                   :loading="pathCandidateLoading"
@@ -834,11 +834,20 @@ const latestExplorationTurn = computed(() => {
   }
   return qaHistory.value[0] || null
 })
-const currentInteractionMatchesContext = computed(() => (
+const currentInteractionContextKey = computed(() => (
+  buildCurrentInteractionStepKey(currentInteractionMode.value || learningMode.value)
+))
+const currentInteractionStepMatchesContext = computed(() => (
   Boolean(currentInteractionTurnId.value)
-  && hasCurrentInteractionOutput.value
   && currentInteractionMode.value === learningMode.value
   && Boolean(currentInteractionStepKey.value)
+  && currentInteractionStepKey.value === currentInteractionContextKey.value
+))
+const currentInteractionMatchesContext = computed(() => (
+  hasCurrentInteractionOutput.value && currentInteractionStepMatchesContext.value
+))
+const hasContextualInteractionOutput = computed(() => (
+  hasCurrentInteractionOutput.value && currentInteractionStepMatchesContext.value
 ))
 const latestResponse = computed(() => {
   if (!currentInteractionMatchesContext.value || currentInteractionMode.value !== 'socratic') return null
