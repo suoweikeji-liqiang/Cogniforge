@@ -448,6 +448,55 @@ async def test_problem_ask_sync_route_falls_back_when_answer_is_empty(client, mo
 
 
 @pytest.mark.asyncio
+async def test_problem_ask_rewrites_mismatched_answer_language_on_sync_route(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(
+        client,
+        headers,
+        title="Metric tradeoffs",
+        description="Understand precision, recall, and threshold tradeoffs.",
+    )
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "1. **精确率**：预测为正例的样本中，实际为正例的比例。\n"
+            "2. **召回率**：实际为正例的样本中，被预测为正例的比例。"
+        )
+
+    async def fake_rewrite(*args, **kwargs):
+        return (
+            "1. **Precision**: the share of predicted positives that are actually positive.\n"
+            "2. **Recall**: the share of actual positives that were successfully predicted."
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return ["precision", "recall"]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service.llm, "generate", fake_rewrite)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "What is the difference between precision and recall?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+
+    assert body["answer"].startswith("1. **Precision**")
+    assert "精确率" not in body["answer"]
+    assert body["llm_calls"] >= 2
+
+
+@pytest.mark.asyncio
 async def test_problem_ask_stream_returns_incremental_answer_and_final_payload(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
@@ -502,6 +551,65 @@ async def test_problem_ask_stream_returns_incremental_answer_and_final_payload(c
     assert payload["mode_metadata"]["turn_source"] == "ask"
     assert payload["llm_calls"] >= 1
     assert payload["trace_id"]
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_stream_rewrites_mismatched_answer_language_before_emitting_tokens(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "Accept": "text/event-stream",
+    }
+    problem = await create_problem(client, headers, title="Streamed language alignment")
+
+    async def fake_stream_generate_with_context(*args, **kwargs):
+        for token in [
+            "1. **精确率**：预测为正例的样本中，实际为正例的比例。",
+            "2. **召回率**：实际为正例的样本中，被预测为正例的比例。",
+        ]:
+            yield token
+
+    async def fake_rewrite(*args, **kwargs):
+        return (
+            "1. **Precision**: the share of predicted positives that are actually positive.\n"
+            "2. **Recall**: the share of actual positives that were successfully predicted."
+        )
+
+    monkeypatch.setattr(model_os_service, "stream_generate_with_context", fake_stream_generate_with_context)
+    monkeypatch.setattr(model_os_service.llm, "generate", fake_rewrite)
+
+    async with client.stream(
+        "POST",
+        f"/api/problems/{problem['id']}/ask/stream",
+        json={
+            "question": "What is the difference between precision and recall?",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    ) as response:
+        assert response.status_code == 200
+        body = ""
+        async for chunk in response.aiter_text():
+            body += chunk
+
+    normalized = body.replace("\r\n", "\n")
+    assert "event: token" in normalized
+    assert "data: 1. **Precision**: the share of predicted positives" in normalized
+    assert "data: 1. **精确率**" not in normalized
+
+    final_blocks = [block for block in normalized.split("\n\n") if "event: final" in block]
+    assert final_blocks
+    final_data = "\n".join(
+        line.removeprefix("data: ")
+        for line in final_blocks[-1].splitlines()
+        if line.startswith("data: ")
+    )
+    payload = json.loads(final_data)
+    assert payload["answer"].startswith("1. **Precision**")
+    assert "精确率" not in payload["answer"]
 
 
 @pytest.mark.asyncio
@@ -1110,6 +1218,73 @@ async def test_problem_ask_filters_low_signal_concept_candidates(client, monkeyp
     ratio_candidate = next(item for item in stored_turn_candidates if item["concept_text"] == "比例")
     assert "积分（I）" in ratio_candidate["evidence_snippet"]
     assert "对噪声敏感" in ratio_candidate["evidence_snippet"]
+
+
+@pytest.mark.asyncio
+async def test_problem_ask_strips_markdown_fragments_from_extracted_concepts(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(
+        client,
+        headers,
+        title="精确率与召回率",
+        description="理解精确率、召回率和阈值变化的关系。",
+    )
+
+    async def fake_answer(*args, **kwargs):
+        return (
+            "1. **精确率**：在所有被预测为正类的样本中，实际为正类的比例。\n"
+            "2. **召回率**：在所有实际为正类的样本中，被预测为正类的比例。\n"
+            "3. 在代码变更的缺陷检测中，降低阈值通常会提高召回率。"
+        )
+
+    async def fake_extract(*args, **kwargs):
+        return [
+            "1.**精确率",
+            "召回率的定义**",
+            "在代码变更的缺陷检测中",
+        ]
+
+    monkeypatch.setattr(model_os_service, "generate_with_context", fake_answer)
+    monkeypatch.setattr(model_os_service, "extract_related_concepts_resilient", fake_extract)
+
+    ask_response = await client.post(
+        f"/api/problems/{problem['id']}/ask",
+        json={
+            "question": "精确率和召回率有什么区别？",
+            "learning_mode": "exploration",
+            "answer_mode": "direct",
+        },
+        headers=headers,
+    )
+    assert ask_response.status_code == 200
+    body = ask_response.json()
+
+    turn_candidates = {item["name"] for item in body["derived_candidates"]}
+    assert "精确率" in turn_candidates
+    assert "召回率" in turn_candidates
+    assert "1.**精确率" not in turn_candidates
+    assert "召回率的定义**" not in turn_candidates
+    assert "在代码变更的缺陷检测中" not in turn_candidates
+
+    candidates_response = await client.get(
+        f"/api/problems/{problem['id']}/concept-candidates",
+        headers=headers,
+    )
+    assert candidates_response.status_code == 200
+    stored_turn_candidates = [
+        item
+        for item in candidates_response.json()
+        if item["source_turn_id"] == body["turn_id"]
+    ]
+    stored_turn_candidate_names = {item["concept_text"] for item in stored_turn_candidates}
+    assert "精确率" in stored_turn_candidate_names
+    assert "召回率" in stored_turn_candidate_names
+    assert "1.**精确率" not in stored_turn_candidate_names
+    assert "召回率的定义**" not in stored_turn_candidate_names
+    assert "在代码变更的缺陷检测中" not in stored_turn_candidate_names
 
 
 @pytest.mark.asyncio
