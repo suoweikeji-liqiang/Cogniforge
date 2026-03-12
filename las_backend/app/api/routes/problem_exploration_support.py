@@ -145,6 +145,24 @@ def _pick_secondary_concept(
     return step_concept or primary
 
 
+def _build_prerequisite_path_title(
+    *,
+    primary: str,
+    prerequisite: str,
+    cjk: bool,
+) -> str:
+    normalized_primary = _sanitize_question_concept_phrase(primary)
+    normalized_prerequisite = _sanitize_question_concept_phrase(prerequisite)
+    primary_key = model_os_service.normalize_concept_key(normalized_primary)
+    prerequisite_key = model_os_service.normalize_concept_key(normalized_prerequisite)
+
+    if normalized_prerequisite and prerequisite_key and prerequisite_key != primary_key:
+        return normalized_prerequisite
+    if cjk:
+        return f"{normalized_primary or '当前主题'}前置基础"
+    return f"Prerequisites for '{normalized_primary or 'the current topic'}'"
+
+
 def _select_answered_concepts(
     *,
     question: str,
@@ -312,18 +330,19 @@ def _build_exploration_path_suggestions(
 
     suggestions: List[dict] = []
     if answer_type == "prerequisite_explanation":
+        prerequisite_title = _build_prerequisite_path_title(
+            primary=primary,
+            prerequisite=secondary,
+            cjk=cjk,
+        )
         suggestions.append(
             {
                 "type": "prerequisite",
-                "title": (
-                    f"先补“{secondary}”，再回到“{primary}”"
-                    if cjk
-                    else f"Study '{secondary}' before returning to '{primary}'"
-                ),
+                "title": prerequisite_title,
                 "reason": (
-                    f"这个问题暴露了对“{primary}”前置知识的依赖。"
+                    f"先补“{prerequisite_title}”，再回到“{primary}”。"
                     if cjk
-                    else f"This question suggests '{primary}' depends on prerequisite knowledge first."
+                    else f"Study '{prerequisite_title}' first, then return to '{primary}'."
                 ),
             }
         )

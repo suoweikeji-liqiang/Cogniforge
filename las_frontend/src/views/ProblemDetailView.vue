@@ -81,10 +81,12 @@
                   <span class="workspace-summary-label">{{ t('problemDetail.currentPath') }}</span>
                   <strong>{{ workspacePathSummary }}</strong>
                   <p v-if="learningPath?.branch_reason">{{ learningPath.branch_reason }}</p>
-                  <p v-else-if="learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined">
+                  <p v-if="learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined">
                     {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
                   </p>
-                  <p v-else>{{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}</p>
+                  <p v-if="!learningPath?.branch_reason && !(learningPath?.parent_path_id && learningPath?.return_step_id !== null && learningPath?.return_step_id !== undefined)">
+                    {{ t('problemDetail.progress') }}: {{ completedSteps }}/{{ totalSteps || 0 }}
+                  </p>
                 </article>
                 <article class="workspace-status-pill">
                   <span class="workspace-summary-label">{{ t('problemDetail.currentMode') }}</span>
@@ -294,6 +296,12 @@
                   </span>
                 </div>
                 <p v-if="learningPath.branch_reason" class="section-subtitle">{{ learningPath.branch_reason }}</p>
+                <p
+                  v-if="learningPath.parent_path_id && learningPath.return_step_id !== null && learningPath.return_step_id !== undefined"
+                  class="section-subtitle"
+                >
+                  {{ t('problemDetail.returnStepLabel', { step: learningPath.return_step_id + 1 }) }}
+                </p>
                 <div v-if="allLearningPaths.length > 1" class="path-nav-list">
                   <button
                     v-for="path in allLearningPaths"
@@ -468,6 +476,9 @@
                       <p v-if="response.structured_feedback.mastery_score !== undefined">
                         <strong>{{ t('problemDetail.masteryScore') }}:</strong> {{ response.structured_feedback.mastery_score }}
                         · <strong>{{ t('problemDetail.confidence') }}:</strong> {{ formatConfidence(response.structured_feedback.confidence) }}
+                      </p>
+                      <p v-if="response.structured_feedback.misconceptions?.length">
+                        <strong>{{ t('feedback.misconceptions') }}:</strong> {{ response.structured_feedback.misconceptions.join(' / ') }}
                       </p>
                       <p v-if="response.structured_feedback.suggestions?.length">
                         <strong>{{ t('feedback.suggestions') }}:</strong> {{ response.structured_feedback.suggestions.join(' / ') }}

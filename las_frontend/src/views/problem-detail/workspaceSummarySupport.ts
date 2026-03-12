@@ -258,6 +258,12 @@ export const createProblemDetailWorkspaceSummarySupport = ({
     return pathCandidates.value.filter((candidate) => ['planned', 'bookmarked'].includes(candidate.status)).length
   })
 
+  const activePathParentTitle = computed(() => {
+    const parentId = String(learningPath.value?.parent_path_id || '')
+    if (!parentId) return ''
+    return allLearningPaths.value.find((path: any) => String(path.id || '') === parentId)?.title || ''
+  })
+
   const workspaceReviewSummary = computed(() => {
     if (!problemReviewEntries.value.length) {
       return t('problemDetail.workspaceReviewEmpty')
@@ -312,6 +318,13 @@ export const createProblemDetailWorkspaceSummarySupport = ({
     }
     if (recallEntry?.recommended_action === 'extend_or_compare' && pendingPathFollowUpCount.value) {
       return t('problemDetail.workspaceNextReviewExtend', { concept: recallConceptLabel })
+    }
+    if (learningPath.value?.kind === 'prerequisite' && currentStep.value?.concept) {
+      return t('problemDetail.workspaceNextPrerequisiteBranch', {
+        concept: currentStep.value.concept,
+        step: Number(learningPath.value?.return_step_id ?? 0) + 1,
+        target: activePathParentTitle.value || problem.value?.title || t('problemDetail.title'),
+      })
     }
     if (learningMode.value === 'exploration') {
       return latestQA.value?.next_learning_actions?.[0]

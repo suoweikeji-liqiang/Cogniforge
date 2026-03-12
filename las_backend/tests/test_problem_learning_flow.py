@@ -645,11 +645,11 @@ async def test_problem_response_fallback_localizes_pid_follow_up_and_path_candid
     assert response.status_code == 200
     body = response.json()
 
-    assert body["follow_up"]["question"].startswith("如果换一个边界情况")
+    assert "具体例子" in body["follow_up"]["question"]
     assert "正确性：" in (body.get("system_feedback") or "")
     assert body["derived_path_candidates"]
     assert "Fill prerequisite foundations" not in body["derived_path_candidates"][0]["title"]
-    assert body["derived_path_candidates"][0]["title"].startswith("先补“")
+    assert body["derived_path_candidates"][0]["title"].endswith("前置基础")
 
 
 @pytest.mark.asyncio
@@ -1741,6 +1741,7 @@ async def test_problem_path_candidates_from_exploration_can_be_decided(client, d
     assert candidate["type"] == "prerequisite"
     assert candidate["recommended_insertion"] == "insert_before_current_main"
     assert candidate["source_turn_id"] == body["turn_id"]
+    assert candidate["title"] == "State-space model"
 
     decision_response = await client.post(
         f"/api/problems/{problem['id']}/path-candidates/{candidate['id']}/decide",
@@ -1751,6 +1752,16 @@ async def test_problem_path_candidates_from_exploration_can_be_decided(client, d
     decision_body = decision_response.json()
     assert decision_body["candidate"]["status"] == "planned"
     assert decision_body["candidate"]["selected_insertion"] == "insert_before_current_main"
+
+    active_path = await client.get(
+        f"/api/problems/{problem['id']}/learning-path",
+        headers=headers,
+    )
+    assert active_path.status_code == 200
+    active_body = active_path.json()
+    assert active_body["kind"] == "prerequisite"
+    assert active_body["title"] == "State-space model"
+    assert active_body["parent_path_id"] is not None
 
     candidates_response = await client.get(
         f"/api/problems/{problem['id']}/path-candidates",
@@ -1774,7 +1785,7 @@ async def test_problem_path_candidates_from_exploration_can_be_decided(client, d
 
 
 @pytest.mark.asyncio
-async def test_redeciding_insert_before_current_main_reactivates_main_path(client, db_session, monkeypatch):
+async def test_redeciding_insert_before_current_main_reactivates_prerequisite_branch(client, db_session, monkeypatch):
     from app.models.entities.user import LearningPath
     from app.services.model_os_service import model_os_service
 
@@ -1814,22 +1825,21 @@ async def test_redeciding_insert_before_current_main_reactivates_main_path(clien
     )
     assert first_decision.status_code == 200
 
-    active_main_response = await client.get(
+    active_branch_response = await client.get(
         f"/api/problems/{problem['id']}/learning-path",
         headers=headers,
     )
-    assert active_main_response.status_code == 200
-    active_main = active_main_response.json()
-    assert active_main["kind"] == "main"
-    main_path_id = active_main["id"]
-    main_step_count = len(active_main["path_data"])
-    main_current_step = active_main["current_step"]
+    assert active_branch_response.status_code == 200
+    active_branch = active_branch_response.json()
+    assert active_branch["kind"] == "prerequisite"
+    branch_path_id = active_branch["id"]
+    branch_title = active_branch["title"]
 
     branch_path = LearningPath(
         problem_id=problem["id"],
         title="Temporary branch detour",
         kind="branch",
-        parent_path_id=main_path_id,
+        parent_path_id=active_branch["parent_path_id"],
         source_turn_id=candidate["source_turn_id"],
         return_step_id=0,
         branch_reason="Temporary detour for reactivation coverage.",
@@ -1868,10 +1878,9 @@ async def test_redeciding_insert_before_current_main_reactivates_main_path(clien
     )
     assert restored_path.status_code == 200
     restored_body = restored_path.json()
-    assert restored_body["id"] == main_path_id
-    assert restored_body["kind"] == "main"
-    assert len(restored_body["path_data"]) == main_step_count
-    assert restored_body["current_step"] == main_current_step
+    assert restored_body["id"] == branch_path_id
+    assert restored_body["kind"] == "prerequisite"
+    assert restored_body["title"] == branch_title
 
 
 @pytest.mark.asyncio
@@ -2089,7 +2098,7 @@ async def test_branch_repeated_concept_keeps_branch_specific_candidate_for_reinf
 
 
 @pytest.mark.asyncio
-async def test_insert_before_current_main_updates_main_path(client, monkeypatch):
+async def test_insert_before_current_main_creates_prerequisite_branch_and_keeps_main_path(client, monkeypatch):
     from app.services.model_os_service import model_os_service
 
     tokens = await register_and_login(client)
@@ -2143,10 +2152,55 @@ async def test_insert_before_current_main_updates_main_path(client, monkeypatch)
     )
     assert after_path.status_code == 200
     after_body = after_path.json()
-    assert after_body["kind"] == "main"
-    assert len(after_body["path_data"]) >= before_count + 2
+    assert after_body["kind"] == "prerequisite"
+    assert after_body["title"] == "State-space model"
     assert after_body["current_step"] == 0
-    assert "State-space model" in after_body["path_data"][0]["concept"] or candidate["title"] in after_body["path_data"][0]["concept"]
+    assert after_body["path_data"][0]["concept"] == "State-space model"
+
+    main_paths = await client.get(
+        f"/api/problems/{problem['id']}/learning-paths",
+        headers=headers,
+    )
+    assert main_paths.status_code == 200
+    restored_main = next(item for item in main_paths.json() if item["kind"] == "main")
+    assert len(restored_main["path_data"]) == before_count
+    assert restored_main["current_step"] == before_body["current_step"]
+
+
+@pytest.mark.asyncio
+async def test_problem_response_synthesizes_gap_diagnosis_when_feedback_omits_issue(client, monkeypatch):
+    from app.services.model_os_service import model_os_service
+
+    tokens = await register_and_login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    problem = await create_problem(client, headers, title="Gap diagnosis")
+
+    async def fake_feedback(*args, **kwargs):
+        return {
+            "correctness": "partially correct",
+            "misconceptions": [],
+            "suggestions": ["Please add one concrete example before you continue."],
+            "next_question": "What boundary case breaks your explanation?",
+            "mastery_score": 61,
+            "dimension_scores": {"accuracy": 62, "completeness": 58, "transfer": 60, "rigor": 59},
+            "confidence": 0.68,
+            "pass_stage": False,
+            "decision_reason": "Needs another Socratic turn before progression.",
+        }
+
+    monkeypatch.setattr(model_os_service, "generate_feedback_structured", fake_feedback)
+
+    response = await client.post(
+        f"/api/problems/{problem['id']}/responses",
+        json={"problem_id": problem["id"], "user_response": "It mostly works, but I have not tested it with an example."},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["structured_feedback"]["misconceptions"]
+    assert "example" in body["structured_feedback"]["misconceptions"][0].lower()
+    assert "Misconceptions:" in (body.get("system_feedback") or "")
 
 
 @pytest.mark.asyncio

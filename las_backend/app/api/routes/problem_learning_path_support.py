@@ -152,14 +152,14 @@ def _build_path_steps_from_candidate(
             },
             {
                 "concept": (
-                    f"Reconnect {title} to {anchor_concept}"
+                    f"Connect '{title}' back to '{anchor_concept}'"
                     if not cjk
-                    else f"把“{title}”重新接回“{anchor_concept}”"
+                    else f"把“{title}”接回“{anchor_concept}”"
                 ),
                 "description": (
-                    f"Explain how '{title}' supports the original step '{anchor_concept}'."
+                    f"Explain how '{title}' unlocks the original step '{anchor_concept}', then check if you can return."
                     if not cjk
-                    else f"说明“{title}”如何支撑原主线步骤“{anchor_concept}”。"
+                    else f"说明“{title}”如何支撑原主线步骤“{anchor_concept}”，并确认现在是否可以返回。"
                 ),
                 "resources": [title, anchor_concept],
             },
