@@ -45,6 +45,7 @@ async function createProblem(request: APIRequestContext, accessToken: string, ti
       title,
       description: 'Problem detail framing context',
       associated_concepts: ['threshold'],
+      learning_mode: 'socratic',
     },
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -67,13 +68,21 @@ async function failOnce(route: Route, attempts: { value: number }) {
   return false
 }
 
-async function openCreateProblemModal(page: Page, title: string) {
+async function openCreateProblemModal(page: Page, title: string, mode?: 'socratic' | 'exploration') {
   await page.getByRole('button', { name: /New Problem/i }).click()
   const modal = page.locator('.modal').first()
   await modal.locator('.form-group').nth(0).locator('input').fill(title)
   await modal.locator('.form-group').nth(1).locator('textarea').fill('Created from the Problems library flow.')
   await modal.locator('.form-group').nth(2).locator('input').fill('precision, recall')
-  await modal.getByRole('button', { name: /^Add$/i }).click()
+
+  if (mode === 'socratic') {
+    await modal.getByTestId('problems-create-mode-socratic').click()
+  }
+  if (mode === 'exploration') {
+    await modal.getByTestId('problems-create-mode-exploration').click()
+  }
+
+  return modal
 }
 
 test('dashboard shows a retryable error state during init failure', async ({ page, request }) => {
@@ -90,7 +99,7 @@ test('dashboard shows a retryable error state during init failure', async ({ pag
   await page.goto('/dashboard')
   await expect(page.getByTestId('dashboard-error-state')).toBeVisible()
   await page.getByTestId('dashboard-error-retry').click()
-  await expect(page.getByTestId('dashboard-focus-card')).toBeVisible()
+  await expect(page.getByTestId('continue-focus-card')).toBeVisible()
 })
 
 test('problem list shows a retryable error state during init failure', async ({ page, request }) => {
@@ -170,39 +179,49 @@ test('problem detail shows a retryable error state during init failure', async (
   await page.goto(`/problems/${problem.id}`)
   await expect(page.getByTestId('problem-detail-error-state')).toBeVisible()
   await page.getByTestId('problem-detail-error-retry').click()
-  await expect(page.getByTestId('workspace-overview')).toBeVisible()
+  await expect(page.getByTestId('problem-learning-header')).toBeVisible()
+  await expect(page.getByTestId('problem-learning-contract')).toBeVisible()
 })
 
-test('problem creation can pause at the mode chooser and keep the user on the list', async ({ page, request }) => {
+test('problem creation requires choosing a learning protocol before submit', async ({ page, request }) => {
   // Contract Assertions:
-  // - Critical Path: problem creation must preserve a clear next decision before entering the workspace.
-  // - Base Button (.btn): chooser actions remain visible and operable after problem creation.
+  // - Critical Path: problem creation must make the learning protocol explicit before workspace entry.
+  // - Base Button (.btn): create controls remain visible and respect disabled state until protocol is chosen.
   const title = `Chooser ${randomUUID().slice(0, 6)}`
   await authenticate(page, request)
   await page.goto('/problems')
 
-  await openCreateProblemModal(page, title)
-  await expect(page.getByTestId('problem-start-mode-chooser')).toBeVisible()
-  await page.getByRole('button', { name: /Close/i }).click()
-
-  await expect(page).toHaveURL(/\/problems$/)
-  await expect(page.getByTestId('problem-start-mode-chooser')).toHaveCount(0)
-  await expect(page.getByText(title)).toBeVisible()
+  const modal = await openCreateProblemModal(page, title)
+  await expect(modal.getByRole('button', { name: /^Add$/i })).toBeDisabled()
+  await modal.getByTestId('problems-create-mode-socratic').click()
+  await expect(modal.getByRole('button', { name: /^Add$/i })).toBeEnabled()
 })
 
 test('problem creation can enter the workspace directly in exploration mode', async ({ page, request }) => {
   // Contract Assertions:
   // - Critical Path: problem creation must support choosing the exploration protocol before workspace entry.
-  // - Base Button (.btn): chooser actions remain visible and operable after problem creation.
+  // - Base Button (.btn): protocol choice remains visible and operable inside the create flow.
   const title = `Exploration ${randomUUID().slice(0, 6)}`
   await authenticate(page, request)
   await page.goto('/problems')
 
-  await openCreateProblemModal(page, title)
-  await expect(page.getByTestId('problem-start-mode-chooser')).toBeVisible()
-  await page.getByTestId('problem-start-mode-exploration').click()
+  const modal = await openCreateProblemModal(page, title, 'exploration')
+  await modal.getByRole('button', { name: /^Add$/i }).click()
 
   await expect(page).toHaveURL(/\/problems\/.+/)
-  await expect(page.getByTestId('problem-start-mode-chooser')).toHaveCount(0)
+  await expect(page.getByTestId('problem-learning-header')).toBeVisible()
   await expect(page.getByTestId('mode-switch-exploration')).toHaveClass(/active/)
+})
+
+test('problem creation can enter the workspace directly in socratic mode', async ({ page, request }) => {
+  const title = `Socratic ${randomUUID().slice(0, 6)}`
+  await authenticate(page, request)
+  await page.goto('/problems')
+
+  const modal = await openCreateProblemModal(page, title, 'socratic')
+  await modal.getByRole('button', { name: /^Add$/i }).click()
+
+  await expect(page).toHaveURL(/\/problems\/.+/)
+  await expect(page.getByTestId('problem-learning-header')).toBeVisible()
+  await expect(page.getByTestId('mode-switch-socratic')).toHaveClass(/active/)
 })

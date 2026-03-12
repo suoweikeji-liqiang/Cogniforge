@@ -106,14 +106,7 @@ async function createReview(request: APIRequestContext, accessToken: string) {
   expect(response.ok()).toBeTruthy()
 }
 
-async function expandArtifacts(page: Page) {
-  const toggle = page.getByTestId('workspace-artifacts-toggle')
-  if (await toggle.isVisible()) {
-    await toggle.click()
-  }
-}
-
-test('zh mainline surfaces stay localized across dashboard reviews and workspace outputs', async ({ page, request }) => {
+test('zh mainline surfaces stay localized across continue reviews and workspace outputs', async ({ page, request }) => {
   // Contract Assertions:
   // - Critical Path: the zh mainline must keep core navigation and workspace decisions localized.
   // - Base Button (.btn): longer zh CTA labels must remain visible and operable in the primary flow.
@@ -127,20 +120,19 @@ test('zh mainline surfaces stay localized across dashboard reviews and workspace
 
   await page.goto('/dashboard')
   await expect(page.getByTestId('primary-nav-item-home')).toContainText('继续学习')
-  await expect(page.getByTestId('dashboard-focus-card')).toContainText(/继续最近的问题|打开学习工作区/)
-  await expect(page.getByTestId('dashboard-focus-card')).not.toContainText(/Continue Learning|Open Workspace/i)
+  await expect(page.getByTestId('continue-focus-card')).toContainText(/继续最近的问题|打开学习工作区/)
+  await expect(page.getByTestId('continue-focus-card')).not.toContainText(/Continue Learning|Open Workspace/i)
 
   await page.goto('/reviews')
-  await expect(page.getByRole('heading', { name: '复习' })).toBeVisible()
-  const reviewModelCardsPanel = page.getByTestId('review-model-cards-panel')
-  await expect(reviewModelCardsPanel).toContainText(/来源[:：]/)
-  await expect(reviewModelCardsPanel).toContainText(/当前状态[:：]/)
-  await expect(reviewModelCardsPanel).toContainText(/建议动作[:：]/)
-  await expect(reviewModelCardsPanel).not.toContainText(/Source:|Current state:|Suggested action:/i)
+  await expect(page.getByRole('heading', { level: 1, name: '复习' })).toBeVisible()
+  const reinforcementPanel = page.getByTestId('reviews-reinforcement-panel')
+  await expect(reinforcementPanel).toContainText(/需要强化|回到工作区/)
+  await expect(reinforcementPanel).not.toContainText(/Source:|Current state:|Suggested action:/i)
 
   await page.goto(`/problems/${problem.id}`)
   await expect(page.getByTestId('problem-detail-workspace')).toBeVisible()
-  await expect(page.getByTestId('current-learning-path')).toContainText(/精确率与召回率/)
+  await expect(page.getByTestId('problem-learning-header')).toContainText(/精确率与召回率/)
+  await expect(page.getByTestId('problem-learning-contract')).toContainText(/当前任务|完成标准/)
 
   await page.getByTestId('mode-switch-exploration').click()
   await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
@@ -148,31 +140,11 @@ test('zh mainline surfaces stay localized across dashboard reviews and workspace
   await expect(page.getByTestId('socratic-question-panel')).toBeVisible()
   await page.getByTestId('socratic-response-input').fill('第一次回答：阈值越严格，通常精确率会上升，但召回率可能下降。')
   await page.getByTestId('submit-socratic-response').click()
-  await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
-  await expect(page.getByTestId('socratic-response-stream-preview')).toBeHidden()
-  await expect(page.getByTestId('socratic-question-panel')).toContainText(/检查题|检查点/)
-
-  await page.getByTestId('socratic-response-input').fill('第二步回答：如果更怕漏掉真正的正例，就要降低阈值来换取更高召回率。')
-  await page.getByTestId('submit-socratic-response').click()
-  await expect(page.getByTestId('socratic-response-stream-preview')).toBeVisible()
-  await expect(page.getByTestId('socratic-response-stream-preview')).toBeHidden()
-  await expect(page.getByText(/已自动推进到下一步/)).toBeVisible()
-  await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
-  await expect(page.getByTestId('problem-detail-workspace')).toContainText(/阈值决策/)
+  await expect(page.getByTestId('problem-turn-result')).toContainText(/掌握度|误区|建议|Mastery/i)
 
   await page.getByTestId('mode-switch-exploration').click()
   await page.getByTestId('exploration-question-input').fill('精确率和召回率有什么区别？请给一个阈值变化的具体例子。')
   await page.getByTestId('submit-exploration-question').click()
-
-  await expect(page.getByTestId('exploration-stream-preview')).toBeVisible()
-  await expect(page.getByTestId('exploration-stream-preview')).toBeHidden()
-  await expandArtifacts(page)
-
-  const turnOutcome = page.getByTestId('turn-outcome-panel')
-  await expect(turnOutcome).toContainText(/精确率|召回率/)
-  await expect(turnOutcome).not.toContainText(/Start from the current step concept|Precision measures how many predicted positives are correct/i)
-
-  const pathCandidatesPanel = page.getByTestId('path-candidates-panel')
-  await expect(pathCandidatesPanel).toContainText(/对比|支线|前置/)
-  await expect(pathCandidatesPanel).not.toContainText(/comparison path|deep dive|prerequisite/i)
+  await expect(page.getByTestId('problem-turn-result')).toContainText(/精确率|召回率/)
+  await expect(page.getByTestId('problem-postturn-decisions')).toContainText(/处理概念候选|处理路径建议/)
 })

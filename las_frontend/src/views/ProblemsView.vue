@@ -2,6 +2,7 @@
   <div class="problems-page">
     <div class="page-header">
       <div>
+        <p class="page-kicker">{{ t('nav.problems') }}</p>
         <h1>{{ t('problems.title') }}</h1>
         <p class="page-subtitle">{{ t('problems.subtitle') }}</p>
       </div>
@@ -10,7 +11,7 @@
       </button>
     </div>
 
-    <div class="filters-bar">
+    <div class="search-row">
       <input
         v-model="searchQuery"
         type="text"
@@ -18,23 +19,41 @@
         data-testid="problems-search-input"
         :placeholder="t('problems.searchProblems')"
       />
-      <select v-model="learningModeFilter" class="filter-select" data-testid="problems-mode-filter">
-        <option value="all">{{ t('problems.filterAllModes') }}</option>
-        <option value="socratic">{{ t('problems.filterModeSocratic') }}</option>
-        <option value="exploration">{{ t('problems.filterModeExploration') }}</option>
-      </select>
-      <select v-model="statusFilter" class="filter-select" data-testid="problems-status-filter">
-        <option value="all">{{ t('problems.filterAllStatuses') }}</option>
-        <option value="new">{{ t('problems.filterStatusNew') }}</option>
-        <option value="in-progress">{{ t('problems.filterStatusInProgress') }}</option>
-        <option value="completed">{{ t('problems.filterStatusCompleted') }}</option>
-      </select>
-      <select v-model="sortBy" class="filter-select" data-testid="problems-sort-filter">
-        <option value="updated_desc">{{ t('problems.sortRecentActivity') }}</option>
-        <option value="created_desc">{{ t('problems.sortNewest') }}</option>
-        <option value="created_asc">{{ t('problems.sortOldest') }}</option>
-      </select>
     </div>
+
+    <details class="filters-panel" :open="hasSecondaryFilters" data-testid="problems-filters-panel">
+      <summary>
+        <span>{{ t('problems.filtersTitle') }}</span>
+        <span v-if="activeFilterCount" class="filters-count">{{ activeFilterCount }}</span>
+      </summary>
+      <p class="filters-hint">{{ t('problems.filtersHint') }}</p>
+      <div class="filters-bar">
+        <select v-model="learningModeFilter" class="filter-select" data-testid="problems-mode-filter">
+          <option value="all">{{ t('problems.filterAllModes') }}</option>
+          <option value="socratic">{{ t('problems.filterModeSocratic') }}</option>
+          <option value="exploration">{{ t('problems.filterModeExploration') }}</option>
+        </select>
+        <select v-model="statusFilter" class="filter-select" data-testid="problems-status-filter">
+          <option value="all">{{ t('problems.filterAllStatuses') }}</option>
+          <option value="new">{{ t('problems.filterStatusNew') }}</option>
+          <option value="in-progress">{{ t('problems.filterStatusInProgress') }}</option>
+          <option value="completed">{{ t('problems.filterStatusCompleted') }}</option>
+        </select>
+        <select v-model="sortBy" class="filter-select" data-testid="problems-sort-filter">
+          <option value="updated_desc">{{ t('problems.sortRecentActivity') }}</option>
+          <option value="created_desc">{{ t('problems.sortNewest') }}</option>
+          <option value="created_asc">{{ t('problems.sortOldest') }}</option>
+        </select>
+        <button
+          v-if="hasSecondaryFilters"
+          type="button"
+          class="btn btn-secondary filters-reset"
+          @click="clearFilters"
+        >
+          {{ t('problems.clearFilters') }}
+        </button>
+      </div>
+    </details>
 
     <PrimaryAsyncStateCard
       v-if="pageState === 'error'"
@@ -51,25 +70,30 @@
 
     <template v-else-if="problems.length">
       <div class="problems-grid" data-testid="problems-grid">
-      <router-link 
-        v-for="problem in problems" 
-        :key="problem.id" 
-        :to="`/problems/${problem.id}`"
-        class="problem-card"
-      >
-        <h3>{{ problem.title }}</h3>
-        <p>{{ problem.description || t('problems.noProblems') }}</p>
-        <div class="problem-meta">
-          <span class="status" :class="problem.status">{{ problem.status }}</span>
-          <span v-if="problem.learning_mode" class="mode-badge">
-            {{ problem.learning_mode === 'exploration' ? t('problemDetail.modeExploration') : t('problemDetail.modeSocratic') }}
-          </span>
-          <span class="concepts" v-if="problem.associated_concepts?.length">
-            {{ problem.associated_concepts.length }} {{ t('problems.concepts') }}
-          </span>
-        </div>
-        <div class="problem-cta">{{ t('problems.openWorkspace') }} →</div>
-      </router-link>
+        <router-link
+          v-for="problem in problems"
+          :key="problem.id"
+          :to="`/problems/${problem.id}`"
+          class="problem-card"
+        >
+          <div class="problem-card-head">
+            <div>
+              <h3>{{ problem.title }}</h3>
+              <p>{{ problem.description || t('problems.createFirst') }}</p>
+            </div>
+            <span class="status" :class="problem.status">{{ problem.status }}</span>
+          </div>
+          <div class="problem-meta-row">
+            <span v-if="problem.learning_mode" class="mode-badge">
+              {{ problem.learning_mode === 'exploration' ? t('problemDetail.modeExploration') : t('problemDetail.modeSocratic') }}
+            </span>
+            <span class="meta-pill" v-if="problem.associated_concepts?.length">
+              {{ problem.associated_concepts.length }} {{ t('problems.concepts') }}
+            </span>
+            <span class="meta-pill">{{ formatDate(problem.updated_at || problem.created_at) }}</span>
+          </div>
+          <div class="problem-cta">{{ t('problems.openWorkspace') }} →</div>
+        </router-link>
       </div>
       <div v-if="hasMoreProblems" class="load-more-row">
         <button
@@ -83,10 +107,10 @@
         </button>
       </div>
     </template>
-    
+
     <p v-else class="empty">{{ emptyProblemsMessage }}</p>
-    
-    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+
+    <div v-if="showCreateModal" class="modal-overlay" @click.self="closeCreateModal">
       <div class="modal">
         <h2>{{ t('problems.newProblem') }}</h2>
         <form @submit.prevent="createProblem">
@@ -102,53 +126,42 @@
             <label>{{ t('problems.concepts') }}</label>
             <input v-model="newProblem.concepts" type="text" placeholder="e.g., control theory, PID, systems" />
           </div>
+          <div class="form-group">
+            <label>{{ t('problems.startModeTitle') }}</label>
+            <p class="field-hint">{{ t('problems.startModeMessage') }}</p>
+            <div class="mode-choice-grid">
+              <button
+                type="button"
+                class="mode-choice"
+                :class="{ active: newProblem.learning_mode === 'socratic' }"
+                data-testid="problems-create-mode-socratic"
+                @click="newProblem.learning_mode = 'socratic'"
+              >
+                <strong>{{ t('problems.startModeSocratic') }}</strong>
+                <span>{{ t('problemDetail.modeSocraticHint') }}</span>
+              </button>
+              <button
+                type="button"
+                class="mode-choice"
+                :class="{ active: newProblem.learning_mode === 'exploration' }"
+                data-testid="problems-create-mode-exploration"
+                @click="newProblem.learning_mode = 'exploration'"
+              >
+                <strong>{{ t('problems.startModeExploration') }}</strong>
+                <span>{{ t('problemDetail.modeExplorationHint') }}</span>
+              </button>
+            </div>
+          </div>
           <p v-if="error" class="error">{{ error }}</p>
           <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" @click="showCreateModal = false">
+            <button type="button" class="btn btn-secondary" @click="closeCreateModal">
               {{ t('common.cancel') }}
             </button>
-            <button type="submit" class="btn btn-primary" :disabled="creating">
+            <button type="submit" class="btn btn-primary" :disabled="creating || !newProblem.learning_mode">
               {{ creating ? t('common.loading') : t('common.add') }}
             </button>
           </div>
         </form>
-      </div>
-    </div>
-
-    <div
-      v-if="showStartModeChooser"
-      class="modal-overlay"
-      data-testid="problem-start-mode-chooser"
-      @click.self="closeStartModeChooser"
-    >
-      <div class="modal">
-        <h2>{{ t('problems.startModeTitle') }}</h2>
-        <p class="page-subtitle">{{ t('problems.startModeMessage') }}</p>
-        <div class="chooser-actions">
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="startingMode"
-            data-testid="problem-start-mode-socratic"
-            @click="startProblemInMode('socratic')"
-          >
-            {{ t('problems.startModeSocratic') }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-secondary"
-            :disabled="startingMode"
-            data-testid="problem-start-mode-exploration"
-            @click="startProblemInMode('exploration')"
-          >
-            {{ t('problems.startModeExploration') }}
-          </button>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" :disabled="startingMode" @click="closeStartModeChooser">
-            {{ t('common.close') }}
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -171,9 +184,7 @@ const loading = ref(true)
 const loadingMore = ref(false)
 const hasMoreProblems = ref(false)
 const showCreateModal = ref(false)
-const showStartModeChooser = ref(false)
 const creating = ref(false)
-const startingMode = ref(false)
 const error = ref('')
 const pageState = ref<AsyncPageState>('loading')
 const pageError = ref('')
@@ -181,13 +192,22 @@ const searchQuery = ref('')
 const learningModeFilter = ref('all')
 const statusFilter = ref('all')
 const sortBy = ref('updated_desc')
-const createdProblemId = ref<string | null>(null)
 const trimmedSearchQuery = computed(() => searchQuery.value.trim())
-const hasActiveFilters = computed(() => (
-  Boolean(trimmedSearchQuery.value)
-  || learningModeFilter.value !== 'all'
+const hasSecondaryFilters = computed(() => (
+  learningModeFilter.value !== 'all'
   || statusFilter.value !== 'all'
   || sortBy.value !== 'updated_desc'
+))
+const hasActiveFilters = computed(() => (
+  Boolean(trimmedSearchQuery.value)
+  || hasSecondaryFilters.value
+))
+const activeFilterCount = computed(() => (
+  [
+    learningModeFilter.value !== 'all',
+    statusFilter.value !== 'all',
+    sortBy.value !== 'updated_desc',
+  ].filter(Boolean).length
 ))
 const emptyProblemsMessage = computed(() => (
   hasActiveFilters.value ? t('problems.noProblems') : t('problems.createFirst')
@@ -195,16 +215,21 @@ const emptyProblemsMessage = computed(() => (
 let latestFetchId = 0
 let searchDebounceId: number | null = null
 
-const newProblem = ref({
+const newProblem = ref<{
+  title: string
+  description: string
+  concepts: string
+  learning_mode: 'socratic' | 'exploration' | ''
+}>({
   title: '',
   description: '',
   concepts: '',
+  learning_mode: '',
 })
 
-const closeStartModeChooser = () => {
-  if (startingMode.value) return
-  showStartModeChooser.value = false
-  createdProblemId.value = null
+const formatDate = (value: string | undefined) => {
+  if (!value) return '-'
+  return new Date(value).toLocaleDateString()
 }
 
 const resetNewProblem = () => {
@@ -212,7 +237,22 @@ const resetNewProblem = () => {
     title: '',
     description: '',
     concepts: '',
+    learning_mode: '',
   }
+}
+
+const closeCreateModal = () => {
+  if (creating.value) return
+  showCreateModal.value = false
+  error.value = ''
+  resetNewProblem()
+}
+
+const clearFilters = () => {
+  searchQuery.value = ''
+  learningModeFilter.value = 'all'
+  statusFilter.value = 'all'
+  sortBy.value = 'updated_desc'
 }
 
 const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
@@ -240,9 +280,7 @@ const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
     const nextProblems = response.data || []
     problems.value = append ? [...problems.value, ...nextProblems] : nextProblems
     hasMoreProblems.value = nextProblems.length === PAGE_SIZE
-    if (!append) {
-      pageState.value = 'ready'
-    }
+    if (!append) pageState.value = 'ready'
   } catch (e) {
     if (fetchId !== latestFetchId) return
     console.error('Failed to fetch problems:', e)
@@ -261,9 +299,7 @@ const fetchProblems = async ({ append = false }: { append?: boolean } = {}) => {
 }
 
 const queueProblemSearch = () => {
-  if (searchDebounceId !== null) {
-    window.clearTimeout(searchDebounceId)
-  }
+  if (searchDebounceId !== null) window.clearTimeout(searchDebounceId)
   searchDebounceId = window.setTimeout(() => {
     searchDebounceId = null
     fetchProblems()
@@ -276,29 +312,35 @@ const loadMoreProblems = async () => {
 }
 
 const createProblem = async () => {
+  if (!newProblem.value.learning_mode) {
+    error.value = t('problems.startModeMessage')
+    return
+  }
+
   error.value = ''
   creating.value = true
-  
+
   try {
     const concepts = newProblem.value.concepts
-      ? newProblem.value.concepts.split(',').map(c => c.trim()).filter(Boolean)
+      ? newProblem.value.concepts.split(',').map((c) => c.trim()).filter(Boolean)
       : []
-    
+
     const response = await api.post('/problems/', {
       title: newProblem.value.title,
       description: newProblem.value.description,
       associated_concepts: concepts,
+      learning_mode: newProblem.value.learning_mode,
     }, {
       timeout: 15000,
     })
-    
+
     const createdProblem = response.data
     problems.value = [createdProblem, ...problems.value.filter((item) => item.id !== createdProblem.id)]
-    showCreateModal.value = false
-    showStartModeChooser.value = true
-    createdProblemId.value = createdProblem.id
-    resetNewProblem()
     pageState.value = 'ready'
+    showCreateModal.value = false
+    const destination = `/problems/${createdProblem.id}`
+    resetNewProblem()
+    await router.push(destination)
   } catch (e: any) {
     if (e.code === 'ECONNABORTED') {
       error.value = t('problems.createTimeout')
@@ -310,37 +352,12 @@ const createProblem = async () => {
   }
 }
 
-const startProblemInMode = async (mode: 'socratic' | 'exploration') => {
-  if (!createdProblemId.value || startingMode.value) return
-  startingMode.value = true
-  try {
-    if (mode === 'exploration') {
-      await api.put(`/problems/${createdProblemId.value}`, { learning_mode: 'exploration' })
-      problems.value = problems.value.map((item) => (
-        item.id === createdProblemId.value
-          ? { ...item, learning_mode: 'exploration' }
-          : item
-      ))
-    }
-    showStartModeChooser.value = false
-    await router.push(`/problems/${createdProblemId.value}`)
-    createdProblemId.value = null
-  } catch (e) {
-    console.error('Failed to set starting mode:', e)
-    error.value = t('problems.createFailed')
-  } finally {
-    startingMode.value = false
-  }
-}
-
 onMounted(() => {
   fetchProblems()
 })
 
 onBeforeUnmount(() => {
-  if (searchDebounceId !== null) {
-    window.clearTimeout(searchDebounceId)
-  }
+  if (searchDebounceId !== null) window.clearTimeout(searchDebounceId)
 })
 
 watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
@@ -349,25 +366,80 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
 </script>
 
 <style scoped>
+.problems-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: 1rem;
-  margin-bottom: 2rem;
+}
+
+.page-kicker {
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .page-subtitle {
   margin-top: 0.35rem;
   color: var(--text-muted);
-  max-width: 48rem;
+  max-width: 52rem;
+}
+
+.search-row {
+  display: flex;
+}
+
+.filters-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.95rem 1rem;
+}
+
+.filters-panel summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.filters-hint {
+  margin: 0.55rem 0 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.filters-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.15);
+  color: #bbf7d0;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .filters-bar {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+}
+
+.filters-reset {
+  margin-left: auto;
 }
 
 .search-input,
@@ -394,48 +466,67 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
   gap: 1rem;
 }
 
-.load-more-row {
-  display: flex;
-  justify-content: center;
-  margin-top: 1.25rem;
-}
-
 .problem-card {
+  display: grid;
+  gap: 1rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.5rem;
+  border-radius: 18px;
+  padding: 1.35rem;
   text-decoration: none;
   color: var(--text);
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .problem-card:hover {
   border-color: var(--primary);
+  transform: translateY(-1px);
 }
 
-.problem-card h3 {
-  margin-bottom: 0.5rem;
-}
-
-.problem-card p {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-}
-
-.problem-meta {
+.problem-card-head {
   display: flex;
-  gap: 1rem;
-  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.problem-card-head h3 {
+  margin-bottom: 0.35rem;
+}
+
+.problem-card-head p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.problem-meta-row {
+  display: flex;
+  gap: 0.6rem;
   flex-wrap: wrap;
-  margin-bottom: 0.75rem;
+  align-items: center;
+}
+
+.meta-pill,
+.mode-badge,
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.meta-pill {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+}
+
+.mode-badge {
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.1);
+  color: #bfdbfe;
 }
 
 .status {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
   text-transform: capitalize;
 }
 
@@ -454,24 +545,15 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
   color: var(--bg-dark);
 }
 
-.concepts {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.mode-badge {
-  font-size: 0.72rem;
-  padding: 0.16rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid rgba(96, 165, 250, 0.35);
-  background: rgba(96, 165, 250, 0.1);
-  color: #bfdbfe;
-}
-
 .problem-cta {
   color: var(--primary);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-weight: 600;
+}
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
 }
 
 .modal-overlay {
@@ -487,14 +569,49 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
 .modal {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 2rem;
   width: 100%;
-  max-width: 500px;
+  max-width: 620px;
 }
 
 .modal h2 {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.field-hint {
+  margin-top: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.mode-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.8rem;
+}
+
+.mode-choice {
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mode-choice span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.mode-choice.active {
+  border-color: rgba(74, 222, 128, 0.42);
+  background: rgba(74, 222, 128, 0.08);
 }
 
 .modal-actions {
@@ -504,15 +621,25 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
   margin-top: 1.5rem;
 }
 
-.chooser-actions {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-}
-
-.loading, .empty {
+.loading,
+.empty {
   text-align: center;
   padding: 3rem;
   color: var(--text-muted);
+}
+
+@media (max-width: 760px) {
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filters-reset {
+    margin-left: 0;
+  }
+
+  .mode-choice-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

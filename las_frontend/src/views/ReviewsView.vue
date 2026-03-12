@@ -32,25 +32,10 @@
           <p>{{ focusCard.description }}</p>
           <span class="focus-cta">{{ focusCard.cta }}</span>
         </router-link>
-
-        <div class="metric-grid">
-          <div class="metric-card">
-            <span>{{ t('reviews.queueCount') }}</span>
-            <strong>{{ dueReviewCount }}</strong>
-          </div>
-          <div class="metric-card">
-            <span>{{ t('reviews.scheduledCount') }}</span>
-            <strong>{{ scheduledCount }}</strong>
-          </div>
-          <div class="metric-card">
-            <span>{{ t('reviews.savedCount') }}</span>
-            <strong>{{ savedReviewCount }}</strong>
-          </div>
-        </div>
       </section>
 
-      <section class="reviews-grid">
-        <section class="card-panel" data-testid="review-queue-panel">
+      <section class="reviews-stack">
+        <section class="card-panel" data-testid="reviews-due-queue">
           <p class="section-meta">{{ t('reviews.queueMeta') }}</p>
           <h2>{{ t('reviews.queueTitle') }}</h2>
           <div v-if="dueCards.length" class="queue-list">
@@ -67,7 +52,6 @@
                 <p>{{ card.next_review_at ? formatDateTime(card.next_review_at) : t('reviews.reviewQueueHint') }}</p>
                 <p class="origin-line">{{ formatReviewOrigin(card) }}</p>
                 <p class="origin-line">{{ formatReviewReason(card) }}</p>
-                <p v-if="card.origin?.source_turn_preview" class="origin-preview">{{ card.origin.source_turn_preview }}</p>
               </div>
               <div class="queue-actions">
                 <router-link to="/srs-review" class="btn btn-secondary">{{ t('reviews.startSrs') }}</router-link>
@@ -78,46 +62,49 @@
                 >
                   {{ t('reviews.openWorkspace') }}
                 </router-link>
-                <router-link :to="`/model-cards/${card.model_card_id}`" class="btn btn-secondary">
-                  {{ t('problemDetail.openModelCard') }}
-                </router-link>
               </div>
             </article>
           </div>
           <div v-else class="empty-block">
             <p class="empty">{{ t('reviews.noDueReviews') }}</p>
-            <router-link to="/model-cards" class="inline-link">
-              {{ t('reviews.openModelCards') }}
+            <router-link to="/problems" class="inline-link">
+              {{ t('reviews.returnToWorkspace') }}
             </router-link>
           </div>
         </section>
 
-        <section class="card-panel" data-testid="review-model-cards-panel">
-          <p class="section-meta">{{ t('reviews.lifecycleMeta') }}</p>
-          <h2>{{ t('reviews.lifecycleTitle') }}</h2>
-          <div v-if="recentModelCards.length" class="card-list">
-            <router-link
-              v-for="card in recentModelCards"
-              :key="card.id"
-              :to="`/model-cards/${card.id}`"
+        <section class="card-panel" data-testid="reviews-reinforcement-panel">
+          <p class="section-meta">{{ t('reviews.reinforcementMeta') }}</p>
+          <h2>{{ t('reviews.reinforcementTitle') }}</h2>
+          <div v-if="reinforcementEntries.length" class="card-list">
+            <article
+              v-for="entry in reinforcementEntries"
+              :key="entry.schedule_id"
               class="card-item"
             >
               <div class="card-copy">
-                <strong>{{ card.title }}</strong>
-                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleSourceLabel') }}:</strong> {{ formatModelCardSource(card) }}</p>
-                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleStateLabel') }}:</strong> {{ formatModelCardState(card) }}</p>
-                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleActionLabel') }}:</strong> {{ formatModelCardAction(card) }}</p>
+                <strong>{{ entry.title }}</strong>
+                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleSourceLabel') }}:</strong> {{ formatReviewOrigin(entry) }}</p>
+                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleStateLabel') }}:</strong> {{ formatReinforcementState(entry) }}</p>
+                <p class="card-meta-line"><strong>{{ t('reviews.lifecycleActionLabel') }}:</strong> {{ formatReinforcementAction(entry) }}</p>
+                <router-link :to="`/model-cards/${entry.model_card_id}`" class="review-context-link">
+                  {{ t('problemDetail.openModelCard') }}
+                </router-link>
               </div>
-              <span class="status" :class="{ scheduled: isCardScheduled(card.id) }">
-                {{ isCardScheduled(card.id) ? t('modelCards.scheduled') : t('reviews.needsReviewPlan') }}
-              </span>
-            </router-link>
+              <div class="queue-actions">
+                <router-link
+                  v-if="entry.origin?.problem_id"
+                  :to="buildWorkspaceRoute(entry)"
+                  class="btn btn-secondary"
+                >
+                  {{ t('reviews.returnToWorkspace') }}
+                </router-link>
+              </div>
+            </article>
           </div>
           <div v-else class="empty-block">
-            <p class="empty">{{ t('modelCards.createFirst') }}</p>
-            <router-link to="/model-cards" class="inline-link">
-              {{ t('reviews.openModelCards') }}
-            </router-link>
+            <p class="empty">{{ t('reviews.reinforcementEmpty') }}</p>
+            <router-link to="/problems" class="inline-link">{{ t('reviews.returnToWorkspace') }}</router-link>
           </div>
         </section>
       </section>
@@ -132,13 +119,7 @@
         </summary>
 
         <div class="archive-body">
-          <div class="section-heading archive-actions">
-            <p class="hero-subtitle">{{ t('reviews.archiveHint') }}</p>
-            <button class="btn btn-secondary" @click="showCreateModal = true">
-              {{ t('reviews.newReview') }}
-            </button>
-          </div>
-
+          <p class="hero-subtitle">{{ t('reviews.archiveHint') }}</p>
           <div v-if="reviews.length" class="review-archive">
             <div v-for="review in reviews" :key="review.id" class="review-card">
               <div class="review-header">
@@ -167,59 +148,6 @@
         </div>
       </details>
     </template>
-
-    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
-      <div class="modal">
-        <h2>{{ t('reviews.newReview') }}</h2>
-        <form @submit.prevent="createReview">
-          <div class="form-group">
-            <label>{{ t('reviews.reviewType') }}</label>
-            <select v-model="newReview.review_type" required>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>{{ t('reviews.period') }}</label>
-            <input v-model="newReview.period" type="text" placeholder="e.g., Week 1, January 2024" required />
-          </div>
-          <div class="form-group">
-            <label>{{ t('reviews.content') }}</label>
-            <textarea v-model="newReview.summary" rows="2"></textarea>
-          </div>
-          <div class="form-group">
-            <label>{{ t('reviews.insights') }}</label>
-            <textarea v-model="newReview.insights" rows="3"></textarea>
-          </div>
-          <div class="form-group">
-            <label>{{ t('reviews.nextSteps') }}</label>
-            <textarea v-model="newReview.next_steps" rows="2"></textarea>
-          </div>
-          <div class="form-group">
-            <label>{{ t('reviews.misconceptions') }}</label>
-            <textarea v-model="newReview.misconceptions" rows="2"></textarea>
-          </div>
-          <p v-if="error" class="error">{{ error }}</p>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" @click="showCreateModal = false">
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-secondary"
-              :disabled="generating"
-              @click="generateReview"
-            >
-              {{ generating ? t('reviews.generating') : t('reviews.generate') }}
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="creating">
-              {{ creating ? t('common.loading') : t('common.add') }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -236,30 +164,17 @@ const { t } = useI18n()
 const reviews = ref<any[]>([])
 const dueCards = ref<any[]>([])
 const schedules = ref<any[]>([])
-const modelCards = ref<any[]>([])
 const pageState = ref<AsyncPageState>('loading')
 const pageError = ref('')
-const showCreateModal = ref(false)
-const creating = ref(false)
-const generating = ref(false)
-const error = ref('')
 
-const newReview = ref({
-  review_type: 'daily',
-  period: '',
-  summary: '',
-  insights: '',
-  next_steps: '',
-  misconceptions: '',
-})
-
-const recentModelCards = computed(() => modelCards.value.slice(0, 4))
-const dueReviewCount = computed(() => dueCards.value.length)
-const scheduledCount = computed(() => schedules.value.length)
 const savedReviewCount = computed(() => reviews.value.length)
-const scheduledCardIds = computed(() => new Set(schedules.value.map((schedule: any) => schedule.model_card_id)))
-const scheduleByCardId = computed(() => {
-  return new Map(schedules.value.map((schedule: any) => [String(schedule.model_card_id), schedule]))
+const scheduleByCardId = computed(() => new Map(schedules.value.map((schedule: any) => [String(schedule.model_card_id), schedule])))
+
+const reinforcementEntries = computed(() => {
+  return [...schedules.value]
+    .filter((schedule: any) => Boolean(schedule.needs_reinforcement))
+    .sort((left: any, right: any) => String(right.last_reviewed_at || '').localeCompare(String(left.last_reviewed_at || '')))
+    .slice(0, 6)
 })
 
 const focusCard = computed(() => {
@@ -269,19 +184,20 @@ const focusCard = computed(() => {
       eyebrow: t('reviews.focusTitle'),
       title: t('reviews.focusReady', { count: dueCards.value.length }),
       description: formatReviewOrigin(firstDueCard),
-      cta: t('reviews.startSrs'),
+      cta: t('reviews.startReviewCta'),
       to: '/srs-review',
       tone: 'tone-alert',
     }
   }
 
-  if (recentModelCards.value.length > 0) {
+  if (reinforcementEntries.value.length > 0) {
+    const firstEntry = reinforcementEntries.value[0]
     return {
       eyebrow: t('reviews.focusTitle'),
-      title: t('reviews.focusModelCards'),
-      description: recentModelCards.value[0].title,
-      cta: t('reviews.openModelCards'),
-      to: `/model-cards/${recentModelCards.value[0].id}`,
+      title: t('reviews.focusReinforcement'),
+      description: formatReviewOrigin(firstEntry),
+      cta: t('reviews.returnToWorkspace'),
+      to: buildWorkspaceRoute(firstEntry),
       tone: 'tone-primary',
     }
   }
@@ -289,9 +205,9 @@ const focusCard = computed(() => {
   return {
     eyebrow: t('reviews.focusTitle'),
     title: t('reviews.focusEmpty'),
-    description: t('reviews.subtitle'),
-    cta: t('reviews.openModelCards'),
-    to: '/model-cards',
+    description: t('reviews.focusEmptyDescription'),
+    cta: t('reviews.returnToWorkspace'),
+    to: '/problems',
     tone: 'tone-primary',
   }
 })
@@ -299,13 +215,9 @@ const focusCard = computed(() => {
 const formatDate = (dateValue: string) => new Date(dateValue).toLocaleDateString()
 const formatDateTime = (dateValue: string) => new Date(dateValue).toLocaleString()
 
-const isCardScheduled = (cardId: string) => scheduledCardIds.value.has(cardId)
-
 const formatReviewOrigin = (entry: any) => {
   const origin = entry?.origin
-  if (!origin?.problem_title) {
-    return t('reviews.originUnknown')
-  }
+  if (!origin?.problem_title) return t('reviews.originUnknown')
   const conceptLabel = origin.concept_text || entry?.title || t('problemDetail.derivedConceptsTitle')
   return t('reviews.originFromProblem', {
     concept: conceptLabel,
@@ -337,34 +249,18 @@ const buildWorkspaceRoute = (entry: any) => {
   }
 }
 
-const formatModelCardSource = (card: any) => {
-  const schedule = scheduleByCardId.value.get(String(card.id))
-  if (!schedule) {
-    return t('reviews.modelLifecycleSourceNone')
-  }
-  return formatReviewOrigin(schedule)
+const formatReinforcementState = (entry: any) => {
+  const schedule = scheduleByCardId.value.get(String(entry.model_card_id))
+  if (schedule?.needs_reinforcement) return t('reviews.modelLifecycleStateReinforcement')
+  if (schedule?.last_reviewed_at) return t('reviews.modelLifecycleStateReviewed')
+  if (schedule?.next_review_at) return t('reviews.modelLifecycleStateScheduled')
+  return t('reviews.modelLifecycleStateUnscheduled')
 }
 
-const formatModelCardState = (card: any) => {
-  const schedule = scheduleByCardId.value.get(String(card.id))
-  if (!schedule) {
-    return t('reviews.modelLifecycleStateUnscheduled')
-  }
-  if (schedule.needs_reinforcement) return t('reviews.modelLifecycleStateReinforcement')
-  if (dueCards.value.some((entry: any) => String(entry.model_card_id) === String(card.id))) {
-    return t('reviews.modelLifecycleStateDue')
-  }
-  if (schedule.last_reviewed_at) return t('reviews.modelLifecycleStateReviewed')
-  return t('reviews.modelLifecycleStateScheduled')
-}
-
-const formatModelCardAction = (card: any) => {
-  const schedule = scheduleByCardId.value.get(String(card.id))
+const formatReinforcementAction = (entry: any) => {
+  const schedule = scheduleByCardId.value.get(String(entry.model_card_id))
   if (!schedule) return t('reviews.modelLifecycleActionSchedule')
   if (schedule.needs_reinforcement) return t('reviews.modelLifecycleActionRevisit')
-  if (dueCards.value.some((entry: any) => String(entry.model_card_id) === String(card.id))) {
-    return t('reviews.modelLifecycleActionRecallNow')
-  }
   return t('reviews.modelLifecycleActionOpen')
 }
 
@@ -372,61 +268,20 @@ const fetchReviewLifecycle = async () => {
   pageError.value = ''
   pageState.value = 'loading'
   try {
-    const [reviewsRes, dueRes, schedulesRes, modelCardsRes] = await Promise.all([
+    const [reviewsRes, dueRes, schedulesRes] = await Promise.all([
       api.get('/reviews/'),
       api.get('/srs/due'),
       api.get('/srs/schedules'),
-      api.get('/model-cards/'),
     ])
 
     reviews.value = reviewsRes.data || []
     dueCards.value = dueRes.data || []
     schedules.value = schedulesRes.data || []
-    modelCards.value = modelCardsRes.data || []
     pageState.value = 'ready'
   } catch (fetchError) {
     console.error('Failed to fetch review lifecycle data:', fetchError)
     pageError.value = t('reviews.errorMessage')
     pageState.value = 'error'
-  }
-}
-
-const resetForm = () => {
-  newReview.value = {
-    review_type: 'daily',
-    period: '',
-    summary: '',
-    insights: '',
-    next_steps: '',
-    misconceptions: '',
-  }
-}
-
-const createReview = async () => {
-  error.value = ''
-  creating.value = true
-
-  try {
-    await api.post('/reviews/', {
-      review_type: newReview.value.review_type,
-      period: newReview.value.period,
-      content: {
-        summary: newReview.value.summary,
-        insights: newReview.value.insights,
-        next_steps: newReview.value.next_steps,
-        misconceptions: newReview.value.misconceptions
-          ? newReview.value.misconceptions.split('\n').map((item) => item.trim()).filter(Boolean)
-          : [],
-      },
-    })
-
-    showCreateModal.value = false
-    resetForm()
-    await fetchReviewLifecycle()
-  } catch (createError: any) {
-    error.value = createError.response?.data?.detail || 'Failed to create review'
-  } finally {
-    creating.value = false
   }
 }
 
@@ -445,27 +300,6 @@ const exportReview = async (review: any) => {
     URL.revokeObjectURL(url)
   } catch (exportError) {
     console.error('Failed to export review:', exportError)
-  }
-}
-
-const generateReview = async () => {
-  error.value = ''
-  generating.value = true
-
-  try {
-    const response = await api.post('/reviews/generate', {
-      review_type: newReview.value.review_type,
-      period: newReview.value.period,
-    })
-    const content = response.data.content || {}
-    newReview.value.summary = content.summary || ''
-    newReview.value.insights = content.insights || ''
-    newReview.value.next_steps = content.next_steps || ''
-    newReview.value.misconceptions = (content.misconceptions || []).join('\n')
-  } catch (generateError: any) {
-    error.value = generateError.response?.data?.detail || 'Failed to generate review'
-  } finally {
-    generating.value = false
   }
 }
 
@@ -507,7 +341,6 @@ onMounted(() => {
 
 .focus-card,
 .card-panel,
-.metric-card,
 .review-card {
   border-radius: 18px;
   border: 1px solid var(--border);
@@ -518,15 +351,13 @@ onMounted(() => {
   display: grid;
   gap: 0.75rem;
   padding: 1.5rem;
-  color: var(--text);
   text-decoration: none;
+  color: var(--text);
   background: linear-gradient(180deg, rgba(26, 26, 46, 0.94), rgba(15, 15, 35, 0.98));
 }
 
 .focus-eyebrow,
-.review-badge,
-.status,
-.period {
+.review-badge {
   display: inline-flex;
   align-items: center;
   width: fit-content;
@@ -537,6 +368,11 @@ onMounted(() => {
 
 .focus-eyebrow {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.review-badge {
+  background: rgba(74, 222, 128, 0.14);
+  color: #bbf7d0;
 }
 
 .focus-cta {
@@ -552,34 +388,9 @@ onMounted(() => {
   border-color: rgba(74, 222, 128, 0.25);
 }
 
-.metric-grid,
-.reviews-grid {
+.reviews-stack {
   display: grid;
   gap: 1rem;
-}
-
-.metric-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.metric-card {
-  padding: 1rem 1.1rem;
-}
-
-.metric-card span {
-  display: block;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-}
-
-.metric-card strong {
-  display: block;
-  margin-top: 0.35rem;
-  font-size: 1.8rem;
-}
-
-.reviews-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .card-panel {
@@ -591,14 +402,6 @@ onMounted(() => {
   margin-bottom: 0.9rem;
 }
 
-.section-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
 .queue-list,
 .card-list,
 .review-archive {
@@ -607,32 +410,25 @@ onMounted(() => {
 }
 
 .queue-item,
-.card-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.95rem;
+.card-item,
+.review-card {
+  padding: 1rem;
   border-radius: 12px;
   background: var(--bg-dark);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  color: var(--text);
-  text-decoration: none;
 }
 
-.queue-copy {
-  min-width: 0;
-  display: grid;
-  gap: 0.3rem;
+.queue-item,
+.card-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
+.queue-copy,
 .card-copy {
-  min-width: 0;
   display: grid;
   gap: 0.3rem;
-}
-
-.card-meta-line {
-  font-size: 0.84rem;
 }
 
 .queue-title-row {
@@ -642,59 +438,46 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.queue-actions {
-  display: flex;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-}
-
 .origin-line,
-.origin-preview {
-  font-size: 0.84rem;
-  color: var(--text-muted);
-}
-
-.origin-preview {
-  white-space: pre-wrap;
-}
-
-.queue-item p,
-.card-item p,
-.review-content p,
+.card-meta-line,
+.review-date,
 .empty {
   color: var(--text-muted);
 }
 
-.review-badge {
-  background: rgba(74, 222, 128, 0.14);
-  color: #bbf7d0;
+.queue-actions,
+.review-actions-row {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
-.status {
-  background: rgba(96, 165, 250, 0.14);
-  color: #bfdbfe;
+.empty-block {
+  display: grid;
+  gap: 0.5rem;
 }
 
-.status.scheduled {
-  background: rgba(74, 222, 128, 0.14);
-  color: #bbf7d0;
+.inline-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
 }
 
-.period {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-muted);
-}
-
-.archive-panel {
-  padding-bottom: 0.9rem;
+.review-context-link {
+  width: fit-content;
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .archive-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   cursor: pointer;
   list-style: none;
-  margin-bottom: 0;
 }
 
 .archive-summary::-webkit-details-marker {
@@ -707,107 +490,27 @@ onMounted(() => {
   margin-top: 1rem;
 }
 
-.archive-actions {
-  margin-bottom: 0;
-}
-
-.review-card {
-  padding: 1rem;
-}
-
 .review-header {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-  margin-bottom: 0.75rem;
+  gap: 0.8rem;
 }
 
-.review-header h3 {
-  text-transform: capitalize;
-}
-
-.review-date {
-  margin-top: 0.3rem;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.review-content strong {
+.period {
   color: var(--primary);
+  font-weight: 700;
 }
 
-.review-actions-row {
-  margin-top: 1rem;
-}
-
-.empty-block {
+.review-content {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
 }
 
-.inline-link {
-  color: var(--primary);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 10, 18, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-
-.modal {
-  width: min(640px, 100%);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 1.5rem;
-}
-
-.form-group {
-  display: grid;
-  gap: 0.45rem;
-  margin-bottom: 1rem;
-}
-
-.form-group input,
-.form-group textarea,
-.form-group select {
-  width: 100%;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
-
-.error {
-  margin-bottom: 1rem;
-  color: #fca5a5;
-}
-
-@media (max-width: 900px) {
-  .metric-grid,
-  .reviews-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .section-heading,
-  .review-header,
+@media (max-width: 760px) {
   .queue-item,
   .card-item {
-    display: grid;
-  }
-
-  .queue-actions {
-    justify-content: flex-start;
+    flex-direction: column;
   }
 }
 </style>
