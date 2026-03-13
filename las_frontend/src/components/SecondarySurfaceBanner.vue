@@ -7,13 +7,18 @@
     </div>
 
     <div class="actions">
-      <router-link :to="primaryTo" class="btn btn-secondary banner-link">
+      <router-link
+        :to="primaryTo"
+        class="btn btn-secondary banner-link"
+        :data-testid="testId ? `${testId}-primary-action` : undefined"
+      >
         {{ primaryLabel }}
       </router-link>
       <router-link
         v-if="secondaryTo && secondaryLabel"
         :to="secondaryTo"
         class="btn btn-secondary banner-link banner-link-muted"
+        :data-testid="testId ? `${testId}-secondary-action` : undefined"
       >
         {{ secondaryLabel }}
       </router-link>
@@ -36,8 +41,8 @@ defineProps<{
 
 <style scoped>
 .secondary-surface-banner {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
   margin-bottom: 1.5rem;
@@ -47,6 +52,11 @@ defineProps<{
   background:
     radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 40%),
     linear-gradient(180deg, rgba(26, 26, 46, 0.94), rgba(16, 16, 34, 0.98));
+}
+
+.copy,
+.actions {
+  min-width: 0;
 }
 
 .copy h2 {
@@ -72,10 +82,12 @@ defineProps<{
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-self: start;
 }
 
 .banner-link {
   text-decoration: none;
+  justify-content: center;
 }
 
 .banner-link-muted {
@@ -84,7 +96,16 @@ defineProps<{
 
 @media (max-width: 900px) {
   .secondary-surface-banner {
-    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .banner-link {
+    width: 100%;
   }
 }
 </style>

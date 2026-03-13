@@ -25,6 +25,9 @@
           <span class="focus-eyebrow">{{ focusCard.eyebrow }}</span>
           <h2>{{ focusCard.title }}</h2>
           <p>{{ focusCard.description }}</p>
+          <div v-if="focusCard.meta?.length" class="focus-meta" data-testid="continue-focus-meta">
+            <span v-for="item in focusCard.meta" :key="item" class="meta-chip">{{ item }}</span>
+          </div>
           <span class="focus-cta">{{ focusCard.cta }}</span>
         </router-link>
 
@@ -38,8 +41,8 @@
             <strong>{{ dueReviewCount }}</strong>
           </div>
           <div class="metric-card">
-            <span>{{ t('dashboard.modelCards') }}</span>
-            <strong>{{ modelCards.length }}</strong>
+            <span>{{ t('dashboard.readyToContinue') }}</span>
+            <strong>{{ readyToContinueCount }}</strong>
           </div>
         </div>
       </section>
@@ -54,12 +57,17 @@
               :key="problem.id"
               :to="`/problems/${problem.id}`"
               class="resume-item"
+              data-testid="dashboard-problem-item"
             >
-              <div>
+              <div class="resume-item-copy">
                 <strong>{{ problem.title }}</strong>
                 <p>{{ problem.description || t('dashboard.resumeLatestProblemDescription') }}</p>
+                <div class="resume-item-meta" data-testid="dashboard-problem-meta">
+                  <span class="meta-chip">{{ formatProblemMode(problem.learning_mode) }}</span>
+                  <span class="meta-chip">{{ formatUpdatedAt(problem.updated_at || problem.created_at) }}</span>
+                </div>
               </div>
-              <span class="status">{{ problem.status }}</span>
+              <span class="status">{{ formatProblemStatus(problem.status) }}</span>
             </router-link>
           </div>
           <div v-else class="empty-block">
@@ -107,14 +115,35 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 
 const problems = ref<any[]>([])
-const modelCards = ref<any[]>([])
 const dueCards = ref<any[]>([])
 const pageState = ref<AsyncPageState>('loading')
 const pageError = ref('')
 
-const recentProblems = computed(() => problems.value.slice(0, 5))
+const resumableProblems = computed(() => problems.value.filter((problem) => problem.status !== 'completed'))
+const recentProblems = computed(() => resumableProblems.value.slice(0, 5))
 const dueReviewCount = computed(() => dueCards.value.length)
-const activeProblemCount = computed(() => problems.value.filter((problem) => problem.status !== 'completed').length)
+const activeProblemCount = computed(() => resumableProblems.value.length)
+const readyToContinueCount = computed(() => recentProblems.value.length)
+const firstRecentProblem = computed(() => recentProblems.value[0] || null)
+
+const formatDate = (value: string) => new Date(value).toLocaleDateString(undefined, {
+  month: 'short',
+  day: 'numeric',
+})
+
+const formatProblemMode = (mode: string) => (
+  mode === 'exploration'
+    ? t('problemDetail.modeExploration')
+    : t('problemDetail.modeSocratic')
+)
+
+const formatProblemStatus = (status: string) => {
+  if (status === 'completed') return t('problems.filterStatusCompleted')
+  if (status === 'in-progress') return t('problems.filterStatusInProgress')
+  return t('problems.filterStatusNew')
+}
+
+const formatUpdatedAt = (value: string) => t('dashboard.updatedLabel', { date: formatDate(value) })
 
 const focusCard = computed(() => {
   if (dueCards.value.length > 0) {
@@ -128,13 +157,18 @@ const focusCard = computed(() => {
     }
   }
 
-  if (recentProblems.value.length > 0) {
+  if (firstRecentProblem.value) {
     return {
       eyebrow: t('dashboard.priorityNow'),
       title: t('dashboard.resumeLatestProblem'),
-      description: recentProblems.value[0].title,
+      description: firstRecentProblem.value.title,
+      meta: [
+        formatProblemMode(firstRecentProblem.value.learning_mode),
+        formatProblemStatus(firstRecentProblem.value.status),
+        formatUpdatedAt(firstRecentProblem.value.updated_at || firstRecentProblem.value.created_at),
+      ],
       cta: t('dashboard.openProblem'),
-      to: `/problems/${recentProblems.value[0].id}`,
+      to: `/problems/${firstRecentProblem.value.id}`,
       tone: 'tone-primary',
     }
   }
@@ -143,6 +177,7 @@ const focusCard = computed(() => {
     eyebrow: t('dashboard.priorityNow'),
     title: t('dashboard.captureFirstProblem'),
     description: t('dashboard.resumeLatestProblemDescription'),
+    meta: [],
     cta: t('dashboard.newProblem'),
     to: '/problems',
     tone: 'tone-primary',
@@ -153,14 +188,12 @@ const fetchDashboardData = async () => {
   pageError.value = ''
   pageState.value = 'loading'
   try {
-    const [problemsRes, cardsRes, dueRes] = await Promise.all([
+    const [problemsRes, dueRes] = await Promise.all([
       api.get('/problems/'),
-      api.get('/model-cards/'),
       api.get('/srs/due'),
     ])
 
     problems.value = problemsRes.data || []
-    modelCards.value = cardsRes.data || []
     dueCards.value = dueRes.data || []
     pageState.value = 'ready'
   } catch (error) {
@@ -241,6 +274,25 @@ onMounted(fetchDashboardData)
   font-weight: 700;
 }
 
+.focus-meta,
+.resume-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .tone-alert {
   border-color: rgba(245, 158, 11, 0.35);
 }
@@ -298,6 +350,7 @@ onMounted(fetchDashboardData)
 .review-item {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 0.8rem;
   padding: 0.9rem;
   border-radius: 12px;
@@ -305,6 +358,12 @@ onMounted(fetchDashboardData)
   border: 1px solid rgba(255, 255, 255, 0.06);
   text-decoration: none;
   color: var(--text);
+}
+
+.resume-item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.4rem;
 }
 
 .resume-item p,
@@ -316,7 +375,7 @@ onMounted(fetchDashboardData)
 .status {
   background: rgba(96, 165, 250, 0.14);
   color: #bfdbfe;
-  text-transform: capitalize;
+  flex-shrink: 0;
 }
 
 .review-badge {
@@ -339,6 +398,16 @@ onMounted(fetchDashboardData)
   .metric-grid,
   .continue-grid {
     grid-template-columns: 1fr;
+  }
+
+  .resume-item,
+  .review-item {
+    flex-direction: column;
+  }
+
+  .status,
+  .review-badge {
+    align-self: flex-start;
   }
 }
 </style>
