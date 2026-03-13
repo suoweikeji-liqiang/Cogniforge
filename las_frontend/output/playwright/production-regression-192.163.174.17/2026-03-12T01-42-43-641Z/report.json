@@ -1,0 +1,194 @@
+{
+  "baseUrl": "http://192.163.174.17",
+  "startedAt": "2026-03-12T01:42:43.641Z",
+  "outputDir": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z",
+  "account": {
+    "username": "prodreg_mmmsziyf5357",
+    "email": "prodreg_mmmsziyf5357@example.com"
+  },
+  "artifacts": {
+    "problemId": "c2a4c433-a80f-4759-b8e3-2bdc2812ffde",
+    "problemTitle": "Prod Regression Problem mmmsziyf5357",
+    "modelCardId": "0d1711cb-856f-4ed5-99c0-5ac3ceac19ec",
+    "modelCardTitle": "Prod Regression Card d60acf",
+    "scheduleId": "6fb0d5e1-9d57-4813-96a9-f9dec5a4292b"
+  },
+  "steps": [
+    {
+      "name": "01-register-ui",
+      "startedAt": "2026-03-12T01:42:44.151Z",
+      "status": "passed",
+      "details": {
+        "redirectedTo": "http://192.163.174.17/login"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/01-register-success.png",
+      "finishedAt": "2026-03-12T01:42:47.953Z"
+    },
+    {
+      "name": "02-login-ui",
+      "startedAt": "2026-03-12T01:42:47.954Z",
+      "status": "passed",
+      "details": {
+        "redirectedTo": "http://192.163.174.17/dashboard",
+        "hasToken": true
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/02-login-success.png",
+      "finishedAt": "2026-03-12T01:42:50.203Z"
+    },
+    {
+      "name": "03-dashboard-shell",
+      "startedAt": "2026-03-12T01:42:50.203Z",
+      "status": "passed",
+      "details": {
+        "homeLabel": "Continue Learning",
+        "focusHref": "/problems"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/03-dashboard.png",
+      "finishedAt": "2026-03-12T01:42:51.434Z"
+    },
+    {
+      "name": "04-problems-create-and-start-mode",
+      "startedAt": "2026-03-12T01:42:51.434Z",
+      "status": "passed",
+      "details": {
+        "problemId": "c2a4c433-a80f-4759-b8e3-2bdc2812ffde",
+        "problemTitle": "Prod Regression Problem mmmsziyf5357"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/04-problem-created.png",
+      "finishedAt": "2026-03-12T01:43:05.961Z"
+    },
+    {
+      "name": "05-exploration-turn-and-artifacts",
+      "startedAt": "2026-03-12T01:43:05.961Z",
+      "status": "passed",
+      "details": {
+        "turnOutcome": "Answer Type: ComparisonAnswer1) **Precision** = 预测为正例的样本中，实际为正例的比例（“查得准”）；  \n   **Recall** = 实际为正例的样本中，被预测为正例的比例（“查得全”）。  \n\n2) **关键区别**：  \n   - 精确率关注**减少误报（False Positives）**，即避免把负例错判为正例；  \n   - 召回率关注**减少漏报（False Negatives）**，即避免漏掉实际的正例。  \n\n3) **阈值示例**：  \n   在代码变更的缺陷检测中，设定置信度阈值 **≥0.8** 才判定为“有缺陷”。  \n   - **高阈值（如0.9）**：系统只报置信度极高的缺陷 → **精确率高**（报的几乎都是真缺陷），但**召回率低**（许多低置信度真缺陷被漏掉）。  \n   - **低阈值（如0.5）**",
+        "turnSummary": "Turn Result3 concept updates · 1 path optionsSee what this exploration turn explained, derived, and suggested next.",
+        "conceptCount": "Derived Concepts3Current-turn concept candidates stay visible first.",
+        "pathCount": "Derived Path Candidates1Current-turn path options stay visible first."
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/05-exploration-turn.png",
+      "finishedAt": "2026-03-12T01:43:32.006Z"
+    },
+    {
+      "name": "06-derived-concepts-paths-and-model-card",
+      "startedAt": "2026-03-12T01:43:32.007Z",
+      "status": "passed",
+      "details": {
+        "acceptedConcept": true,
+        "savedBranch": true,
+        "branchPathSummary": "Current Path: Comparison branch开一条“precision vs recall”对比支线Returns to step 1这类问题更适合通过并列比较来稳定边界。Main path · Prod Regression Problem mmmsziyf5357Comparison branch · 开一条“precision vs recall”对比支线Return To Parent Path",
+        "modelCardId": "0d1711cb-856f-4ed5-99c0-5ac3ceac19ec",
+        "modelCardTitle": "Prod Regression Card d60acf"
+      },
+      "warnings": [
+        "No promote-derived-concept action was available.",
+        "No schedule-derived-concept-review action was available.",
+        "No linked model card was available from derived concepts. Falling back to manual model card creation."
+      ],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/06-model-card-detail-fallback.png",
+      "finishedAt": "2026-03-12T01:43:58.103Z"
+    },
+    {
+      "name": "07-socratic-turn",
+      "startedAt": "2026-03-12T01:43:58.103Z",
+      "status": "passed",
+      "details": {
+        "manualAdvanceCount": 0,
+        "turnOutcome": "Question Type: ProbeQuestion: Probe: before moving on, what is the core idea of 'precision', and what is the most likely confusion point?Correctness: partially correctMastery Score: 58 · Confidence: 66%Progression Decision: Stay on this step · Progression skippedNext Action: What boundary case can falsify your current view of 'precision'?New Concepts This Round: precisionPath SuggestionsPrerequisi"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/07-socratic-turn.png",
+      "finishedAt": "2026-03-12T01:44:37.163Z"
+    },
+    {
+      "name": "08-reviews-hub",
+      "startedAt": "2026-03-12T01:44:37.163Z",
+      "status": "passed",
+      "details": {
+        "focusHref": "/model-cards/0d1711cb-856f-4ed5-99c0-5ac3ceac19ec",
+        "queueText": "Review QueueDue spaced-repetition cardsNo due reviews right now.Open Model Cards",
+        "modelCardsText": "Model Card LifecycleCards to evolveProd Regression Card d60acfSource: No linked learning origin yet.Current state: Scheduled and waiting for its next recall.Suggested action: Open the card and inspect its current recall status.Scheduled"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/08-reviews.png",
+      "finishedAt": "2026-03-12T01:44:38.415Z"
+    },
+    {
+      "name": "09-model-cards-library",
+      "startedAt": "2026-03-12T01:44:38.415Z",
+      "status": "passed",
+      "details": {
+        "gridVisible": true,
+        "firstCardText": "Prod Regression Card d60acfActiveManual fallback card created during production regression to continue downstream coverage.v32 Examples3 Counter ExamplesFirst recall queuedThis card is queued for its first recall.ScheduledWaiting for the first recallComplete the first recall when it comes due.ViewSc"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/09-model-cards-library.png",
+      "finishedAt": "2026-03-12T01:44:39.662Z"
+    },
+    {
+      "name": "10-srs-surface",
+      "startedAt": "2026-03-12T01:44:39.663Z",
+      "status": "passed",
+      "details": {
+        "lastOutcomeVisible": false,
+        "originPanelVisible": false,
+        "bodyText": "Review SubflowUse this page as a focused review session inside the broader review loopThis page handles the active recall session itself. The broader planning, scheduling, and evolution loop still lives in Reviews and Model Cards.ReviewsOpen Model CardsRecall SessionDue Today0Total Scheduled1All reviews done for today!"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/10-srs-review.png",
+      "finishedAt": "2026-03-12T01:45:00.105Z"
+    },
+    {
+      "name": "11-zh-locale-regression",
+      "startedAt": "2026-03-12T01:45:00.105Z",
+      "status": "passed",
+      "details": {
+        "homeLabel": "继续学习",
+        "turnOutcome": "回答类型: 对比解释回答1. **精确率与召回率的定义**  \n   - **精确率**：在所有被预测为“正类”（如缺陷）的样本中，实际为正类的比例。公式：`精确率 = TP / (TP + FP)`，关注预测的**准确性**（宁缺毋滥）。  \n   - **召回率**：在所有实际为正类的样本中，被正确预测为正类的比例。公式：`召回率 = TP / (TP + FN)`，关注覆盖的**完整性**（宁错杀不放过）。  \n\n2. **核心区别**  \n   精确率衡量**预测结果的可信度**（减少误报），召回率衡量**对真实问题的发现能力**（减少漏报）。两者通常存在权衡：提高召回率（降低漏报）可能牺牲精确率（增加误报），反之亦然。  \n\n3. **阈值变化的具体例子（以代码缺陷检测为例）**  \n   假设模型输出缺陷概率，**阈值设为0.6时**：  \n   - 仅概率≥0.6的代码变更被"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17/2026-03-12T01-42-43-641Z/11-zh-workspace.png",
+      "finishedAt": "2026-03-12T01:45:38.202Z"
+    },
+    {
+      "name": "12-api-state-sanity",
+      "startedAt": "2026-03-12T01:45:38.202Z",
+      "status": "passed",
+      "details": {
+        "problemsStatus": 200,
+        "problemCount": 1,
+        "schedulesStatus": 200,
+        "matchingSchedule": {
+          "scheduleId": "6fb0d5e1-9d57-4813-96a9-f9dec5a4292b",
+          "nextReviewAt": "2026-03-13T01:43:57.434800",
+          "recallState": "scheduled"
+        }
+      },
+      "warnings": [],
+      "finishedAt": "2026-03-12T01:45:39.242Z"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "warnings": [
+    {
+      "step": "06-derived-concepts-paths-and-model-card",
+      "message": "No promote-derived-concept action was available."
+    },
+    {
+      "step": "06-derived-concepts-paths-and-model-card",
+      "message": "No schedule-derived-concept-review action was available."
+    },
+    {
+      "step": "06-derived-concepts-paths-and-model-card",
+      "message": "No linked model card was available from derived concepts. Falling back to manual model card creation."
+    }
+  ],
+  "finishedAt": "2026-03-12T01:45:39.242Z"
+}

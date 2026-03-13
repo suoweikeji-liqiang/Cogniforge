@@ -88,7 +88,7 @@
                 <p class="card-meta-line"><strong>{{ t('reviews.lifecycleStateLabel') }}:</strong> {{ formatReinforcementState(entry) }}</p>
                 <p class="card-meta-line"><strong>{{ t('reviews.lifecycleActionLabel') }}:</strong> {{ formatReinforcementAction(entry) }}</p>
                 <router-link :to="`/model-cards/${entry.model_card_id}`" class="review-context-link">
-                  {{ t('problemDetail.openModelCard') }}
+                  {{ t('reviews.openCardContext') }}
                 </router-link>
               </div>
               <div class="queue-actions">

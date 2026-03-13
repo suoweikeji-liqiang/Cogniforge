@@ -41,22 +41,43 @@
                 <span class="candidate-mode">{{ formatLearningMode(candidate.learning_mode) }}</span>
                 <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
               </div>
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
-                {{ formatCandidateSource(candidate.source) }}
-              </p>
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-                {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
-              </p>
-              <div v-if="candidate.evidence_snippet" class="candidate-evidence">
-                <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
-                <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
-              </div>
-              <p v-if="candidate.merged_into_concept" class="candidate-meta">
-                <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
-                {{ candidate.merged_into_concept }}
-              </p>
+              <details v-if="embedded && hasCandidateContext(candidate)" class="candidate-context">
+                <summary class="candidate-context-summary">{{ t('problemDetail.conceptCandidateContextToggle') }}</summary>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
+                  {{ formatCandidateSource(candidate.source) }}
+                </p>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                  {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
+                </p>
+                <div v-if="candidate.evidence_snippet" class="candidate-evidence">
+                  <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
+                  <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
+                </div>
+                <p v-if="candidate.merged_into_concept" class="candidate-meta">
+                  <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
+                  {{ candidate.merged_into_concept }}
+                </p>
+              </details>
+              <template v-else>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
+                  {{ formatCandidateSource(candidate.source) }}
+                </p>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                  {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
+                </p>
+                <div v-if="candidate.evidence_snippet" class="candidate-evidence">
+                  <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
+                  <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
+                </div>
+                <p v-if="candidate.merged_into_concept" class="candidate-meta">
+                  <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
+                  {{ candidate.merged_into_concept }}
+                </p>
+              </template>
               <div v-if="canModerate(candidate)" class="candidate-actions">
                 <button type="button" class="btn btn-primary" :disabled="actionPendingId === candidate.id" data-testid="accept-derived-concept" @click="emit('accept', candidate.id)">
                   {{ t('problemDetail.acceptCandidate') }}
@@ -104,18 +125,35 @@
                 </button>
               </div>
               <div v-if="['accepted', 'merged'].includes(candidate.status)" class="candidate-handoff">
-                <p class="candidate-meta">
-                  <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
-                  {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
-                </p>
-                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
-                  <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
-                  {{ formatReviewSchedule(candidate) }}
-                </p>
-                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
-                  <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
-                  {{ formatRecallConsequence(candidate) }}
-                </p>
+                <details v-if="embedded && hasCandidateHandoffContext(candidate)" class="candidate-context candidate-context-handoff">
+                  <summary class="candidate-context-summary">{{ t('problemDetail.conceptCandidateHandoffToggle') }}</summary>
+                  <p class="candidate-meta">
+                    <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                    {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                    {{ formatReviewSchedule(candidate) }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                    {{ formatRecallConsequence(candidate) }}
+                  </p>
+                </details>
+                <template v-else>
+                  <p class="candidate-meta">
+                    <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                    {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                    {{ formatReviewSchedule(candidate) }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                    {{ formatRecallConsequence(candidate) }}
+                  </p>
+                </template>
                 <div v-if="needsReinforcement(candidate)" class="candidate-reinforcement-panel" data-testid="derived-concept-needs-reinforcement">
                   <span class="handoff-badge handoff-badge-alert">{{ t('problemDetail.needsReinforcementBadge') }}</span>
                   <p class="candidate-meta candidate-review-meta">
@@ -188,23 +226,43 @@
                 <span class="candidate-mode">{{ formatLearningMode(candidate.learning_mode) }}</span>
                 <span class="candidate-confidence">{{ formatConfidence(candidate.confidence) }}</span>
               </div>
-
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
-                {{ formatCandidateSource(candidate.source) }}
-              </p>
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
-                {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
-              </p>
-              <div v-if="candidate.evidence_snippet" class="candidate-evidence">
-                <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
-                <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
-              </div>
-              <p v-if="candidate.merged_into_concept" class="candidate-meta">
-                <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
-                {{ candidate.merged_into_concept }}
-              </p>
+              <details v-if="embedded && hasCandidateContext(candidate)" class="candidate-context">
+                <summary class="candidate-context-summary">{{ t('problemDetail.conceptCandidateContextToggle') }}</summary>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
+                  {{ formatCandidateSource(candidate.source) }}
+                </p>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                  {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
+                </p>
+                <div v-if="candidate.evidence_snippet" class="candidate-evidence">
+                  <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
+                  <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
+                </div>
+                <p v-if="candidate.merged_into_concept" class="candidate-meta">
+                  <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
+                  {{ candidate.merged_into_concept }}
+                </p>
+              </details>
+              <template v-else>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.derivedConceptSourceLabel') }}:</strong>
+                  {{ formatCandidateSource(candidate.source) }}
+                </p>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.sourceTurnLabel') }}:</strong>
+                  {{ candidate.source_turn_preview || t('problemDetail.sourceTurnUnavailable') }}
+                </p>
+                <div v-if="candidate.evidence_snippet" class="candidate-evidence">
+                  <strong>{{ t('problemDetail.evidenceLabel') }}:</strong>
+                  <div class="candidate-evidence-body" data-testid="derived-concept-evidence" v-html="renderEvidenceSnippet(candidate.evidence_snippet)" />
+                </div>
+                <p v-if="candidate.merged_into_concept" class="candidate-meta">
+                  <strong>{{ t('problemDetail.mergeIntoLabel') }}:</strong>
+                  {{ candidate.merged_into_concept }}
+                </p>
+              </template>
 
               <div v-if="canModerate(candidate)" class="candidate-actions">
                 <button type="button" class="btn btn-primary" :disabled="actionPendingId === candidate.id" data-testid="accept-derived-concept" @click="emit('accept', candidate.id)">
@@ -256,18 +314,35 @@
               </div>
 
               <div v-if="['accepted', 'merged'].includes(candidate.status)" class="candidate-handoff">
-                <p class="candidate-meta">
-                  <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
-                  {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
-                </p>
-                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
-                  <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
-                  {{ formatReviewSchedule(candidate) }}
-                </p>
-                <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
-                  <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
-                  {{ formatRecallConsequence(candidate) }}
-                </p>
+                <details v-if="embedded && hasCandidateHandoffContext(candidate)" class="candidate-context candidate-context-handoff">
+                  <summary class="candidate-context-summary">{{ t('problemDetail.conceptCandidateHandoffToggle') }}</summary>
+                  <p class="candidate-meta">
+                    <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                    {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                    {{ formatReviewSchedule(candidate) }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                    {{ formatRecallConsequence(candidate) }}
+                  </p>
+                </details>
+                <template v-else>
+                  <p class="candidate-meta">
+                    <strong>{{ t('problemDetail.modelCardLinkLabel') }}:</strong>
+                    {{ isLinkedToModelCard(candidate) ? t('problemDetail.modelCardLinked') : t('problemDetail.modelCardNotLinked') }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewStatusLabel') }}:</strong>
+                    {{ formatReviewSchedule(candidate) }}
+                  </p>
+                  <p v-if="isReviewScheduled(candidate)" class="candidate-meta candidate-review-meta">
+                    <strong>{{ t('problemDetail.reviewConsequenceLabel') }}:</strong>
+                    {{ formatRecallConsequence(candidate) }}
+                  </p>
+                </template>
                 <div v-if="needsReinforcement(candidate)" class="candidate-reinforcement-panel" data-testid="derived-concept-needs-reinforcement">
                   <span class="handoff-badge handoff-badge-alert">{{ t('problemDetail.needsReinforcementBadge') }}</span>
                   <p class="candidate-meta candidate-review-meta">
@@ -381,6 +456,13 @@ const isFocusTarget = (candidate: any) => {
   return true
 }
 
+const hasCandidateContext = (candidate: any) => Boolean(
+  candidate?.source
+  || candidate?.source_turn_preview
+  || candidate?.evidence_snippet
+  || candidate?.merged_into_concept
+)
+
 const statusRank = (status: string | undefined | null) => {
   if (status === 'pending') return 0
   if (status === 'postponed') return 1
@@ -471,6 +553,10 @@ const isReviewScheduled = (candidate: any) => {
       && (props.scheduledModelCardIds || []).includes(String(candidate.linked_model_card_id))
   )
 }
+
+const hasCandidateHandoffContext = (candidate: any) => Boolean(
+  isLinkedToModelCard(candidate) || isReviewScheduled(candidate)
+)
 
 const getReviewSchedule = (candidate: any) => {
   if (!candidate?.linked_model_card_id) return null
@@ -659,6 +745,24 @@ const emitMerge = (candidateId: string) => {
 
 .candidate-review-meta {
   color: #bbf7d0;
+}
+
+.candidate-context {
+  margin-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.55rem;
+}
+
+.candidate-context-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.candidate-context-summary::-webkit-details-marker {
+  display: none;
 }
 
 .candidate-evidence {

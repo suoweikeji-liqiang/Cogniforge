@@ -16,10 +16,7 @@
         <p class="subtitle">{{ t('resources.archiveSubtitle') }}</p>
       </div>
       <div class="header-actions">
-        <router-link to="/problems" class="btn-secondary resources-link">
-          {{ t('resources.captureInProblem') }}
-        </router-link>
-        <button @click="showAdd = true" class="btn-secondary" data-testid="resources-toggle-add">
+        <button @click="showAdd = true" class="btn btn-secondary" data-testid="resources-toggle-add">
           {{ t('resources.addReference') }}
         </button>
       </div>
@@ -40,8 +37,8 @@
         <option value="video">{{ t('resources.video') }}</option>
       </select>
       <div class="form-actions">
-        <button @click="addResource" class="btn-secondary" :disabled="!newUrl">{{ t('common.save') }}</button>
-        <button @click="showAdd = false" class="btn-secondary">{{ t('common.cancel') }}</button>
+        <button @click="addResource" class="btn btn-secondary" :disabled="!newUrl">{{ t('common.save') }}</button>
+        <button @click="showAdd = false" class="btn btn-secondary">{{ t('common.cancel') }}</button>
       </div>
     </div>
 
@@ -155,7 +152,6 @@ watch(searchQuery, () => {
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
 .header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-.resources-link { text-decoration: none; display: inline-flex; align-items: center; }
 .subtitle { color: var(--text-muted); margin-top: 0.35rem; max-width: 56ch; }
 .search-input { margin-bottom: 1rem; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
@@ -184,6 +180,8 @@ watch(searchQuery, () => {
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
 @media (max-width: 768px) {
   .header { flex-direction: column; gap: 0.75rem; align-items: stretch; }
+  .header-actions { width: 100%; }
+  .header-actions .btn { width: 100%; }
   .filter-bar { flex-wrap: wrap; }
   .filter-btn { flex: 1; min-width: 0; text-align: center; font-size: 0.8rem; padding: 0.5rem 0.5rem; }
   .resource-card h3 { font-size: 0.95rem; word-break: break-all; }

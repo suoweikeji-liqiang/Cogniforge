@@ -16,10 +16,7 @@
         <p class="subtitle">{{ t('notes.archiveSubtitle') }}</p>
       </div>
       <div class="header-actions">
-        <router-link to="/problems" class="btn-secondary notes-link">
-          {{ t('notes.captureInProblem') }}
-        </router-link>
-        <button @click="showAdd = !showAdd" class="btn-secondary" data-testid="notes-toggle-add">
+        <button @click="showAdd = !showAdd" class="btn btn-secondary" data-testid="notes-toggle-add">
           {{ showAdd ? t('common.close') : t('notes.addAnnotation') }}
         </button>
       </div>
@@ -37,7 +34,7 @@
           <button @click="toggleVoice" :class="['btn-voice', { recording }]">
             {{ recording ? t('notes.stopRecording') : t('notes.startRecording') }}
           </button>
-          <button @click="saveNote" class="btn-secondary" :disabled="!newContent.trim()">{{ t('common.save') }}</button>
+          <button @click="saveNote" class="btn btn-secondary" :disabled="!newContent.trim()">{{ t('common.save') }}</button>
         </div>
       </div>
     </div>
@@ -142,7 +139,6 @@ onUnmounted(() => {
 .header { margin-bottom: 1.5rem; display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
 .header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 .subtitle { color: var(--text-muted); margin-top: 0.35rem; max-width: 56ch; }
-.notes-link { text-decoration: none; display: inline-flex; align-items: center; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
 .note-input { margin-bottom: 1.5rem; }
 .input { background: var(--bg-dark); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; color: var(--text); width: 100%; box-sizing: border-box; resize: vertical; }
@@ -165,6 +161,9 @@ onUnmounted(() => {
 .note-tags { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
 @media (max-width: 768px) {
+  .header { flex-direction: column; align-items: stretch; }
+  .header-actions { width: 100%; }
+  .header-actions .btn { width: 100%; }
   .input-footer { flex-direction: column; }
   .tags-input { width: 100%; }
   .tag-field { width: 100%; flex: 1; }

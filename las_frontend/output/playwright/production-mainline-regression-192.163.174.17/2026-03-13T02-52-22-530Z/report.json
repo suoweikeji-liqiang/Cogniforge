@@ -1,0 +1,79 @@
+{
+  "baseUrl": "http://192.163.174.17",
+  "outputDir": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-52-22-530Z",
+  "startedAt": "2026-03-13T02:52:22.534Z",
+  "checks": [
+    {
+      "name": "login",
+      "ok": true,
+      "url": "http://192.163.174.17/dashboard",
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-52-22-530Z/01-dashboard-after-login.png"
+    },
+    {
+      "name": "dashboard-shell",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-52-22-530Z/02-dashboard.png",
+      "navText": "EN\n中文\nC\nCogniforge\nStructured Learning Loop\nSigned in as\nasteroida\nLogout\nContinue Learning\nProblems\nReviews\nAdmin\n\nCONTINUE LEARNING\n\nWelcome, asteroida\n\nPut the next meaningful learning step first, and keep metrics and tools in the background.\n\nTop Priority\nYou have 1 reviews ready to clear\n\nClear",
+      "hasContinue": true,
+      "hasProblems": true,
+      "hasReviews": true,
+      "hasAdmin": true,
+      "hasModelCardsPrimary": false
+    },
+    {
+      "name": "problems-create-flow",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-52-22-530Z/03-problem-create-flow.png",
+      "modalText": "New Problem\nProblem Details\nDescription\nAssociated Concepts\nChoose how to begin\n\nChoose the learning protocol before you create the problem and enter the workspace.\n\nStart in Socratic\nRespond to the current step and let the system evaluate whether you should progress.\nStart in Exploration\nAsk about a concept in the current step and use the answer to discover related ideas.\nCancel\nAdd",
+      "hasInlineProtocolSelection": true,
+      "directToProblemDetail": false,
+      "secondChooserVisible": true,
+      "currentUrl": "http://192.163.174.17/problems",
+      "createdProblemId": null
+    },
+    {
+      "name": "problem-detail-structure",
+      "ok": false,
+      "error": "Problem was not created; skipping ProblemDetail checks."
+    },
+    {
+      "name": "problem-detail-turn",
+      "ok": false,
+      "error": "Problem was not created; skipping learning turn."
+    },
+    {
+      "name": "reviews-mainline",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-52-22-530Z/06-reviews.png",
+      "testIds": {
+        "focus": 1,
+        "dueQueue": 1,
+        "reinforcement": 1,
+        "archive": 1
+      },
+      "hasGenerator": false,
+      "excerpt": "EN\n中文\nC\nCogniforge\nStructured Learning Loop\nSigned in as\nasteroida\nLogout\nContinue Learning\nProblems\nReviews\nAdmin\n\nCURRENT REVIEW FOCUS\n\nReviews\n\nClear due recall first, then return to the workspace when a concept needs reinforcement.\n\nCurrent review focus\n1 cards are ready for review\n\nNo linked learning origin yet.\n\nStart Review\n\nDO NEXT\n\nDue recall queue\n机器学习是什么\nOpen Recall Session\n\n3/11/2026, 3:15:30 PM\n\nNo linked learning origin yet.\n\nEntered recall from a linked learning outcome.\n\nOpen Recall Session\n\nNEEDS REINFORCEMENT\n\nKnowledge to rebuild in context\n\nNo concepts currently need reinforcement.\n\nReturn to Workspace\n\nREFLECTION ARCHIVE\n\nSaved learning reviews\n0"
+    },
+    {
+      "name": "srs-subflow",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-52-22-530Z/07-srs-review.png",
+      "excerpt": "EN\n中文\nC\nCogniforge\nStructured Learning Loop\nSigned in as\nasteroida\nLogout\nContinue Learning\nProblems\nReviews\nAdmin\n\nREVIEW SUBFLOW\n\nUse this page as a focused review session inside the broader review loop\n\nThis page handles the active recall session itself. The broader planning, scheduling, and evolution loop still lives in Reviews and Model Cards.\n\nReviews\nOpen Model Cards\nRecall Session\nDue Today\n\n1\n\nTotal Scheduled\n\n1\n\n机器学习是什么\n\nTry to recall the key concepts of this model card\n\nShow Answer"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "P0",
+      "area": "Problems",
+      "message": "Create Problem does not route directly into ProblemDetail on production."
+    },
+    {
+      "severity": "P1",
+      "area": "Problems",
+      "message": "A second start-mode chooser is still present after creation on production."
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "finishedAt": "2026-03-13T02:52:34.528Z"
+}

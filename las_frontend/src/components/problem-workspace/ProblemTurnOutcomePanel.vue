@@ -9,6 +9,27 @@
 
     <template v-if="learningMode === 'socratic'">
       <div v-if="latestResponse && latestFeedback" class="turn-outcome-body">
+        <div class="turn-summary-grid">
+          <article class="result-summary-card" data-testid="turn-result-status-card">
+            <span class="summary-label">{{ t('problemDetail.turnResultStatusLabel') }}</span>
+            <strong>{{ socraticSummary.status }}</strong>
+            <p>{{ socraticSummary.statusSupport }}</p>
+          </article>
+          <article class="result-summary-card" data-testid="turn-result-gap-card">
+            <span class="summary-label">{{ t('problemDetail.turnResultGapLabel') }}</span>
+            <strong>{{ socraticSummary.gap }}</strong>
+            <p>{{ socraticSummary.gapSupport }}</p>
+          </article>
+          <article class="result-summary-card" data-testid="turn-result-next-card">
+            <span class="summary-label">{{ t('problemDetail.turnResultNextLabel') }}</span>
+            <strong>{{ socraticSummary.next }}</strong>
+            <p>{{ socraticSummary.nextSupport }}</p>
+          </article>
+        </div>
+
+        <details class="turn-outcome-details" :open="!embedded">
+          <summary>{{ t('problemDetail.turnResultDetailsToggle') }}</summary>
+          <div class="turn-outcome-detail-stack">
         <p v-if="latestResponse.question_kind" class="meta-line">
           <strong>{{ t('problemDetail.questionKind') }}:</strong> {{ formatQuestionKind(latestResponse.question_kind) }}
         </p>
@@ -70,12 +91,35 @@
             <li v-for="(hint, index) in socraticActionHints" :key="`socratic-hint-${index}`">{{ hint }}</li>
           </ul>
         </div>
+          </div>
+        </details>
       </div>
       <p v-else class="empty">{{ t('problemDetail.noTurnResultSocratic') }}</p>
     </template>
 
     <template v-else>
       <div v-if="latestQa" class="turn-outcome-body">
+        <div class="turn-summary-grid">
+          <article class="result-summary-card" data-testid="turn-result-status-card">
+            <span class="summary-label">{{ t('problemDetail.turnResultStatusLabel') }}</span>
+            <strong>{{ explorationSummary.status }}</strong>
+            <p>{{ explorationSummary.statusSupport }}</p>
+          </article>
+          <article class="result-summary-card" data-testid="turn-result-gap-card">
+            <span class="summary-label">{{ t('problemDetail.turnResultInsightLabel') }}</span>
+            <strong>{{ explorationSummary.insight }}</strong>
+            <p>{{ explorationSummary.insightSupport }}</p>
+          </article>
+          <article class="result-summary-card" data-testid="turn-result-next-card">
+            <span class="summary-label">{{ t('problemDetail.turnResultNextLabel') }}</span>
+            <strong>{{ explorationSummary.next }}</strong>
+            <p>{{ explorationSummary.nextSupport }}</p>
+          </article>
+        </div>
+
+        <details class="turn-outcome-details" :open="!embedded">
+          <summary>{{ t('problemDetail.turnResultDetailsToggle') }}</summary>
+          <div class="turn-outcome-detail-stack">
         <p v-if="latestQa.answer_type" class="meta-line">
           <strong>{{ t('problemDetail.answerType') }}:</strong> {{ formatAnswerType(latestQa.answer_type) }}
         </p>
@@ -127,6 +171,8 @@
             <li v-for="(hint, index) in explorationActionHints" :key="`exploration-hint-${index}`">{{ hint }}</li>
           </ul>
         </div>
+          </div>
+        </details>
       </div>
       <p v-else class="empty">{{ t('problemDetail.noTurnResultExploration') }}</p>
     </template>
@@ -210,6 +256,80 @@ const explorationActionHints = computed(() => {
     displayPathSuggestions.value,
   )
 })
+
+const normalizeInline = (value: unknown) => String(value || '').replace(/\s+/g, ' ').trim()
+
+const truncateInline = (value: unknown, max = 140) => {
+  const normalized = normalizeInline(value)
+  if (normalized.length <= max) return normalized
+  return `${normalized.slice(0, max - 1).trimEnd()}…`
+}
+
+const socraticSummary = computed(() => {
+  const mastery = props.latestFeedback?.mastery_score
+  const confidence = formatConfidence(props.latestFeedback?.confidence)
+  const progressed = props.latestResponse?.decision?.advance
+  const misconceptions = props.latestFeedback?.misconceptions || []
+  const suggestions = props.latestFeedback?.suggestions || []
+  const followUp = normalizeInline(props.latestResponse?.follow_up?.question)
+  const decisionReason = normalizeInline(props.latestResponse?.decision?.reason)
+  const correctness = normalizeInline(props.latestFeedback?.correctness)
+
+  const status = progressed
+    ? t('problemDetail.turnResultAdvanced')
+    : t('problemDetail.turnResultNeedsWork')
+
+  const statusSupport = mastery !== undefined
+    ? t('problemDetail.turnResultScoreConfidence', { score: mastery, confidence })
+    : (correctness || t('problemDetail.turnResultStatusSupportFallback'))
+
+  const gap = truncateInline(misconceptions[0] || decisionReason || correctness || t('problemDetail.turnResultGapFallback'))
+  const gapSupport = truncateInline(suggestions[0] || t('problemDetail.turnResultGapSupportFallback'))
+
+  const next = truncateInline(followUp || suggestions[0] || socraticActionHints.value[0] || t('problemDetail.turnResultNextFallback'))
+  const nextSupport = props.latestResponse?.question_kind
+    ? t('problemDetail.turnResultNextSupportQuestionKind', { kind: formatQuestionKind(props.latestResponse.question_kind) })
+    : t('problemDetail.turnResultNextSupportSocratic')
+
+  return { status, statusSupport, gap, gapSupport, next, nextSupport }
+})
+
+const explorationSummary = computed(() => {
+  const nextActions = props.latestQa?.next_learning_actions || []
+  const answeredConcepts = props.latestQa?.answered_concepts || []
+  const relatedConcepts = props.latestQa?.related_concepts || []
+  const answerType = formatAnswerType(props.latestQa?.answer_type)
+  const answer = truncateInline(props.latestQa?.answer || t('problemDetail.turnResultInsightFallback'), 180)
+  const next = truncateInline(
+    nextActions[0]
+      || props.latestQa?.suggested_next_focus
+      || explorationActionHints.value[0]
+      || t('problemDetail.turnResultNextFallback'),
+  )
+
+  const statusSupport = answeredConcepts.length
+    ? t('problemDetail.turnResultStatusSupportAnswered', { concepts: answeredConcepts.join(' / ') })
+    : (relatedConcepts.length
+      ? t('problemDetail.turnResultStatusSupportRelated', { concepts: relatedConcepts.join(' / ') })
+      : t('problemDetail.turnResultStatusSupportExplorationFallback'))
+
+  const insightSupport = props.latestQa?.return_to_main_path_hint
+    ? t('problemDetail.turnResultInsightSupportReturn')
+    : t('problemDetail.turnResultInsightSupportStay')
+
+  const nextSupport = displayPathSuggestions.value.length
+    ? t('problemDetail.turnResultNextSupportPaths', { count: displayPathSuggestions.value.length })
+    : t('problemDetail.turnResultNextSupportExploration')
+
+  return {
+    status: answerType,
+    statusSupport,
+    insight: answer,
+    insightSupport,
+    next,
+    nextSupport,
+  }
+})
 </script>
 
 <style scoped>
@@ -225,6 +345,56 @@ const explorationActionHints = computed(() => {
 .turn-outcome-body {
   display: grid;
   gap: 0.55rem;
+}
+
+.turn-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.result-summary-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.summary-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.result-summary-card strong {
+  font-size: 0.96rem;
+}
+
+.result-summary-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.turn-outcome-details {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.turn-outcome-details summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.turn-outcome-detail-stack {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
 }
 
 .section-subtitle {

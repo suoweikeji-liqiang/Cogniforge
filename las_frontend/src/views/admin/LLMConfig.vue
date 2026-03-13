@@ -15,6 +15,16 @@
         </button>
       </div>
 
+      <div
+        v-if="routeStatusNotice"
+        class="route-status-banner"
+        :class="routeStatusNotice.kind"
+        data-testid="llm-route-status-banner"
+      >
+        <strong>{{ routeStatusNotice.title }}</strong>
+        <p>{{ routeStatusNotice.message }}</p>
+      </div>
+
       <div class="route-grid">
         <div v-for="route in routeCards" :key="route.key" class="route-card">
           <h3>{{ t(`llm.routeLabels.${route.key}`) }}</h3>
@@ -52,6 +62,8 @@
               </option>
             </select>
           </div>
+
+          <p class="route-card-status">{{ getRouteStatusCopy(route.key) }}</p>
         </div>
       </div>
     </div>
@@ -79,7 +91,7 @@
             </div>
             <div class="provider-status">
               <span class="status-badge" :class="{ enabled: provider.enabled }">
-                {{ provider.enabled ? t('llm.enabled') : 'Disabled' }}
+                {{ provider.enabled ? t('llm.enabled') : t('llm.disabled') }}
               </span>
             </div>
           </div>
@@ -106,6 +118,25 @@
                 {{ t('common.delete') }}
               </button>
             </div>
+          </div>
+
+          <div
+            v-if="selectedProvider && !selectedProvider.enabled"
+            class="provider-warning"
+            data-testid="llm-disabled-provider-warning"
+          >
+            <div>
+              <strong>{{ t('llm.providerDisabledTitle') }}</strong>
+              <p>{{ t('llm.providerDisabledHint') }}</p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              data-testid="llm-enable-provider"
+              @click="enableSelectedProvider"
+            >
+              {{ t('llm.enableProviderNow') }}
+            </button>
           </div>
           
           <div class="provider-details">
@@ -162,7 +193,8 @@
         </template>
         
         <div v-else class="no-selection">
-          <p>{{ t('llm.noProviders') }}</p>
+          <p>{{ noSelectionTitle }}</p>
+          <p class="hint">{{ noSelectionHint }}</p>
         </div>
       </div>
     </div>
@@ -274,6 +306,38 @@ const routeCards = [
 ]
 
 const enabledProviders = computed(() => providers.value.filter(provider => provider.enabled))
+const hasProviders = computed(() => providers.value.length > 0)
+const hasEnabledProviders = computed(() => enabledProviders.value.length > 0)
+
+const routeStatusNotice = computed(() => {
+  if (!hasProviders.value) {
+    return {
+      kind: 'warning',
+      title: t('llm.routeStatusNoProvidersTitle'),
+      message: t('llm.routeStatusNoProvidersMessage'),
+    }
+  }
+  if (!hasEnabledProviders.value) {
+    return {
+      kind: 'warning',
+      title: t('llm.routeStatusNoEnabledProvidersTitle'),
+      message: t('llm.routeStatusNoEnabledProvidersMessage'),
+    }
+  }
+  return {
+    kind: 'info',
+    title: t('llm.routeStatusReadyTitle', { count: enabledProviders.value.length }),
+    message: t('llm.routeStatusReadyMessage'),
+  }
+})
+
+const noSelectionTitle = computed(() => (
+  hasProviders.value ? t('llm.selectProviderTitle') : t('llm.noProviders')
+))
+
+const noSelectionHint = computed(() => (
+  hasProviders.value ? t('llm.selectProviderHint') : t('llm.createFirst')
+))
 
 const providerForm = ref({
   name: '',
@@ -296,6 +360,8 @@ const loadProviders = async () => {
     providers.value = response.data
     if (selectedProvider.value) {
       selectedProvider.value = providers.value.find(p => p.id === selectedProvider.value.id) || null
+    } else if (providers.value.length) {
+      selectedProvider.value = providers.value[0]
     }
   } catch (e) {
     console.error('Failed to load providers:', e)
@@ -347,6 +413,26 @@ const getEnabledModels = (providerId) => {
   return provider?.models?.filter(model => model.enabled) || []
 }
 
+const getRouteStatusCopy = (routeKey) => {
+  const route = taskRoutes.value[routeKey]
+  if (!hasProviders.value) return t('llm.routeNeedsProvider')
+  if (!hasEnabledProviders.value) return t('llm.routeNeedsEnabledProvider')
+  if (!route?.provider_id) {
+    return routeKey === 'fallback'
+      ? t('llm.routeStatusFallbackOff')
+      : t('llm.routeStatusUseGlobalDefault')
+  }
+  const provider = providers.value.find(item => item.id === route.provider_id)
+  if (!provider?.enabled) return t('llm.routeStatusProviderDisabled')
+  const enabledModels = getEnabledModels(route.provider_id)
+  if (!enabledModels.length) return t('llm.routeStatusNoEnabledModels')
+  if (!route.model_record_id) return t('llm.routeStatusProviderDefault')
+  const model = enabledModels.find(item => item.id === route.model_record_id)
+  return model
+    ? t('llm.routeStatusSpecificModel', { model: model.model_name })
+    : t('llm.routeStatusProviderDefault')
+}
+
 const onTaskRouteProviderChange = (routeKey) => {
   if (!taskRoutes.value[routeKey]?.provider_id) {
     taskRoutes.value[routeKey].model_record_id = null
@@ -383,6 +469,25 @@ const editProvider = () => {
     enabled: selectedProvider.value.enabled
   }
   showProviderModal.value = true
+}
+
+const enableSelectedProvider = async () => {
+  if (!selectedProvider.value || selectedProvider.value.enabled) return
+  try {
+    await api.put(`/admin/llm-config/providers/${selectedProvider.value.id}`, {
+      name: selectedProvider.value.name,
+      provider_type: selectedProvider.value.provider_type,
+      api_key: '',
+      base_url: selectedProvider.value.base_url || '',
+      priority: selectedProvider.value.priority,
+      enabled: true,
+    })
+    await loadProviders()
+    await loadTaskRoutes()
+  } catch (e) {
+    console.error('Failed to enable provider:', e)
+    alert(e.response?.data?.detail || t('llm.enableProviderFailed'))
+  }
 }
 
 const saveProvider = async () => {
@@ -539,6 +644,32 @@ onMounted(async () => {
   font-size: 0.875rem;
 }
 
+.route-status-banner {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.route-status-banner.warning {
+  border-color: rgba(250, 204, 21, 0.28);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.route-status-banner.info {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.route-status-banner p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .route-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -563,6 +694,12 @@ onMounted(async () => {
   color: var(--text-muted);
   font-size: 0.8125rem;
   line-height: 1.5;
+}
+
+.route-card-status {
+  margin: 0.75rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
 }
 
 .config-content {
@@ -675,6 +812,23 @@ onMounted(async () => {
   margin: 0;
 }
 
+.provider-warning {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.provider-warning p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+}
+
 .details-actions {
   display: flex;
   gap: 0.5rem;
@@ -781,7 +935,8 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-.empty-state .hint {
+.empty-state .hint,
+.no-selection .hint {
   font-size: 0.875rem;
   margin-top: 0.5rem;
 }
@@ -877,6 +1032,10 @@ onMounted(async () => {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+
+  .provider-warning {
+    flex-direction: column;
   }
 }
 </style>

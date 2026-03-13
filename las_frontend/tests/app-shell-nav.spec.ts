@@ -78,6 +78,22 @@ async function createProblem(request: APIRequestContext, accessToken: string, ti
   return response.json()
 }
 
+async function updateProblemStatus(
+  request: APIRequestContext,
+  accessToken: string,
+  problemId: string,
+  status: 'new' | 'in-progress' | 'completed',
+) {
+  const response = await request.put(`/api/problems/${problemId}`, {
+    data: { status },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+  expect(response.ok()).toBeTruthy()
+  return response.json()
+}
+
 async function scheduleReview(request: APIRequestContext, accessToken: string, modelCardId: string) {
   const response = await request.post(`/api/srs/schedule/${modelCardId}`, {
     headers: {
@@ -125,8 +141,28 @@ test('primary navigation stays focused on the learning loop', async ({ page, req
   await expect(page.getByTestId('continue-focus-card')).toBeVisible()
   await expect(page.getByTestId('dashboard-problems-panel')).toBeVisible()
   await expect(page.getByTestId('dashboard-review-panel')).toBeVisible()
+  await expect(page.getByTestId('resume-dashboard')).toContainText(/Ready to continue/i)
   await expect(page.getByTestId('dashboard-model-cards-panel')).toHaveCount(0)
   await expect(page.locator('a[href="/model-cards"]').first()).toHaveCount(0)
+})
+
+test('continue dashboard skips completed problems and shows resume details for active work', async ({ page, request }) => {
+  // Contract Assertions:
+  // - Critical Path: Continue must route the learner back into resumable work, not a completed endpoint.
+  // - Base Button (.btn): the primary workspace CTA remains visible while additional resume details stay secondary.
+  const tokens = await authenticate(page, request)
+  const activeProblem = await createProblem(request, tokens.access_token, 'Resume Candidate Problem')
+  const completedProblem = await createProblem(request, tokens.access_token, 'Completed Problem Should Not Lead')
+
+  await updateProblemStatus(request, tokens.access_token, completedProblem.id, 'completed')
+  await page.goto('/dashboard')
+
+  const focusCard = page.getByTestId('continue-focus-card')
+  await expect(focusCard).toContainText('Resume Candidate Problem')
+  await expect(focusCard).not.toContainText('Completed Problem Should Not Lead')
+  await expect(page.getByTestId('continue-focus-meta')).toContainText(/Exploration|Updated/i)
+  await expect(page.getByTestId('dashboard-problem-item')).toHaveCount(1)
+  await expect(page.getByTestId('dashboard-problem-meta')).toContainText(/Exploration|Updated/i)
 })
 
 test('admin llm config stays on the admin route after a hard refresh', async ({ page, request }) => {
@@ -180,6 +216,91 @@ test('admin llm config stays on the admin route after a hard refresh', async ({ 
   await expect(page.getByTestId('primary-nav-item-admin')).toBeVisible()
 })
 
+test('admin llm config explains disabled providers before task routes can use them', async ({ page, request }) => {
+  await authenticate(page, request)
+
+  let providersState = [
+    {
+      id: 'provider-disabled',
+      name: 'Disabled Provider',
+      provider_type: 'openai',
+      api_key: 'Configured',
+      base_url: 'https://api.example.com/v1',
+      priority: 0,
+      enabled: false,
+      models: [
+        {
+          id: 'model-disabled',
+          provider_id: 'provider-disabled',
+          model_name: 'Slow Model',
+          model_id: 'slow-model',
+          is_default: true,
+          enabled: true,
+        },
+      ],
+    },
+  ]
+
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'admin-test-user',
+        email: 'admin@example.com',
+        username: 'admin-test',
+        full_name: 'Admin Test',
+        role: 'admin',
+        is_active: true,
+      }),
+    })
+  })
+
+  await page.route('**/api/admin/llm-config/providers', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(providersState),
+    })
+  })
+
+  await page.route('**/api/admin/llm-config/providers/*', async (route) => {
+    if (route.request().method() !== 'PUT') {
+      await route.continue()
+      return
+    }
+    providersState = providersState.map((provider) => ({
+      ...provider,
+      enabled: true,
+    }))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(providersState[0]),
+    })
+  })
+
+  await page.route('**/api/admin/llm-config/routes', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        interactive: { provider_id: null, model_record_id: null },
+        structured_heavy: { provider_id: null, model_record_id: null },
+        fallback: { provider_id: null, model_record_id: null },
+      }),
+    })
+  })
+
+  await page.goto('/admin/llm-config')
+
+  await expect(page.getByTestId('llm-route-status-banner')).toContainText(/No enabled providers/i)
+  await expect(page.getByTestId('llm-disabled-provider-warning')).toBeVisible()
+  await page.getByTestId('llm-enable-provider').click()
+  await expect(page.getByTestId('llm-disabled-provider-warning')).toHaveCount(0)
+  await expect(page.getByTestId('llm-route-status-banner')).toContainText(/1 enabled providers/i)
+})
+
 test('standalone chat is marked as a secondary legacy surface', async ({ page, request }) => {
   await authenticate(page, request)
   await page.goto('/chat')
@@ -187,6 +308,130 @@ test('standalone chat is marked as a secondary legacy surface', async ({ page, r
   await expect(page.getByTestId('legacy-chat-banner')).toBeVisible()
   await expect(page.getByText(/outside the primary learning loop/i)).toBeVisible()
   await expect(page.getByRole('link', { name: /Go to Problems/i })).toBeVisible()
+})
+
+test('secondary surfaces point back to reviews and problems instead of model cards', async ({ page, request }) => {
+  await authenticate(page, request)
+
+  await page.route('**/api/srs/due', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/srs/schedules', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/statistics/knowledge-graph', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ nodes: [], edges: [] }),
+    })
+  })
+
+  await page.route('**/api/cog-test/sessions', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/notes/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/resources/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.goto('/srs-review')
+  const srsBanner = page.getByTestId('srs-secondary-banner')
+  await expect(srsBanner.getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
+  await expect(srsBanner.getByRole('link', { name: 'Problems' })).toHaveAttribute('href', '/problems')
+  await expect(srsBanner.locator('a[href="/model-cards"]')).toHaveCount(0)
+
+  await page.goto('/knowledge-graph')
+  const graphBanner = page.getByTestId('graph-secondary-banner')
+  await expect(graphBanner.getByRole('link', { name: 'Problems' })).toHaveAttribute('href', '/problems')
+  await expect(graphBanner.getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
+  await expect(graphBanner.locator('a[href="/model-cards"]')).toHaveCount(0)
+
+  await page.goto('/cog-test')
+  const cogBanner = page.getByTestId('cog-test-secondary-banner')
+  await expect(cogBanner.getByRole('link', { name: /Open Review Hub/i })).toHaveAttribute('href', '/reviews')
+  await expect(cogBanner.getByRole('link', { name: 'Problems' })).toHaveAttribute('href', '/problems')
+  await expect(cogBanner.locator('a[href="/model-cards"]')).toHaveCount(0)
+
+  await page.goto('/notes')
+  await expect(page.getByTestId('notes-secondary-banner-primary-action')).toHaveAttribute('href', '/problems')
+  await expect(page.getByTestId('notes-secondary-banner-secondary-action')).toHaveAttribute('href', '/reviews')
+  await expect(page.locator('.notes .header a[href="/problems"]')).toHaveCount(0)
+
+  await page.goto('/resources')
+  await expect(page.getByTestId('resources-secondary-banner-primary-action')).toHaveAttribute('href', '/problems')
+  await expect(page.getByTestId('resources-secondary-banner-secondary-action')).toHaveAttribute('href', '/reviews')
+  await expect(page.locator('.resources .header a[href="/problems"]')).toHaveCount(0)
+})
+
+test('mobile mainline surfaces keep primary actions visible without horizontal overflow', async ({ page, request }) => {
+  // Contract Assertions:
+  // - Critical Path: dashboard, secondary surfaces, and the workspace must stay operable on a narrow mobile viewport.
+  // - Base Button (.btn): stacked banner and workspace actions remain visible when the layout collapses.
+  const tokens = await authenticate(page, request)
+  const problem = await createProblem(request, tokens.access_token, 'Mobile Workspace Problem')
+
+  await page.route('**/api/statistics/knowledge-graph', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ nodes: [], edges: [] }),
+    })
+  })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/dashboard')
+  await expect(page.getByTestId('continue-focus-card')).toBeVisible()
+
+  const dashboardOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  expect(dashboardOverflow).toBeFalsy()
+
+  const firstMetric = await page.locator('.metric-card').nth(0).boundingBox()
+  const secondMetric = await page.locator('.metric-card').nth(1).boundingBox()
+  expect(secondMetric?.y ?? 0).toBeGreaterThan((firstMetric?.y ?? 0) + 1)
+
+  await page.goto('/knowledge-graph')
+  const graphBanner = page.getByTestId('graph-secondary-banner')
+  const graphPrimary = await graphBanner.getByRole('link', { name: 'Problems' }).boundingBox()
+  const graphSecondary = await graphBanner.getByRole('link', { name: 'Reviews' }).boundingBox()
+  expect(graphSecondary?.y ?? 0).toBeGreaterThan((graphPrimary?.y ?? 0) + 1)
+
+  const graphOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  expect(graphOverflow).toBeFalsy()
+
+  await page.goto(`/problems/${problem.id}`)
+  await expect(page.getByTestId('problem-learning-header')).toBeVisible()
+  await expect(page.getByTestId('problem-learning-contract')).toBeVisible()
+  await expect(page.getByTestId('problem-turn-area')).toBeVisible()
+
+  const problemOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+  expect(problemOverflow).toBeFalsy()
 })
 
 test('login and register pages keep auth controls compact and avoid shell overflow', async ({ page }) => {
@@ -276,7 +521,8 @@ test('reviews page centers review execution and workspace return', async ({ page
   await expect(page.getByTestId('review-lifecycle-page')).toBeVisible()
   await expect(page.getByTestId('reviews-focus-card')).toHaveAttribute('href', '/srs-review')
   await expect(page.getByTestId('reviews-due-queue')).toContainText('Review Hub Card')
-  await expect(page.getByTestId('reviews-reinforcement-panel')).toContainText(/Source:|Current state:|Suggested action:/)
+  await expect(page.getByTestId('reviews-reinforcement-panel')).toContainText(/From learning|What happened|Do next/)
+  await expect(page.getByTestId('reviews-reinforcement-panel')).not.toContainText(/Source:|Current state:|Suggested action:/)
   await expect(page.getByRole('button', { name: /New Review/i })).toHaveCount(0)
   await expect(page.getByText(/Generate with AI/i)).toHaveCount(0)
   await page.getByTestId('review-archive-toggle').click()

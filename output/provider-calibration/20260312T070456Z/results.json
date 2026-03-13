@@ -1,0 +1,2444 @@
+{
+  "results": [
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Exploration Answer EN",
+        "category": "exploration_answer",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "1) **Concise definition**: Precision measures the reliability of your alerts (what percentage of flagged defects are actually real), while recall measures your coverage (what percentage of total existing defects your model successfully caught).\n\n2) **Key distinction**: Lowering the threshold makes the detector more \"sensitive,\" which increases recall (catching more defects) but inevitably introduces more false positives. Raising the threshold makes the detector more \"conservative,\" which improves precision (reducing noise for developers) but risks missing critical defects (false negatives).\n\n3) **Concrete example**: If you are tuning a security bug detector, you likely prioritize **recall**—you would rather have developers investigate a few \"false alarms\" than miss a single critical vulnerability that could lead to a breach.\n\n4) **Common pitfall**: Chasing a \"perfect\" score. In production, perfect separation is rare; attempting to maximize both precision and recall simultaneously often leads to \"analysis paralysis\" where the threshold remains stuck, or the model performs poorly because it isn't optimized for the specific risks of the codebase.",
+        "parsed": "1) **Concise definition**: Precision measures the reliability of your alerts (what percentage of flagged defects are actually real), while recall measures your coverage (what percentage of total existing defects your model successfully caught).\n\n2) **Key distinction**: Lowering the threshold makes the detector more \"sensitive,\" which increases recall (catching more defects) but inevitably introduces more false positives. Raising the threshold makes the detector more \"conservative,\" which improves precision (reducing noise for developers) but risks missing critical defects (false negatives).\n\n3) **Concrete example**: If you are tuning a security bug detector, you likely prioritize **recall**—you would rather have developers investigate a few \"false alarms\" than miss a single critical vulnerability that could lead to a breach.\n\n4) **Common pitfall**: Chasing a \"perfect\" score. In production, perfect separation is rare; attempting to maximize both precision and recall simultaneously often leads to \"analysis paralysis\" where the threshold remains stuck, or the model performs poorly because it isn't optimized for the specific risks of the codebase.",
+        "latency_s": 2.668,
+        "usage": {
+          "prompt_tokens": 267,
+          "completion_tokens": 214,
+          "total_tokens": 481
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 161
+        }
+      },
+      "judge": {
+        "latency_s": 4.108,
+        "usage": {
+          "prompt_tokens": 918,
+          "completion_tokens": 200,
+          "total_tokens": 1118,
+          "cost": 0.005295,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.005295,
+            "upstream_inference_prompt_cost": 0.002295,
+            "upstream_inference_completions_cost": 0.003
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 10,
+          "pedagogical_quality": 9,
+          "correctness": 10,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 97,
+          "strengths": [
+            "Directly answers the learner’s question in a step-by-step learning-friendly format.",
+            "Perfectly follows the required 4-part structure: definition, distinction, example, pitfall.",
+            "Accurately explains the threshold tradeoff between precision, recall, false positives, and false negatives.",
+            "Uses a concrete software-defect example aligned with the provided context (security bug detector during triage).",
+            "Language is clear, correct, and appropriate for an educational UI."
+          ],
+          "risks": [
+            "The phrase \"inevitably introduces more false positives\" is generally true in practice but slightly absolute; in rare edge cases metrics may not move monotonically on tiny datasets.",
+            "The pitfall section is useful but could be even more operational by mentioning choosing thresholds without considering review capacity or business cost."
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Exploration Answer ZH",
+        "category": "exploration_answer",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "### 为什么积分项会导致超调？\n提示：积分项的本质是“对误差的累积”。当系统受限（执行器达到极限）时，虽然输出无法再增加，但积分项并不知道这一点，它会像一个不知疲倦的“存钱罐”，继续疯狂累积误差。当目标达到后，这个巨大的累积值需要很长时间才能“吐出来”，从而导致系统冲过头。\n\n### Mini-Example：电梯升降\n想象你正在操作一部电梯，目标是停在 10 楼。\n1. **饱和状态**：如果你发出了“全速上升”的指令，但电梯电机功率已达上限，电梯依然在慢速上升。此时，积分项还在不断累积“还没到 10 楼”的误差。\n2. **超调发生**：当电梯终于到达 10 楼时，积分项里已经存了“一整桶”没能及时释放的能量。即便你停止指令，这股惯性依然会推着电梯冲向 11 楼或 12 楼。这就是“积分饱和”带来的超调。\n\n### 检查问题\n如果一个温控系统在加热时，加热棒已经处于 100% 的最大功率输出状态，但温度依然远低于设定值，此时积分项还在持续增大。**请问：这种情况下，如果不做抗积分饱和（Anti-windup）处理，当温度接近设定值时，系统最可能出现什么现象？**",
+        "parsed": "### 为什么积分项会导致超调？\n提示：积分项的本质是“对误差的累积”。当系统受限（执行器达到极限）时，虽然输出无法再增加，但积分项并不知道这一点，它会像一个不知疲倦的“存钱罐”，继续疯狂累积误差。当目标达到后，这个巨大的累积值需要很长时间才能“吐出来”，从而导致系统冲过头。\n\n### Mini-Example：电梯升降\n想象你正在操作一部电梯，目标是停在 10 楼。\n1. **饱和状态**：如果你发出了“全速上升”的指令，但电梯电机功率已达上限，电梯依然在慢速上升。此时，积分项还在不断累积“还没到 10 楼”的误差。\n2. **超调发生**：当电梯终于到达 10 楼时，积分项里已经存了“一整桶”没能及时释放的能量。即便你停止指令，这股惯性依然会推着电梯冲向 11 楼或 12 楼。这就是“积分饱和”带来的超调。\n\n### 检查问题\n如果一个温控系统在加热时，加热棒已经处于 100% 的最大功率输出状态，但温度依然远低于设定值，此时积分项还在持续增大。**请问：这种情况下，如果不做抗积分饱和（Anti-windup）处理，当温度接近设定值时，系统最可能出现什么现象？**",
+        "latency_s": 3.26,
+        "usage": {
+          "prompt_tokens": 274,
+          "completion_tokens": 335,
+          "total_tokens": 609
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.17,
+        "metrics": {
+          "keyword_score": 83.33,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 25
+        }
+      },
+      "judge": {
+        "latency_s": 4.717,
+        "usage": {
+          "prompt_tokens": 1043,
+          "completion_tokens": 306,
+          "total_tokens": 1349,
+          "cost": 0.0071975,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0071975,
+            "upstream_inference_prompt_cost": 0.0026075,
+            "upstream_inference_completions_cost": 0.00459
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 9,
+          "pedagogical_quality": 8,
+          "correctness": 8,
+          "structure_fit": 10,
+          "language_fit": 9,
+          "overall": 88,
+          "strengths": [
+            "严格遵循了要求的引导式结构：先给短提示，再给 mini-example，最后以聚焦检查问题收尾。",
+            "内容紧扣当前学习步骤“积分饱和”，明确串联了积分累积、执行器饱和、超调之间的关系。",
+            "使用了具体情境化例子，便于学习者形成直觉理解。",
+            "检查问题设计合理，能检验学习者是否理解“执行器已饱和但积分继续累积，随后导致过冲/超调”的核心机制。",
+            "语言整体自然，符合中文学习场景，可直接放入学习产品界面。"
+          ],
+          "risks": [
+            "虽然解释方向正确，但把超调部分部分归因为‘惯性’略显不严谨，容易让学习者把机械惯性和积分累积的控制效应混淆。",
+            "没有正面回答‘在什么情况下要做抗积分饱和’，更多是通过例子暗示，若更明确总结触发条件会更完整。",
+            "比喻如‘疯狂累积’‘一整桶能量’较生动，但技术表述稍显夸张，可能削弱精确性。"
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Concept Extraction EN",
+        "category": "concept_extraction",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"classifier threshold optimization\", \"precision-recall tradeoff\", \"false positive rate\", \"false negative rate\", \"software defect detection\", \"alert triage\", \"classification performance metrics\", \"decision threshold tuning\"]",
+        "parsed": [
+          "classifier threshold optimization",
+          "precision-recall tradeoff",
+          "false positive rate",
+          "false negative rate",
+          "software defect detection",
+          "alert triage",
+          "classification performance metrics",
+          "decision threshold tuning"
+        ],
+        "latency_s": 1.958,
+        "usage": {
+          "prompt_tokens": 164,
+          "completion_tokens": 40,
+          "total_tokens": 204
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": {
+        "latency_s": 3.761,
+        "usage": {
+          "prompt_tokens": 549,
+          "completion_tokens": 214,
+          "total_tokens": 763,
+          "cost": 0.0045825,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0045825,
+            "upstream_inference_prompt_cost": 0.0013725,
+            "upstream_inference_completions_cost": 0.00321
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 8,
+          "pedagogical_quality": 8,
+          "correctness": 8,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 86,
+          "strengths": [
+            "Returns only a JSON array of strings as required.",
+            "Stays within the 8-concept limit and keeps concepts concise.",
+            "Captures most core ideas from the prompt, including thresholding, precision/recall, false positives, false negatives, defect detection, and triage.",
+            "Language matches the user's English input and is UI-safe."
+          ],
+          "risks": [
+            "Uses some expanded or generalized phrases instead of the most canonical target concepts, e.g. 'classifier threshold optimization' and 'classification performance metrics'.",
+            "Includes rate-oriented terms ('false positive rate', 'false negative rate') rather than the expected event/error categories ('false positives', 'false negatives').",
+            "Misses the standalone concepts 'precision' and 'recall' in favor of a combined 'precision-recall tradeoff', which may reduce concept granularity for downstream learning workflows."
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Concept Extraction ZH",
+        "category": "concept_extraction",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"PID控制\", \"积分饱和\", \"执行器饱和\", \"超调\", \"稳态误差\", \"抗积分饱和算法\", \"积分项\", \"控制系统稳定性\"]",
+        "parsed": [
+          "PID控制",
+          "积分饱和",
+          "执行器饱和",
+          "超调",
+          "稳态误差",
+          "抗积分饱和算法",
+          "积分项",
+          "控制系统稳定性"
+        ],
+        "latency_s": 1.949,
+        "usage": {
+          "prompt_tokens": 180,
+          "completion_tokens": 37,
+          "total_tokens": 217
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": {
+        "latency_s": 4.924,
+        "usage": {
+          "prompt_tokens": 551,
+          "completion_tokens": 235,
+          "total_tokens": 786,
+          "cost": 0.0049025,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0049025,
+            "upstream_inference_prompt_cost": 0.0013775,
+            "upstream_inference_completions_cost": 0.003525
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 9,
+          "pedagogical_quality": 8,
+          "correctness": 9,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 91,
+          "strengths": [
+            "严格遵守了只输出JSON数组的格式要求",
+            "使用了简体中文，语言自然且符合技术学习语境",
+            "覆盖了题目点名的大多数核心概念：积分项、执行器饱和、超调、稳态误差、抗积分饱和",
+            "概念长度合适，均为简短可用的学习标签",
+            "数量满足8个以内的限制"
+          ],
+          "risks": [
+            "包含“PID控制”和“控制系统稳定性”这类较泛的概念，和题目要求的聚焦程度相比略弱",
+            "“抗积分饱和算法”比预期关键词“抗积分饱和/anti-windup”更具体，可能影响与标准标签的精确对齐",
+            "未显式包含英文别名“anti-windup”，若系统依赖同义词覆盖，可能略有损失"
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Learning Path EN",
+        "category": "learning_path",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\n  {\n    \"step\": 1,\n    \"concept\": \"Precision-Recall Trade-off Dynamics\",\n    \"description\": \"Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.\",\n    \"resources\": [\n      \"Scikit-learn documentation on Precision-Recall curves\",\n      \"Andrew Ng's Machine Learning Yearning: Error Analysis\"\n    ]\n  },\n  {\n    \"step\": 2,\n    \"concept\": \"Cost-Sensitive Learning and Utility Functions\",\n    \"description\": \"Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.\",\n    \"resources\": [\n      \"Cost-sensitive learning tutorials\",\n      \"Decision Theory basics for classification\"\n    ]\n  },\n  {\n    \"step\": 3,\n    \"concept\": \"Threshold Calibration and Deployment Strategy\",\n    \"description\": \"Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.\",\n    \"resources\": [\n      \"Model monitoring and drift detection guides\",\n      \"Practical MLOps: Threshold management in production\"\n    ]\n  }\n]",
+        "parsed": [
+          {
+            "step": 1,
+            "concept": "Precision-Recall Trade-off Dynamics",
+            "description": "Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.",
+            "resources": [
+              "Scikit-learn documentation on Precision-Recall curves",
+              "Andrew Ng's Machine Learning Yearning: Error Analysis"
+            ]
+          },
+          {
+            "step": 2,
+            "concept": "Cost-Sensitive Learning and Utility Functions",
+            "description": "Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.",
+            "resources": [
+              "Cost-sensitive learning tutorials",
+              "Decision Theory basics for classification"
+            ]
+          },
+          {
+            "step": 3,
+            "concept": "Threshold Calibration and Deployment Strategy",
+            "description": "Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.",
+            "resources": [
+              "Model monitoring and drift detection guides",
+              "Practical MLOps: Threshold management in production"
+            ]
+          }
+        ],
+        "latency_s": 3.351,
+        "usage": {
+          "prompt_tokens": 398,
+          "completion_tokens": 395,
+          "total_tokens": 793
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 91.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "step_count": 3,
+          "numbering_ok": true,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": {
+        "latency_s": 4.838,
+        "usage": {
+          "prompt_tokens": 934,
+          "completion_tokens": 233,
+          "total_tokens": 1167,
+          "cost": 0.00583,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.00583,
+            "upstream_inference_prompt_cost": 0.002335,
+            "upstream_inference_completions_cost": 0.003495
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 8,
+          "pedagogical_quality": 8,
+          "correctness": 9,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 87,
+          "strengths": [
+            "Returns exactly a valid JSON array with the required keys only.",
+            "Uses English appropriately and matches the learner context.",
+            "Builds on existing binary-classification knowledge and progresses toward deployment decisions.",
+            "Includes model-collision prompts directly inside each description field as required.",
+            "Covers key threshold-tuning ideas such as precision/recall trade-offs, false positives/false negatives, and deployment/monitoring."
+          ],
+          "risks": [
+            "The path is somewhat compressed: it skips an explicit foundational step on threshold mechanics/probability scores before moving into trade-offs and cost-sensitive decisions.",
+            "Step 2 asks the learner to 'calculate the optimal threshold' from cost numbers alone, which is pedagogically oversimplified unless score distributions or calibration assumptions are provided.",
+            "It does not explicitly mention triage workflows for risky code alerts, which could make the deployment connection less concrete for this product setting.",
+            "Resources are generic and not tightly scoped to defect detection or code-alert operations."
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Socratic Question EN",
+        "category": "socratic_question",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "If lowering the threshold increases the number of alerts by capturing more potential defects (increasing recall), what happens to the ratio of true defects among those additional alerts, and how does that affect precision?",
+        "parsed": "If lowering the threshold increases the number of alerts by capturing more potential defects (increasing recall), what happens to the ratio of true defects among those additional alerts, and how does that affect precision?",
+        "latency_s": 1.643,
+        "usage": {
+          "prompt_tokens": 243,
+          "completion_tokens": 38,
+          "total_tokens": 281
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 97.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 222
+        }
+      },
+      "judge": {
+        "latency_s": 4.938,
+        "usage": {
+          "prompt_tokens": 598,
+          "completion_tokens": 185,
+          "total_tokens": 783,
+          "cost": 0.00427,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.00427,
+            "upstream_inference_prompt_cost": 0.001495,
+            "upstream_inference_completions_cost": 0.002775
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 10,
+          "pedagogical_quality": 9,
+          "correctness": 10,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 98,
+          "strengths": [
+            "Returns exactly one concise Socratic probe question with no answer included.",
+            "Targets the learner's specific gap by asking for a causal explanation of why precision can drop when lowering the threshold increases alerts.",
+            "Uses the key concepts required for this step: threshold change, recall, precision, and the effect of additional alerts/false-positive volume.",
+            "Fits a real learning workflow because it builds directly on the learner's partial answer and latest feedback context.",
+            "Language is clear, appropriate, and product-safe for an English learning UI."
+          ],
+          "risks": [
+            "It mentions 'ratio of true defects among those additional alerts' rather than explicitly naming false positives, so the false-positive mechanism is somewhat implicit rather than fully explicit."
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Socratic Question ZH",
+        "category": "socratic_question",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "假设你正在控制一个阀门（执行器），其开度上限为 100%。当系统存在偏差，PID 计算出的控制量需要开到 150% 才能消除误差，此时阀门会被锁定在 100%。在这种情况下，如果积分项继续累积误差，对比“停止累积”和“持续累积”两种情况，当目标值突然下调时，系统的响应会有什么本质区别？",
+        "parsed": "假设你正在控制一个阀门（执行器），其开度上限为 100%。当系统存在偏差，PID 计算出的控制量需要开到 150% 才能消除误差，此时阀门会被锁定在 100%。在这种情况下，如果积分项继续累积误差，对比“停止累积”和“持续累积”两种情况，当目标值突然下调时，系统的响应会有什么本质区别？",
+        "latency_s": 2.22,
+        "usage": {
+          "prompt_tokens": 245,
+          "completion_tokens": 96,
+          "total_tokens": 341
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 79.5,
+        "metrics": {
+          "keyword_score": 50.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 143
+        }
+      },
+      "judge": {
+        "latency_s": 3.76,
+        "usage": {
+          "prompt_tokens": 700,
+          "completion_tokens": 203,
+          "total_tokens": 903,
+          "cost": 0.004795,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.004795,
+            "upstream_inference_prompt_cost": 0.00175,
+            "upstream_inference_completions_cost": 0.003045
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 10,
+          "pedagogical_quality": 10,
+          "correctness": 10,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 99,
+          "strengths": [
+            "严格只输出了一个问题，符合任务协议。",
+            "问题是 checkpoint 风格，要求学习者比较两种情况并判断本质区别，能有效检验是否真正理解。",
+            "使用了具体的执行器饱和场景（阀门上限 100%、控制量要求 150%），紧扣最新反馈建议。",
+            "清晰覆盖了积分项持续累积、执行器饱和、解除条件变化后出现超调/响应差异的因果链。",
+            "语言简洁、自然、适合直接放入学习产品 UI。"
+          ],
+          "risks": [
+            "问题中使用“偏差”而非“误差”，虽不影响理解，但术语一致性可略微优化。"
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Structured Feedback EN",
+        "category": "structured_feedback",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"incorrect\",\n  \"misconceptions\": [\n    \"Confused the definitions of precision and recall\",\n    \"Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously\"\n  ],\n  \"suggestions\": [\n    \"Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.\",\n    \"Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision.\"\n  ],\n  \"next_question\": \"If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?\",\n  \"mastery_score\": 0.2,\n  \"dimension_scores\": {\n    \"accuracy\": 0.1,\n    \"completeness\": 0.2,\n    \"transfer\": 0.1,\n    \"rigor\": 0.1\n  },\n  \"confidence\": 0.95,\n  \"pass_stage\": false,\n  \"decision_reason\": \"The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning.\"\n}",
+        "parsed": {
+          "correctness": "incorrect",
+          "misconceptions": [
+            "Confused the definitions of precision and recall",
+            "Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously"
+          ],
+          "suggestions": [
+            "Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.",
+            "Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision."
+          ],
+          "next_question": "If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.95,
+          "pass_stage": false,
+          "decision_reason": "The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning."
+        },
+        "latency_s": 2.659,
+        "usage": {
+          "prompt_tokens": 311,
+          "completion_tokens": 284,
+          "total_tokens": 595
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 85.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "incorrect",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": {
+        "latency_s": 4.607,
+        "usage": {
+          "prompt_tokens": 865,
+          "completion_tokens": 246,
+          "total_tokens": 1111,
+          "cost": 0.0058525,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0058525,
+            "upstream_inference_prompt_cost": 0.0021625,
+            "upstream_inference_completions_cost": 0.00369
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 6,
+          "pedagogical_quality": 7,
+          "correctness": 5,
+          "structure_fit": 10,
+          "language_fit": 10,
+          "overall": 67,
+          "strengths": [
+            "Returns valid JSON only and preserves the exact required schema and key names.",
+            "Language matches the learner input and is appropriate for a product UI.",
+            "Provides concrete misconceptions, suggestions, and a relevant follow-up question tied to threshold tuning.",
+            "Correctly notes that lowering the threshold tends to increase recall and often decrease precision."
+          ],
+          "risks": [
+            "Labels the response as 'incorrect' even though the learner showed partial understanding by identifying one aspect of precision/recall and discussing threshold effects; expected judgement was partial.",
+            "Fails expected scoring calibration: mastery_score is 0, outside the expected mid-low range, and all dimension scores are 0, which is too harsh for the learner response.",
+            "Does not explicitly mention 'predicted positives' and 'false positives' in the misconceptions section as strongly as expected for concept anchoring.",
+            "The feedback says the user 'fundamentally swapped' both definitions, but the user only swapped precision and recall definitions while still engaging with threshold behavior, so the diagnosis is somewhat overstated."
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 1,
+      "spec": {
+        "title": "Structured Feedback ZH",
+        "category": "structured_feedback",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"partially correct\",\n  \"misconceptions\": [\n    \"认为积分饱和与执行器饱和无关\",\n    \"认为解决超调的唯一方法是直接关闭积分项\"\n  ],\n  \"suggestions\": [\n    \"理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后\",\n    \"学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力\"\n  ],\n  \"next_question\": \"当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？\",\n  \"mastery_score\": 0.4,\n  \"dimension_scores\": {\n    \"accuracy\": 0.5,\n    \"completeness\": 0.3,\n    \"transfer\": 0.2,\n    \"rigor\": 0.4\n  },\n  \"confidence\": 0.9,\n  \"pass_stage\": false,\n  \"decision_reason\": \"用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。\"\n}",
+        "parsed": {
+          "correctness": "partially correct",
+          "misconceptions": [
+            "认为积分饱和与执行器饱和无关",
+            "认为解决超调的唯一方法是直接关闭积分项"
+          ],
+          "suggestions": [
+            "理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后",
+            "学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力"
+          ],
+          "next_question": "当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.9,
+          "pass_stage": false,
+          "decision_reason": "用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。"
+        },
+        "latency_s": 3.124,
+        "usage": {
+          "prompt_tokens": 306,
+          "completion_tokens": 307,
+          "total_tokens": 613
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "partially correct",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": {
+        "latency_s": 5.008,
+        "usage": {
+          "prompt_tokens": 954,
+          "completion_tokens": 274,
+          "total_tokens": 1228,
+          "cost": 0.006495,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.006495,
+            "upstream_inference_prompt_cost": 0.002385,
+            "upstream_inference_completions_cost": 0.00411
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0,
+            "image_tokens": 0,
+            "audio_tokens": 0
+          }
+        },
+        "parsed": {
+          "task_fulfillment": 8,
+          "pedagogical_quality": 8,
+          "correctness": 7,
+          "structure_fit": 9,
+          "language_fit": 7,
+          "overall": 78,
+          "strengths": [
+            "严格遵循了要求的JSON结构，键名完整且无多余字段",
+            "判断为部分正确，且明确指出了与执行器饱和、积分项、超调相关的关键误解",
+            "建议具有教学价值，能引导到抗积分饱和而非简单关闭积分项",
+            "next_question具备追问性，符合学习流程中的后续诊断"
+          ],
+          "risks": [
+            "未满足示例JSON中分数字段的实质填写要求：mastery_score和dimension_scores全部为0，削弱了评估可用性",
+            "correctness使用英文“partially correct”，虽符合可接受值，但整体语言要求为简体中文，界面一致性略受影响",
+            "misconceptions与suggestions没有直接纠正用户“积分项会积累误差”这一表述中的概念混淆",
+            "对‘积分饱和’的机制表述为‘系统滞后’略泛，若用于产品UI可再更精确地说明为解除饱和后的过冲/恢复慢"
+          ]
+        }
+      }
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Exploration Answer EN",
+        "category": "exploration_answer",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "1) **Concise Definition**: Precision measures the reliability of your alerts (what percentage of flagged defects are actually real), while recall measures the coverage of your detector (what percentage of all existing defects you successfully caught).\n\n2) **Key Distinction**: The threshold acts as a \"strictness\" dial. Lowering the threshold makes the model more sensitive (higher recall, but more \"noise\" or false positives), while raising the threshold makes the model more conservative (higher precision, but more \"missed\" defects or false negatives).\n\n3) **Concrete Example**: In a security bug detector, you might **lower the threshold** to ensure high recall, accepting that developers will have to dismiss some false positives to ensure that no critical vulnerabilities slip through into production.\n\n4) **Common Pitfall**: Treating the tradeoff as a theoretical exercise without considering the cost of the developer’s time. If your threshold for precision is too low, the resulting \"alert fatigue\" will cause developers to ignore the tool entirely, effectively rendering your high-recall detector useless.",
+        "parsed": "1) **Concise Definition**: Precision measures the reliability of your alerts (what percentage of flagged defects are actually real), while recall measures the coverage of your detector (what percentage of all existing defects you successfully caught).\n\n2) **Key Distinction**: The threshold acts as a \"strictness\" dial. Lowering the threshold makes the model more sensitive (higher recall, but more \"noise\" or false positives), while raising the threshold makes the model more conservative (higher precision, but more \"missed\" defects or false negatives).\n\n3) **Concrete Example**: In a security bug detector, you might **lower the threshold** to ensure high recall, accepting that developers will have to dismiss some false positives to ensure that no critical vulnerabilities slip through into production.\n\n4) **Common Pitfall**: Treating the tradeoff as a theoretical exercise without considering the cost of the developer’s time. If your threshold for precision is too low, the resulting \"alert fatigue\" will cause developers to ignore the tool entirely, effectively rendering your high-recall detector useless.",
+        "latency_s": 2.619,
+        "usage": {
+          "prompt_tokens": 267,
+          "completion_tokens": 212,
+          "total_tokens": 479
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 160
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Exploration Answer ZH",
+        "category": "exploration_answer",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "### 为什么积分项会导致超调？\n\n**提示：** 积分项的作用是“累积误差以消除稳态偏差”。但在执行器（如电机或加热器）达到物理极限后，即使误差依然存在，执行器也无法进一步增大输出，此时积分项会像一个“停不下来的水龙头”一样无限制地累积误差。当系统目标值最终达到时，这个巨大的累积值无法瞬间清零，导致系统必须产生反向误差来“抵消”之前的累积，从而造成严重的超调。\n\n**迷你示例：**\n想象你在开一辆车，目标是加速到 100km/h。你把油门踩到底（执行器饱和），但车速还在 50km/h（存在误差）。PID 的积分项会因为这段时间的误差一直累积数值。当车速终于达到 100km/h 时，积分项已经累积了一个巨大的正值。即使你松开油门，这个巨大的积分值依然在推着车继续加速，导致车速冲到了 120km/h，直到积分项慢慢减小回来。\n\n**检查问题：**\n如果一个温控系统的加热功率已经开到了最大，但温度还没达标，此时积分项依然在不断增大。请问：当温度终于达到目标值的那一瞬间，积分项的累积值是处于一个“较小”状态，还是“非常大”的状态？这会如何影响接下来的温控表现？",
+        "parsed": "### 为什么积分项会导致超调？\n\n**提示：** 积分项的作用是“累积误差以消除稳态偏差”。但在执行器（如电机或加热器）达到物理极限后，即使误差依然存在，执行器也无法进一步增大输出，此时积分项会像一个“停不下来的水龙头”一样无限制地累积误差。当系统目标值最终达到时，这个巨大的累积值无法瞬间清零，导致系统必须产生反向误差来“抵消”之前的累积，从而造成严重的超调。\n\n**迷你示例：**\n想象你在开一辆车，目标是加速到 100km/h。你把油门踩到底（执行器饱和），但车速还在 50km/h（存在误差）。PID 的积分项会因为这段时间的误差一直累积数值。当车速终于达到 100km/h 时，积分项已经累积了一个巨大的正值。即使你松开油门，这个巨大的积分值依然在推着车继续加速，导致车速冲到了 120km/h，直到积分项慢慢减小回来。\n\n**检查问题：**\n如果一个温控系统的加热功率已经开到了最大，但温度还没达标，此时积分项依然在不断增大。请问：当温度终于达到目标值的那一瞬间，积分项的累积值是处于一个“较小”状态，还是“非常大”的状态？这会如何影响接下来的温控表现？",
+        "latency_s": 2.786,
+        "usage": {
+          "prompt_tokens": 274,
+          "completion_tokens": 325,
+          "total_tokens": 599
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 88.33,
+        "metrics": {
+          "keyword_score": 66.67,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 14
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Concept Extraction EN",
+        "category": "concept_extraction",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"classifier threshold optimization\", \"precision-recall tradeoff\", \"false positive rate\", \"false negative rate\", \"software defect detection\", \"alert triage\", \"classification performance metrics\", \"decision threshold tuning\"]",
+        "parsed": [
+          "classifier threshold optimization",
+          "precision-recall tradeoff",
+          "false positive rate",
+          "false negative rate",
+          "software defect detection",
+          "alert triage",
+          "classification performance metrics",
+          "decision threshold tuning"
+        ],
+        "latency_s": 1.878,
+        "usage": {
+          "prompt_tokens": 200,
+          "completion_tokens": 40,
+          "total_tokens": 240
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Concept Extraction ZH",
+        "category": "concept_extraction",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"PID控制\", \"积分饱和\", \"执行器饱和\", \"超调\", \"稳态误差\", \"抗积分饱和算法\", \"积分项\", \"控制系统稳定性\"]",
+        "parsed": [
+          "PID控制",
+          "积分饱和",
+          "执行器饱和",
+          "超调",
+          "稳态误差",
+          "抗积分饱和算法",
+          "积分项",
+          "控制系统稳定性"
+        ],
+        "latency_s": 2.166,
+        "usage": {
+          "prompt_tokens": 144,
+          "completion_tokens": 37,
+          "total_tokens": 181
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Learning Path EN",
+        "category": "learning_path",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\n  {\n    \"step\": 1,\n    \"concept\": \"Precision-Recall Trade-off Dynamics\",\n    \"description\": \"Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.\",\n    \"resources\": [\n      \"Scikit-learn documentation on Precision-Recall curves\",\n      \"Andrew Ng's Machine Learning Yearning: Error Analysis\"\n    ]\n  },\n  {\n    \"step\": 2,\n    \"concept\": \"Cost-Sensitive Learning and Utility Functions\",\n    \"description\": \"Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.\",\n    \"resources\": [\n      \"Cost-sensitive learning tutorials\",\n      \"Decision Theory basics for classification\"\n    ]\n  },\n  {\n    \"step\": 3,\n    \"concept\": \"Threshold Calibration and Deployment Strategy\",\n    \"description\": \"Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.\",\n    \"resources\": [\n      \"Model monitoring and drift detection guides\",\n      \"Practical MLOps: Threshold management in production\"\n    ]\n  }\n]",
+        "parsed": [
+          {
+            "step": 1,
+            "concept": "Precision-Recall Trade-off Dynamics",
+            "description": "Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.",
+            "resources": [
+              "Scikit-learn documentation on Precision-Recall curves",
+              "Andrew Ng's Machine Learning Yearning: Error Analysis"
+            ]
+          },
+          {
+            "step": 2,
+            "concept": "Cost-Sensitive Learning and Utility Functions",
+            "description": "Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.",
+            "resources": [
+              "Cost-sensitive learning tutorials",
+              "Decision Theory basics for classification"
+            ]
+          },
+          {
+            "step": 3,
+            "concept": "Threshold Calibration and Deployment Strategy",
+            "description": "Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.",
+            "resources": [
+              "Model monitoring and drift detection guides",
+              "Practical MLOps: Threshold management in production"
+            ]
+          }
+        ],
+        "latency_s": 3.604,
+        "usage": {
+          "prompt_tokens": 260,
+          "completion_tokens": 395,
+          "total_tokens": 655
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 91.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "step_count": 3,
+          "numbering_ok": true,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Socratic Question EN",
+        "category": "socratic_question",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "If you lower the threshold to catch more defects (increasing recall), what happens to the number of false positives in your alert queue, and how does that influx specifically affect your precision calculation?",
+        "parsed": "If you lower the threshold to catch more defects (increasing recall), what happens to the number of false positives in your alert queue, and how does that influx specifically affect your precision calculation?",
+        "latency_s": 1.777,
+        "usage": {
+          "prompt_tokens": 244,
+          "completion_tokens": 37,
+          "total_tokens": 281
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 97.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 209
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Socratic Question ZH",
+        "category": "socratic_question",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "假设你正在控制一个阀门，目标是将其开度调至 100%，但此时阀门已经完全打开（物理极限），而系统仍存在偏差。在这种情况下，PID 控制器内部的积分项会继续累加这个偏差，请问这会导致阀门实际状态产生什么变化，以及当你试图让系统恢复到目标值时，这种累加会带来什么后果？",
+        "parsed": "假设你正在控制一个阀门，目标是将其开度调至 100%，但此时阀门已经完全打开（物理极限），而系统仍存在偏差。在这种情况下，PID 控制器内部的积分项会继续累加这个偏差，请问这会导致阀门实际状态产生什么变化，以及当你试图让系统恢复到目标值时，这种累加会带来什么后果？",
+        "latency_s": 2.798,
+        "usage": {
+          "prompt_tokens": 245,
+          "completion_tokens": 85,
+          "total_tokens": 330
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 73.25,
+        "metrics": {
+          "keyword_score": 25.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 132
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Structured Feedback EN",
+        "category": "structured_feedback",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"incorrect\",\n  \"misconceptions\": [\n    \"Confused the definitions of precision and recall\",\n    \"Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously\"\n  ],\n  \"suggestions\": [\n    \"Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.\",\n    \"Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision.\"\n  ],\n  \"next_question\": \"If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?\",\n  \"mastery_score\": 0.2,\n  \"dimension_scores\": {\n    \"accuracy\": 0.1,\n    \"completeness\": 0.2,\n    \"transfer\": 0.1,\n    \"rigor\": 0.1\n  },\n  \"confidence\": 0.95,\n  \"pass_stage\": false,\n  \"decision_reason\": \"The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning.\"\n}",
+        "parsed": {
+          "correctness": "incorrect",
+          "misconceptions": [
+            "Confused the definitions of precision and recall",
+            "Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously"
+          ],
+          "suggestions": [
+            "Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.",
+            "Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision."
+          ],
+          "next_question": "If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.95,
+          "pass_stage": false,
+          "decision_reason": "The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning."
+        },
+        "latency_s": 2.711,
+        "usage": {
+          "prompt_tokens": 675,
+          "completion_tokens": 284,
+          "total_tokens": 959
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 85.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "incorrect",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 2,
+      "spec": {
+        "title": "Structured Feedback ZH",
+        "category": "structured_feedback",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"partially correct\",\n  \"misconceptions\": [\n    \"认为积分饱和与执行器饱和无关\",\n    \"认为解决超调的唯一方法是直接关闭积分项\"\n  ],\n  \"suggestions\": [\n    \"理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后\",\n    \"学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力\"\n  ],\n  \"next_question\": \"当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？\",\n  \"mastery_score\": 0.4,\n  \"dimension_scores\": {\n    \"accuracy\": 0.5,\n    \"completeness\": 0.3,\n    \"transfer\": 0.2,\n    \"rigor\": 0.4\n  },\n  \"confidence\": 0.9,\n  \"pass_stage\": false,\n  \"decision_reason\": \"用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。\"\n}",
+        "parsed": {
+          "correctness": "partially correct",
+          "misconceptions": [
+            "认为积分饱和与执行器饱和无关",
+            "认为解决超调的唯一方法是直接关闭积分项"
+          ],
+          "suggestions": [
+            "理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后",
+            "学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力"
+          ],
+          "next_question": "当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.9,
+          "pass_stage": false,
+          "decision_reason": "用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。"
+        },
+        "latency_s": 2.963,
+        "usage": {
+          "prompt_tokens": 670,
+          "completion_tokens": 307,
+          "total_tokens": 977
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "partially correct",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Exploration Answer EN",
+        "category": "exploration_answer",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "1) **Concise Definition**: Precision measures the reliability of your alerts (how many flagged defects are actually bugs), while recall measures your coverage (how many total defects in the codebase you successfully caught).\n\n2) **Key Distinction**: The threshold acts as a \"sensitivity dial.\" Lowering the threshold makes the model more aggressive, increasing **recall** but inviting more noise (False Positives). Raising the threshold makes the model more conservative, increasing **precision** but causing it to miss more real issues (False Negatives).\n\n3) **Concrete Example**: In a security bug detector, you likely prioritize **recall**—you want to catch every potential vulnerability, even if it means developers spend time dismissing a few false alarms. Conversely, for a noisy \"flaky\" static analysis tool, you might prioritize **precision** to prevent \"alert fatigue,\" ensuring that when the tool flags something, it is almost certainly a real issue that needs fixing.\n\n4) **Common Pitfall**: Treating the tradeoff as a theoretical exercise rather than an operational one. A common mistake is focusing solely on the F1-score (the harmonic mean) without considering the \"cost of failure.\" In production, the cost of a missed critical defect (False Negative) is often significantly higher than the cost of a developer spending five minutes reviewing a false alarm (False Positive). Always tune your threshold based on the specific risk profile of the defect type.",
+        "parsed": "1) **Concise Definition**: Precision measures the reliability of your alerts (how many flagged defects are actually bugs), while recall measures your coverage (how many total defects in the codebase you successfully caught).\n\n2) **Key Distinction**: The threshold acts as a \"sensitivity dial.\" Lowering the threshold makes the model more aggressive, increasing **recall** but inviting more noise (False Positives). Raising the threshold makes the model more conservative, increasing **precision** but causing it to miss more real issues (False Negatives).\n\n3) **Concrete Example**: In a security bug detector, you likely prioritize **recall**—you want to catch every potential vulnerability, even if it means developers spend time dismissing a few false alarms. Conversely, for a noisy \"flaky\" static analysis tool, you might prioritize **precision** to prevent \"alert fatigue,\" ensuring that when the tool flags something, it is almost certainly a real issue that needs fixing.\n\n4) **Common Pitfall**: Treating the tradeoff as a theoretical exercise rather than an operational one. A common mistake is focusing solely on the F1-score (the harmonic mean) without considering the \"cost of failure.\" In production, the cost of a missed critical defect (False Negative) is often significantly higher than the cost of a developer spending five minutes reviewing a false alarm (False Positive). Always tune your threshold based on the specific risk profile of the defect type.",
+        "latency_s": 2.783,
+        "usage": {
+          "prompt_tokens": 268,
+          "completion_tokens": 286,
+          "total_tokens": 554
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 218
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Exploration Answer ZH",
+        "category": "exploration_answer",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "### 积分饱和（Integral Windup）解析\n\n**引导提示：**\n想象一下，积分项的工作是“记账”——只要有误差，它就会不断累积。但如果执行器（如阀门或电机）已经开到最大（饱和）了，即便误差依然存在，增加更多的“积分值”也无法让执行器开得更大，这些多出来的积分只会变成“无效的负债”。一旦误差反转，这些巨大的“负债”需要很长时间才能抵消掉，从而导致系统在目标点处出现严重的超调。\n\n**迷你示例：**\n以温控系统为例：你设定目标温度为 100℃。当室温只有 20℃ 时，加热器全功率运行（达到上限）。此时，积分项还在疯狂累积误差。当温度升到 99℃ 时，加热器其实应该减小功率了，但由于积分项之前累积了太多“无效值”，加热器依然会保持全功率，直到温度冲过 100℃ 后，积分项才能慢慢“消化”掉之前的累积值。\n\n**检查问题：**\n如果你的系统执行器（如电机驱动）在正常运行过程中从未达到过物理极限，你认为还有必要开启“抗积分饱和（Anti-windup）”功能吗？为什么？",
+        "parsed": "### 积分饱和（Integral Windup）解析\n\n**引导提示：**\n想象一下，积分项的工作是“记账”——只要有误差，它就会不断累积。但如果执行器（如阀门或电机）已经开到最大（饱和）了，即便误差依然存在，增加更多的“积分值”也无法让执行器开得更大，这些多出来的积分只会变成“无效的负债”。一旦误差反转，这些巨大的“负债”需要很长时间才能抵消掉，从而导致系统在目标点处出现严重的超调。\n\n**迷你示例：**\n以温控系统为例：你设定目标温度为 100℃。当室温只有 20℃ 时，加热器全功率运行（达到上限）。此时，积分项还在疯狂累积误差。当温度升到 99℃ 时，加热器其实应该减小功率了，但由于积分项之前累积了太多“无效值”，加热器依然会保持全功率，直到温度冲过 100℃ 后，积分项才能慢慢“消化”掉之前的累积值。\n\n**检查问题：**\n如果你的系统执行器（如电机驱动）在正常运行过程中从未达到过物理极限，你认为还有必要开启“抗积分饱和（Anti-windup）”功能吗？为什么？",
+        "latency_s": 3.152,
+        "usage": {
+          "prompt_tokens": 274,
+          "completion_tokens": 287,
+          "total_tokens": 561
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.17,
+        "metrics": {
+          "keyword_score": 83.33,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 16
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Concept Extraction EN",
+        "category": "concept_extraction",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"classifier threshold optimization\", \"precision-recall tradeoff\", \"false positive rate\", \"false negative rate\", \"software defect detection\", \"alert triage\", \"classification performance metrics\", \"decision threshold tuning\"]",
+        "parsed": [
+          "classifier threshold optimization",
+          "precision-recall tradeoff",
+          "false positive rate",
+          "false negative rate",
+          "software defect detection",
+          "alert triage",
+          "classification performance metrics",
+          "decision threshold tuning"
+        ],
+        "latency_s": 1.997,
+        "usage": {
+          "prompt_tokens": 200,
+          "completion_tokens": 40,
+          "total_tokens": 240
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Concept Extraction ZH",
+        "category": "concept_extraction",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"PID控制\", \"积分饱和\", \"执行器饱和\", \"超调\", \"稳态误差\", \"抗积分饱和算法\", \"积分项\", \"控制系统稳定性\"]",
+        "parsed": [
+          "PID控制",
+          "积分饱和",
+          "执行器饱和",
+          "超调",
+          "稳态误差",
+          "抗积分饱和算法",
+          "积分项",
+          "控制系统稳定性"
+        ],
+        "latency_s": 1.783,
+        "usage": {
+          "prompt_tokens": 180,
+          "completion_tokens": 37,
+          "total_tokens": 217
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Learning Path EN",
+        "category": "learning_path",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\n  {\n    \"step\": 1,\n    \"concept\": \"Precision-Recall Trade-off Dynamics\",\n    \"description\": \"Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.\",\n    \"resources\": [\n      \"Scikit-learn documentation on Precision-Recall curves\",\n      \"Andrew Ng's Machine Learning Yearning: Error Analysis\"\n    ]\n  },\n  {\n    \"step\": 2,\n    \"concept\": \"Cost-Sensitive Learning and Utility Functions\",\n    \"description\": \"Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.\",\n    \"resources\": [\n      \"Cost-sensitive learning tutorials\",\n      \"Decision Theory basics for classification\"\n    ]\n  },\n  {\n    \"step\": 3,\n    \"concept\": \"Threshold Calibration and Deployment Strategy\",\n    \"description\": \"Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.\",\n    \"resources\": [\n      \"Model monitoring and drift detection guides\",\n      \"Practical MLOps: Threshold management in production\"\n    ]\n  }\n]",
+        "parsed": [
+          {
+            "step": 1,
+            "concept": "Precision-Recall Trade-off Dynamics",
+            "description": "Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.",
+            "resources": [
+              "Scikit-learn documentation on Precision-Recall curves",
+              "Andrew Ng's Machine Learning Yearning: Error Analysis"
+            ]
+          },
+          {
+            "step": 2,
+            "concept": "Cost-Sensitive Learning and Utility Functions",
+            "description": "Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.",
+            "resources": [
+              "Cost-sensitive learning tutorials",
+              "Decision Theory basics for classification"
+            ]
+          },
+          {
+            "step": 3,
+            "concept": "Threshold Calibration and Deployment Strategy",
+            "description": "Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.",
+            "resources": [
+              "Model monitoring and drift detection guides",
+              "Practical MLOps: Threshold management in production"
+            ]
+          }
+        ],
+        "latency_s": 3.316,
+        "usage": {
+          "prompt_tokens": 260,
+          "completion_tokens": 395,
+          "total_tokens": 655
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 91.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "step_count": 3,
+          "numbering_ok": true,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Socratic Question EN",
+        "category": "socratic_question",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "If you lower the threshold to catch more defects (increasing recall), what happens to the number of false positives in your alert queue, and how does that influx specifically impact your precision calculation?",
+        "parsed": "If you lower the threshold to catch more defects (increasing recall), what happens to the number of false positives in your alert queue, and how does that influx specifically impact your precision calculation?",
+        "latency_s": 1.666,
+        "usage": {
+          "prompt_tokens": 243,
+          "completion_tokens": 37,
+          "total_tokens": 280
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 97.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 209
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Socratic Question ZH",
+        "category": "socratic_question",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "假设你正在控制一个阀门，目标是开度 100%，但阀门受物理结构限制，最大只能开启到 80%。此时控制器检测到还有 20% 的误差且持续存在，如果积分项继续累加这部分误差，当目标值突然下调至 50% 时，系统会发生什么现象？为什么？",
+        "parsed": "假设你正在控制一个阀门，目标是开度 100%，但阀门受物理结构限制，最大只能开启到 80%。此时控制器检测到还有 20% 的误差且持续存在，如果积分项继续累加这部分误差，当目标值突然下调至 50% 时，系统会发生什么现象？为什么？",
+        "latency_s": 2.211,
+        "usage": {
+          "prompt_tokens": 244,
+          "completion_tokens": 79,
+          "total_tokens": 323
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 65.25,
+        "metrics": {
+          "keyword_score": 25.0,
+          "language_score": 100.0,
+          "question_marks": 2,
+          "length_chars": 115
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Structured Feedback EN",
+        "category": "structured_feedback",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"incorrect\",\n  \"misconceptions\": [\n    \"Confused the definitions of precision and recall\",\n    \"Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously\"\n  ],\n  \"suggestions\": [\n    \"Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.\",\n    \"Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision.\"\n  ],\n  \"next_question\": \"If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?\",\n  \"mastery_score\": 0.2,\n  \"dimension_scores\": {\n    \"accuracy\": 0.1,\n    \"completeness\": 0.2,\n    \"transfer\": 0.1,\n    \"rigor\": 0.1\n  },\n  \"confidence\": 0.95,\n  \"pass_stage\": false,\n  \"decision_reason\": \"The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning.\"\n}",
+        "parsed": {
+          "correctness": "incorrect",
+          "misconceptions": [
+            "Confused the definitions of precision and recall",
+            "Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously"
+          ],
+          "suggestions": [
+            "Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.",
+            "Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision."
+          ],
+          "next_question": "If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.95,
+          "pass_stage": false,
+          "decision_reason": "The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning."
+        },
+        "latency_s": 2.777,
+        "usage": {
+          "prompt_tokens": 311,
+          "completion_tokens": 284,
+          "total_tokens": 595
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 85.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "incorrect",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 3,
+      "spec": {
+        "title": "Structured Feedback ZH",
+        "category": "structured_feedback",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"partially correct\",\n  \"misconceptions\": [\n    \"认为积分饱和与执行器饱和无关\",\n    \"认为解决超调的唯一方法是直接关闭积分项\"\n  ],\n  \"suggestions\": [\n    \"理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后\",\n    \"学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力\"\n  ],\n  \"next_question\": \"当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？\",\n  \"mastery_score\": 0.4,\n  \"dimension_scores\": {\n    \"accuracy\": 0.5,\n    \"completeness\": 0.3,\n    \"transfer\": 0.2,\n    \"rigor\": 0.4\n  },\n  \"confidence\": 0.9,\n  \"pass_stage\": false,\n  \"decision_reason\": \"用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。\"\n}",
+        "parsed": {
+          "correctness": "partially correct",
+          "misconceptions": [
+            "认为积分饱和与执行器饱和无关",
+            "认为解决超调的唯一方法是直接关闭积分项"
+          ],
+          "suggestions": [
+            "理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后",
+            "学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力"
+          ],
+          "next_question": "当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.9,
+          "pass_stage": false,
+          "decision_reason": "用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。"
+        },
+        "latency_s": 3.007,
+        "usage": {
+          "prompt_tokens": 306,
+          "completion_tokens": 307,
+          "total_tokens": 613
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "partially correct",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Exploration Answer EN",
+        "category": "exploration_answer",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "1) **Concise definition**: Precision measures the reliability of your alerts (how many flagged defects are actually real), while recall measures your detection coverage (how many total real defects you managed to catch).\n\n2) **Key distinction**: Lowering the classification threshold makes the model \"more sensitive,\" increasing recall (catching more bugs) but also increasing false positives (alerting on clean code). Raising the threshold makes the model \"more conservative,\" increasing precision (ensuring flagged items are high-confidence) but increasing false negatives (missing actual bugs).\n\n3) **Concrete example**: In a **security bug detector**, you might choose high recall (lower threshold) because missing a critical vulnerability is catastrophic, even if it means developers must sift through more false alarms. Conversely, for a **flaky static analysis tool**, you would prioritize high precision (higher threshold) to prevent \"alert fatigue,\" where developers stop trusting the tool because it flags too many non-issues.\n\n4) **Common pitfall**: Assuming that a \"balanced\" threshold is always best. In production defect triage, the costs are rarely symmetrical; the cost of a missed critical defect is often much higher than the cost of a developer spending a few seconds dismissing a false positive. You must tune based on the specific risk tolerance of the software project, not just statistical metrics.",
+        "parsed": "1) **Concise definition**: Precision measures the reliability of your alerts (how many flagged defects are actually real), while recall measures your detection coverage (how many total real defects you managed to catch).\n\n2) **Key distinction**: Lowering the classification threshold makes the model \"more sensitive,\" increasing recall (catching more bugs) but also increasing false positives (alerting on clean code). Raising the threshold makes the model \"more conservative,\" increasing precision (ensuring flagged items are high-confidence) but increasing false negatives (missing actual bugs).\n\n3) **Concrete example**: In a **security bug detector**, you might choose high recall (lower threshold) because missing a critical vulnerability is catastrophic, even if it means developers must sift through more false alarms. Conversely, for a **flaky static analysis tool**, you would prioritize high precision (higher threshold) to prevent \"alert fatigue,\" where developers stop trusting the tool because it flags too many non-issues.\n\n4) **Common pitfall**: Assuming that a \"balanced\" threshold is always best. In production defect triage, the costs are rarely symmetrical; the cost of a missed critical defect is often much higher than the cost of a developer spending a few seconds dismissing a false positive. You must tune based on the specific risk tolerance of the software project, not just statistical metrics.",
+        "latency_s": 2.981,
+        "usage": {
+          "prompt_tokens": 268,
+          "completion_tokens": 268,
+          "total_tokens": 536
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 205
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Exploration Answer ZH",
+        "category": "exploration_answer",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "### 为什么积分项会导致超调？\n\n**提示：** 把积分项想象成一个“记账员”，只要误差存在，它就会不停地往账本上累积数值。当控制器要求输出的能量超过了执行器（如电机、加热棒）的物理极限时，执行器虽然已经“全力以赴”了，但“记账员”并不知道执行器已经到了极限，依然在疯狂累积误差。一旦误差变小，这个巨大的累积值会瞬间释放，导致系统输出“用力过猛”而产生超调。\n\n**迷你示例：**\n想象你在开一辆限速 100km/h 的车，你设定目标速度为 120km/h。由于车子已经踩死油门（执行器饱和），速度无法进一步提升，但积分项还在不断累积“还没达到目标”的误差。当你松开油门时，由于之前累积的巨额积分值还没消退，车子会继续保持全油门状态，导致速度瞬间冲过 120km/h 甚至更高。\n\n**检查问题：**\n如果一个温控系统在加热时功率已经达到了上限，此时积分项是否应该继续累积误差？为什么？",
+        "parsed": "### 为什么积分项会导致超调？\n\n**提示：** 把积分项想象成一个“记账员”，只要误差存在，它就会不停地往账本上累积数值。当控制器要求输出的能量超过了执行器（如电机、加热棒）的物理极限时，执行器虽然已经“全力以赴”了，但“记账员”并不知道执行器已经到了极限，依然在疯狂累积误差。一旦误差变小，这个巨大的累积值会瞬间释放，导致系统输出“用力过猛”而产生超调。\n\n**迷你示例：**\n想象你在开一辆限速 100km/h 的车，你设定目标速度为 120km/h。由于车子已经踩死油门（执行器饱和），速度无法进一步提升，但积分项还在不断累积“还没达到目标”的误差。当你松开油门时，由于之前累积的巨额积分值还没消退，车子会继续保持全油门状态，导致速度瞬间冲过 120km/h 甚至更高。\n\n**检查问题：**\n如果一个温控系统在加热时功率已经达到了上限，此时积分项是否应该继续累积误差？为什么？",
+        "latency_s": 3.296,
+        "usage": {
+          "prompt_tokens": 275,
+          "completion_tokens": 270,
+          "total_tokens": 545
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 88.33,
+        "metrics": {
+          "keyword_score": 66.67,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 13
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Concept Extraction EN",
+        "category": "concept_extraction",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"classifier threshold optimization\", \"precision-recall tradeoff\", \"false positive rate\", \"false negative rate\", \"software defect detection\", \"alert triage\", \"classification performance metrics\", \"decision threshold tuning\"]",
+        "parsed": [
+          "classifier threshold optimization",
+          "precision-recall tradeoff",
+          "false positive rate",
+          "false negative rate",
+          "software defect detection",
+          "alert triage",
+          "classification performance metrics",
+          "decision threshold tuning"
+        ],
+        "latency_s": 1.854,
+        "usage": {
+          "prompt_tokens": 200,
+          "completion_tokens": 40,
+          "total_tokens": 240
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Concept Extraction ZH",
+        "category": "concept_extraction",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"PID控制\", \"积分饱和\", \"执行器饱和\", \"超调\", \"稳态误差\", \"抗积分饱和算法\", \"积分项\", \"控制系统稳定性\"]",
+        "parsed": [
+          "PID控制",
+          "积分饱和",
+          "执行器饱和",
+          "超调",
+          "稳态误差",
+          "抗积分饱和算法",
+          "积分项",
+          "控制系统稳定性"
+        ],
+        "latency_s": 1.909,
+        "usage": {
+          "prompt_tokens": 144,
+          "completion_tokens": 37,
+          "total_tokens": 181
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Learning Path EN",
+        "category": "learning_path",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\n  {\n    \"step\": 1,\n    \"concept\": \"Precision-Recall Trade-off Dynamics\",\n    \"description\": \"Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.\",\n    \"resources\": [\n      \"Scikit-learn documentation on Precision-Recall curves\",\n      \"Andrew Ng's Machine Learning Yearning: Error Analysis\"\n    ]\n  },\n  {\n    \"step\": 2,\n    \"concept\": \"Cost-Sensitive Learning and Utility Functions\",\n    \"description\": \"Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.\",\n    \"resources\": [\n      \"Cost-sensitive learning tutorials\",\n      \"Decision Theory basics for classification\"\n    ]\n  },\n  {\n    \"step\": 3,\n    \"concept\": \"Threshold Calibration and Deployment Strategy\",\n    \"description\": \"Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.\",\n    \"resources\": [\n      \"Model monitoring and drift detection guides\",\n      \"Practical MLOps: Threshold management in production\"\n    ]\n  }\n]",
+        "parsed": [
+          {
+            "step": 1,
+            "concept": "Precision-Recall Trade-off Dynamics",
+            "description": "Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.",
+            "resources": [
+              "Scikit-learn documentation on Precision-Recall curves",
+              "Andrew Ng's Machine Learning Yearning: Error Analysis"
+            ]
+          },
+          {
+            "step": 2,
+            "concept": "Cost-Sensitive Learning and Utility Functions",
+            "description": "Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.",
+            "resources": [
+              "Cost-sensitive learning tutorials",
+              "Decision Theory basics for classification"
+            ]
+          },
+          {
+            "step": 3,
+            "concept": "Threshold Calibration and Deployment Strategy",
+            "description": "Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.",
+            "resources": [
+              "Model monitoring and drift detection guides",
+              "Practical MLOps: Threshold management in production"
+            ]
+          }
+        ],
+        "latency_s": 4.513,
+        "usage": {
+          "prompt_tokens": 260,
+          "completion_tokens": 395,
+          "total_tokens": 655
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 91.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "step_count": 3,
+          "numbering_ok": true,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Socratic Question EN",
+        "category": "socratic_question",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "If lowering the threshold increases the number of alerts, how does the influx of these additional flagged instances—specifically those that are actually non-defects—proportionally impact your precision calculation?",
+        "parsed": "If lowering the threshold increases the number of alerts, how does the influx of these additional flagged instances—specifically those that are actually non-defects—proportionally impact your precision calculation?",
+        "latency_s": 1.933,
+        "usage": {
+          "prompt_tokens": 243,
+          "completion_tokens": 37,
+          "total_tokens": 280
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 93.75,
+        "metrics": {
+          "keyword_score": 75.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 214
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Socratic Question ZH",
+        "category": "socratic_question",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "假设你正在控制一个加热器，设定温度为 100 度，但加热器功率最大只能达到 100%。当环境温度突然降至 20 度，导致加热器即便全功率输出也无法使温度快速回升到 100 度时，如果此时 PID 控制器中的积分项依然在不断累加误差，这对“当实际温度终于达到 100 度时”的系统响应会有什么具体影响？",
+        "parsed": "假设你正在控制一个加热器，设定温度为 100 度，但加热器功率最大只能达到 100%。当环境温度突然降至 20 度，导致加热器即便全功率输出也无法使温度快速回升到 100 度时，如果此时 PID 控制器中的积分项依然在不断累加误差，这对“当实际温度终于达到 100 度时”的系统响应会有什么具体影响？",
+        "latency_s": 2.44,
+        "usage": {
+          "prompt_tokens": 245,
+          "completion_tokens": 99,
+          "total_tokens": 344
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 73.25,
+        "metrics": {
+          "keyword_score": 25.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 150
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Structured Feedback EN",
+        "category": "structured_feedback",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"incorrect\",\n  \"misconceptions\": [\n    \"Confused the definitions of precision and recall\",\n    \"Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously\"\n  ],\n  \"suggestions\": [\n    \"Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.\",\n    \"Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision.\"\n  ],\n  \"next_question\": \"If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?\",\n  \"mastery_score\": 0.2,\n  \"dimension_scores\": {\n    \"accuracy\": 0.1,\n    \"completeness\": 0.2,\n    \"transfer\": 0.1,\n    \"rigor\": 0.1\n  },\n  \"confidence\": 0.95,\n  \"pass_stage\": false,\n  \"decision_reason\": \"The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning.\"\n}",
+        "parsed": {
+          "correctness": "incorrect",
+          "misconceptions": [
+            "Confused the definitions of precision and recall",
+            "Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously"
+          ],
+          "suggestions": [
+            "Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.",
+            "Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision."
+          ],
+          "next_question": "If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.95,
+          "pass_stage": false,
+          "decision_reason": "The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning."
+        },
+        "latency_s": 2.538,
+        "usage": {
+          "prompt_tokens": 675,
+          "completion_tokens": 284,
+          "total_tokens": 959
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 85.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "incorrect",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 4,
+      "spec": {
+        "title": "Structured Feedback ZH",
+        "category": "structured_feedback",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"partially correct\",\n  \"misconceptions\": [\n    \"认为积分饱和与执行器饱和无关\",\n    \"认为解决超调的唯一方法是直接关闭积分项\"\n  ],\n  \"suggestions\": [\n    \"理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后\",\n    \"学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力\"\n  ],\n  \"next_question\": \"当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？\",\n  \"mastery_score\": 0.4,\n  \"dimension_scores\": {\n    \"accuracy\": 0.5,\n    \"completeness\": 0.3,\n    \"transfer\": 0.2,\n    \"rigor\": 0.4\n  },\n  \"confidence\": 0.9,\n  \"pass_stage\": false,\n  \"decision_reason\": \"用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。\"\n}",
+        "parsed": {
+          "correctness": "partially correct",
+          "misconceptions": [
+            "认为积分饱和与执行器饱和无关",
+            "认为解决超调的唯一方法是直接关闭积分项"
+          ],
+          "suggestions": [
+            "理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后",
+            "学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力"
+          ],
+          "next_question": "当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.9,
+          "pass_stage": false,
+          "decision_reason": "用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。"
+        },
+        "latency_s": 2.914,
+        "usage": {
+          "prompt_tokens": 670,
+          "completion_tokens": 307,
+          "total_tokens": 977
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "partially correct",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Exploration Answer EN",
+        "category": "exploration_answer",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "1) **Concise definition**: Precision measures the reliability of your alerts (what percentage of flagged defects are actually real), while recall measures your coverage (what percentage of all existing defects you successfully caught).\n\n2) **Key distinction**: Tuning the threshold is a balancing act. Lowering the threshold makes the detector \"more sensitive,\" increasing recall (catching more bugs) but also increasing false positives (noise). Raising the threshold makes the detector \"more conservative,\" increasing precision (ensuring only high-confidence alerts reach developers) but increasing the risk of false negatives (missing actual defects).\n\n3) **Concrete example**: In a **security bug detector**, you might raise the threshold to prioritize precision. You want to avoid \"alert fatigue,\" where developers stop trusting the tool because it flags too many false positives. However, in a **critical safety-critical system**, you would lower the threshold to prioritize recall, accepting more false positives to ensure almost no dangerous defects slip through to production.\n\n4) **Common pitfall**: Assuming that \"perfect\" performance is achievable. In real-world software triage, there is rarely a clear separation between buggy and non-buggy code. Beginners often chase a high F1-score without considering the operational cost: the cost of a developer wasting time on a false positive versus the cost of a catastrophic bug reaching the user. Always tune based on the specific risk profile of your codebase, not just the model metrics.",
+        "parsed": "1) **Concise definition**: Precision measures the reliability of your alerts (what percentage of flagged defects are actually real), while recall measures your coverage (what percentage of all existing defects you successfully caught).\n\n2) **Key distinction**: Tuning the threshold is a balancing act. Lowering the threshold makes the detector \"more sensitive,\" increasing recall (catching more bugs) but also increasing false positives (noise). Raising the threshold makes the detector \"more conservative,\" increasing precision (ensuring only high-confidence alerts reach developers) but increasing the risk of false negatives (missing actual defects).\n\n3) **Concrete example**: In a **security bug detector**, you might raise the threshold to prioritize precision. You want to avoid \"alert fatigue,\" where developers stop trusting the tool because it flags too many false positives. However, in a **critical safety-critical system**, you would lower the threshold to prioritize recall, accepting more false positives to ensure almost no dangerous defects slip through to production.\n\n4) **Common pitfall**: Assuming that \"perfect\" performance is achievable. In real-world software triage, there is rarely a clear separation between buggy and non-buggy code. Beginners often chase a high F1-score without considering the operational cost: the cost of a developer wasting time on a false positive versus the cost of a catastrophic bug reaching the user. Always tune based on the specific risk profile of your codebase, not just the model metrics.",
+        "latency_s": 2.999,
+        "usage": {
+          "prompt_tokens": 268,
+          "completion_tokens": 290,
+          "total_tokens": 558
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 222
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Exploration Answer ZH",
+        "category": "exploration_answer",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "### 为什么积分项会导致超调？\n\n**提示：** 想象积分项是一个“记忆力极好”的累加器。当系统存在误差时，它会不断增加输出以试图消除误差。如果执行器（如电机、阀门）已经到了最大功率（饱和），但误差还没消失，积分项会继续“疯狂累积”。当系统终于达到目标值时，这个巨大的累积值还没来得及“减掉”，导致控制器依然输出过大的控制量，从而冲过了头。\n\n**迷你示例：**\n设想你正在开车，目标时速是 100km/h。你把油门踩到底（执行器饱和），但车速还在 80km/h。积分项会认为“还没到目标，油门还要再大点”，于是它在后台不断累加。当车速终于达到 100km/h 时，由于积分项里已经存了一个巨大的值，油门依然处于“地板油”状态，车速会瞬间飙升到 120km/h 甚至更高，这就是超调。\n\n**检查问题：**\n如果一个温控系统的加热器功率已经开到了 100%，但炉内温度距离设定值还有 50 度，此时积分项的行为会对系统解除饱和后的表现产生什么具体影响？",
+        "parsed": "### 为什么积分项会导致超调？\n\n**提示：** 想象积分项是一个“记忆力极好”的累加器。当系统存在误差时，它会不断增加输出以试图消除误差。如果执行器（如电机、阀门）已经到了最大功率（饱和），但误差还没消失，积分项会继续“疯狂累积”。当系统终于达到目标值时，这个巨大的累积值还没来得及“减掉”，导致控制器依然输出过大的控制量，从而冲过了头。\n\n**迷你示例：**\n设想你正在开车，目标时速是 100km/h。你把油门踩到底（执行器饱和），但车速还在 80km/h。积分项会认为“还没到目标，油门还要再大点”，于是它在后台不断累加。当车速终于达到 100km/h 时，由于积分项里已经存了一个巨大的值，油门依然处于“地板油”状态，车速会瞬间飙升到 120km/h 甚至更高，这就是超调。\n\n**检查问题：**\n如果一个温控系统的加热器功率已经开到了 100%，但炉内温度距离设定值还有 50 度，此时积分项的行为会对系统解除饱和后的表现产生什么具体影响？",
+        "latency_s": 3.292,
+        "usage": {
+          "prompt_tokens": 275,
+          "completion_tokens": 290,
+          "total_tokens": 565
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 88.33,
+        "metrics": {
+          "keyword_score": 66.67,
+          "language_score": 100.0,
+          "structure_score": 100.0,
+          "length_words": 17
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Concept Extraction EN",
+        "category": "concept_extraction",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"classifier threshold optimization\", \"precision-recall tradeoff\", \"false positive rate\", \"false negative rate\", \"software defect detection\", \"alert triage\", \"classification performance metrics\", \"decision threshold tuning\"]",
+        "parsed": [
+          "classifier threshold optimization",
+          "precision-recall tradeoff",
+          "false positive rate",
+          "false negative rate",
+          "software defect detection",
+          "alert triage",
+          "classification performance metrics",
+          "decision threshold tuning"
+        ],
+        "latency_s": 1.904,
+        "usage": {
+          "prompt_tokens": 164,
+          "completion_tokens": 40,
+          "total_tokens": 204
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Concept Extraction ZH",
+        "category": "concept_extraction",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\"PID控制\", \"积分饱和\", \"执行器饱和\", \"超调\", \"稳态误差\", \"抗积分饱和算法\", \"积分项\", \"控制系统稳定性\"]",
+        "parsed": [
+          "PID控制",
+          "积分饱和",
+          "执行器饱和",
+          "超调",
+          "稳态误差",
+          "抗积分饱和算法",
+          "积分项",
+          "控制系统稳定性"
+        ],
+        "latency_s": 1.819,
+        "usage": {
+          "prompt_tokens": 144,
+          "completion_tokens": 37,
+          "total_tokens": 181
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 100.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "cleanliness": 100.0,
+          "count": 8,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Learning Path EN",
+        "category": "learning_path",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "[\n  {\n    \"step\": 1,\n    \"concept\": \"Precision-Recall Trade-off Dynamics\",\n    \"description\": \"Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.\",\n    \"resources\": [\n      \"Scikit-learn documentation on Precision-Recall curves\",\n      \"Andrew Ng's Machine Learning Yearning: Error Analysis\"\n    ]\n  },\n  {\n    \"step\": 2,\n    \"concept\": \"Cost-Sensitive Learning and Utility Functions\",\n    \"description\": \"Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.\",\n    \"resources\": [\n      \"Cost-sensitive learning tutorials\",\n      \"Decision Theory basics for classification\"\n    ]\n  },\n  {\n    \"step\": 3,\n    \"concept\": \"Threshold Calibration and Deployment Strategy\",\n    \"description\": \"Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.\",\n    \"resources\": [\n      \"Model monitoring and drift detection guides\",\n      \"Practical MLOps: Threshold management in production\"\n    ]\n  }\n]",
+        "parsed": [
+          {
+            "step": 1,
+            "concept": "Precision-Recall Trade-off Dynamics",
+            "description": "Deepen understanding of how shifting the classification threshold affects the confusion matrix. Model collision: Consider a scenario where you increase the threshold to reduce false positives; analyze why this might inadvertently cause a critical security vulnerability to be missed (false negative) and how that impacts the cost function.",
+            "resources": [
+              "Scikit-learn documentation on Precision-Recall curves",
+              "Andrew Ng's Machine Learning Yearning: Error Analysis"
+            ]
+          },
+          {
+            "step": 2,
+            "concept": "Cost-Sensitive Learning and Utility Functions",
+            "description": "Learn to assign numerical costs to false positives versus false negatives. Model collision: If a false positive costs 1 hour of developer time but a false negative costs 100 hours of downtime, calculate the optimal threshold. Test your logic by evaluating if a model with 99% accuracy is actually worse than a model with 90% accuracy in this specific high-stakes environment.",
+            "resources": [
+              "Cost-sensitive learning tutorials",
+              "Decision Theory basics for classification"
+            ]
+          },
+          {
+            "step": 3,
+            "concept": "Threshold Calibration and Deployment Strategy",
+            "description": "Implement threshold tuning in a production pipeline. Model collision: Simulate a drift scenario where the distribution of 'risky code' changes over time. Evaluate if a static threshold remains optimal or if it leads to a 'precision collapse' where the model starts flagging benign code as high-risk due to changing input patterns.",
+            "resources": [
+              "Model monitoring and drift detection guides",
+              "Practical MLOps: Threshold management in production"
+            ]
+          }
+        ],
+        "latency_s": 3.722,
+        "usage": {
+          "prompt_tokens": 398,
+          "completion_tokens": 395,
+          "total_tokens": 793
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 91.0,
+        "metrics": {
+          "keyword_score": 100.0,
+          "language_score": 100.0,
+          "step_count": 3,
+          "numbering_ok": true,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Socratic Question EN",
+        "category": "socratic_question",
+        "language": "en",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "If lowering the threshold increases the number of alerts by capturing more potential defects, how does that influx of additional alerts specifically affect the ratio of true positives to total flagged instances, and why does this shift typically impact precision?",
+        "parsed": "If lowering the threshold increases the number of alerts by capturing more potential defects, how does that influx of additional alerts specifically affect the ratio of true positives to total flagged instances, and why does this shift typically impact precision?",
+        "latency_s": 2.244,
+        "usage": {
+          "prompt_tokens": 243,
+          "completion_tokens": 43,
+          "total_tokens": 286
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 90.75,
+        "metrics": {
+          "keyword_score": 75.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 263
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Socratic Question ZH",
+        "category": "socratic_question",
+        "language": "zh",
+        "schema": false
+      },
+      "candidate": {
+        "raw_text": "假设你正在控制一个加热器，设定目标为 100°C，但加热器功率最大只能达到 100%，此时系统温度停留在 80°C 无法上升。在这种“执行器已达到 100% 输出上限”的状态下，PID 控制器的积分项仍在不断累加误差，请问当温度终于达到 100°C 时，为什么积分项累积的“历史误差”会导致系统产生明显的超调？",
+        "parsed": "假设你正在控制一个加热器，设定目标为 100°C，但加热器功率最大只能达到 100%，此时系统温度停留在 80°C 无法上升。在这种“执行器已达到 100% 输出上限”的状态下，PID 控制器的积分项仍在不断累加误差，请问当温度终于达到 100°C 时，为什么积分项累积的“历史误差”会导致系统产生明显的超调？",
+        "latency_s": 2.125,
+        "usage": {
+          "prompt_tokens": 244,
+          "completion_tokens": 103,
+          "total_tokens": 347
+        },
+        "schema_used": false,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 85.75,
+        "metrics": {
+          "keyword_score": 75.0,
+          "language_score": 100.0,
+          "question_marks": 1,
+          "length_chars": 155
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Structured Feedback EN",
+        "category": "structured_feedback",
+        "language": "en",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"incorrect\",\n  \"misconceptions\": [\n    \"Confused the definitions of precision and recall\",\n    \"Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously\"\n  ],\n  \"suggestions\": [\n    \"Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.\",\n    \"Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision.\"\n  ],\n  \"next_question\": \"If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?\",\n  \"mastery_score\": 0.2,\n  \"dimension_scores\": {\n    \"accuracy\": 0.1,\n    \"completeness\": 0.2,\n    \"transfer\": 0.1,\n    \"rigor\": 0.1\n  },\n  \"confidence\": 0.95,\n  \"pass_stage\": false,\n  \"decision_reason\": \"The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning.\"\n}",
+        "parsed": {
+          "correctness": "incorrect",
+          "misconceptions": [
+            "Confused the definitions of precision and recall",
+            "Incorrectly assumed that lowering the threshold increases both precision and recall simultaneously"
+          ],
+          "suggestions": [
+            "Review the definitions: Recall is the proportion of actual positives identified, while precision is the proportion of predicted positives that are true.",
+            "Visualize the tradeoff: Note that as you lower the threshold to catch more actual positives (increasing recall), you inevitably include more false positives, which decreases precision."
+          ],
+          "next_question": "If you have a model where the cost of missing a bug is extremely high, how should you adjust your threshold, and what impact would that have on your precision and recall?",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.95,
+          "pass_stage": false,
+          "decision_reason": "The user fundamentally swapped the definitions of precision and recall and holds a flawed understanding of the inverse relationship between them during threshold tuning."
+        },
+        "latency_s": 2.727,
+        "usage": {
+          "prompt_tokens": 311,
+          "completion_tokens": 284,
+          "total_tokens": 595
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 85.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "incorrect",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    },
+    {
+      "model": "openrouter/google/gemini-3.1-flash-lite-preview",
+      "round": 5,
+      "spec": {
+        "title": "Structured Feedback ZH",
+        "category": "structured_feedback",
+        "language": "zh",
+        "schema": true
+      },
+      "candidate": {
+        "raw_text": "{\n  \"correctness\": \"partially correct\",\n  \"misconceptions\": [\n    \"认为积分饱和与执行器饱和无关\",\n    \"认为解决超调的唯一方法是直接关闭积分项\"\n  ],\n  \"suggestions\": [\n    \"理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后\",\n    \"学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力\"\n  ],\n  \"next_question\": \"当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？\",\n  \"mastery_score\": 0.4,\n  \"dimension_scores\": {\n    \"accuracy\": 0.5,\n    \"completeness\": 0.3,\n    \"transfer\": 0.2,\n    \"rigor\": 0.4\n  },\n  \"confidence\": 0.9,\n  \"pass_stage\": false,\n  \"decision_reason\": \"用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。\"\n}",
+        "parsed": {
+          "correctness": "partially correct",
+          "misconceptions": [
+            "认为积分饱和与执行器饱和无关",
+            "认为解决超调的唯一方法是直接关闭积分项"
+          ],
+          "suggestions": [
+            "理解积分饱和的本质是执行器达到物理极限后，积分项继续累积导致的系统滞后",
+            "学习抗积分饱和算法（如积分限幅、退饱和法），而不是简单地关闭积分项，因为关闭积分项会丧失消除稳态误差的能力"
+          ],
+          "next_question": "当PID控制器的输出达到执行器物理极限（如电机电压达到最大值）时，为什么积分项的持续累积会导致系统在误差反向后出现严重的超调？",
+          "mastery_score": 0,
+          "dimension_scores": {
+            "accuracy": 0,
+            "completeness": 0,
+            "transfer": 0,
+            "rigor": 0
+          },
+          "confidence": 0.9,
+          "pass_stage": false,
+          "decision_reason": "用户理解积分项消除稳态误差的作用，但对积分饱和的成因存在严重误解，且提出的解决方案（直接关闭积分）在工程实践中会导致稳态误差无法消除。"
+        },
+        "latency_s": 2.952,
+        "usage": {
+          "prompt_tokens": 670,
+          "completion_tokens": 307,
+          "total_tokens": 977
+        },
+        "schema_used": true,
+        "fallback_used": false,
+        "schema_error": null,
+        "error": null
+      },
+      "evaluation": {
+        "deterministic_score": 94.0,
+        "metrics": {
+          "language_score": 100.0,
+          "correctness": "partially correct",
+          "misconception_count": 2,
+          "suggestion_count": 2,
+          "mastery_score": 0.0,
+          "pass_stage": false,
+          "schema_used": true,
+          "fallback_used": false
+        }
+      },
+      "judge": null
+    }
+  ]
+}
