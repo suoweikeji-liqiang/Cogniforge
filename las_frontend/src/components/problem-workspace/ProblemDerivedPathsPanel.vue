@@ -30,14 +30,27 @@
                 <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
               </div>
               <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
-                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
-              </p>
-              <p v-if="candidate.selected_insertion" class="candidate-meta">
-                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
-                {{ formatInsertionBehavior(candidate.selected_insertion) }}
-              </p>
+              <details v-if="embedded && hasPlacementContext(candidate)" class="candidate-context">
+                <summary class="candidate-context-summary">{{ t('problemDetail.pathCandidatePlacementToggle') }}</summary>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+                </p>
+                <p v-if="candidate.selected_insertion" class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.selected_insertion) }}
+                </p>
+              </details>
+              <template v-else>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+                </p>
+                <p v-if="candidate.selected_insertion" class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.selected_insertion) }}
+                </p>
+              </template>
               <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
                 <button
                   type="button"
@@ -96,14 +109,27 @@
                 <span class="candidate-source">{{ formatPathSuggestionType(candidate.type) }}</span>
               </div>
               <p v-if="candidate.reason" class="candidate-evidence">{{ candidate.reason }}</p>
-              <p class="candidate-meta">
-                <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
-                {{ formatInsertionBehavior(candidate.recommended_insertion) }}
-              </p>
-              <p v-if="candidate.selected_insertion" class="candidate-meta">
-                <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
-                {{ formatInsertionBehavior(candidate.selected_insertion) }}
-              </p>
+              <details v-if="embedded && hasPlacementContext(candidate)" class="candidate-context">
+                <summary class="candidate-context-summary">{{ t('problemDetail.pathCandidatePlacementToggle') }}</summary>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+                </p>
+                <p v-if="candidate.selected_insertion" class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.selected_insertion) }}
+                </p>
+              </details>
+              <template v-else>
+                <p class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateRecommendedInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.recommended_insertion) }}
+                </p>
+                <p v-if="candidate.selected_insertion" class="candidate-meta">
+                  <strong>{{ t('problemDetail.pathCandidateChosenInsertion') }}:</strong>
+                  {{ formatInsertionBehavior(candidate.selected_insertion) }}
+                </p>
+              </template>
               <div v-if="candidate.status !== 'dismissed'" class="candidate-actions">
                 <button
                   type="button"
@@ -236,6 +262,10 @@ const formatInsertionBehavior = (action: string | undefined | null) => {
   if (action === 'save_as_side_branch') return t('problemDetail.insertionSaveAsSideBranch')
   return t('problemDetail.insertionBookmarkForLater')
 }
+
+const hasPlacementContext = (candidate: any) => Boolean(
+  candidate?.recommended_insertion || candidate?.selected_insertion
+)
 </script>
 
 <style scoped>
@@ -314,6 +344,24 @@ const formatInsertionBehavior = (action: string | undefined | null) => {
 .candidate-meta {
   margin-top: 0.45rem;
   font-size: 0.85rem;
+}
+
+.candidate-context {
+  margin-top: 0.45rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.55rem;
+}
+
+.candidate-context-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.candidate-context-summary::-webkit-details-marker {
+  display: none;
 }
 
 .candidate-actions {

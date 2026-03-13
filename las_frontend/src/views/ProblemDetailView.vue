@@ -347,15 +347,25 @@
         <div class="section-heading">
           <div>
             <p class="workspace-eyebrow">{{ t('problemDetail.turnResultTitle') }}</p>
-            <h2>{{ workspaceTurnSummary }}</h2>
+            <h2>{{ turnResultHeading }}</h2>
             <p class="section-subtitle">
-              {{ learningMode === 'socratic' ? t('problemDetail.turnResultSubtitleSocratic') : t('problemDetail.turnResultSubtitleExploration') }}
+              {{ turnResultSubtitle }}
             </p>
           </div>
         </div>
 
         <div
-          v-if="!hasContextualInteractionOutput"
+          v-if="isTurnProcessing"
+          class="turn-result-processing"
+          data-testid="turn-result-processing"
+        >
+          <strong>{{ turnProcessingTitle }}</strong>
+          <p>{{ turnProcessingDescription }}</p>
+          <p v-if="turnProcessingSupport" class="turn-processing-support">{{ turnProcessingSupport }}</p>
+        </div>
+
+        <div
+          v-else-if="!hasContextualInteractionOutput"
           class="workspace-current-output-empty"
           data-testid="workspace-current-output-empty"
         >
@@ -370,6 +380,7 @@
         </div>
 
         <ProblemTurnOutcomePanel
+          v-if="hasContextualInteractionOutput"
           embedded
           :learning-mode="learningMode"
           :latest-response="latestResponse"
@@ -831,6 +842,49 @@ const latestQA = computed(() => {
 })
 const responseHistory = computed(() => [...responses.value].reverse())
 const latestFeedback = computed(() => latestResponse.value?.structured_feedback || null)
+const isTurnProcessing = computed(() => submitting.value || askingQuestion.value)
+const turnResultHeading = computed(() => (
+  isTurnProcessing.value
+    ? t('problemDetail.turnResultProcessingHeading')
+    : workspaceTurnSummary.value
+))
+const turnResultSubtitle = computed(() => {
+  if (isTurnProcessing.value) {
+    return learningMode.value === 'socratic'
+      ? t('problemDetail.turnResultProcessingSubtitleSocratic')
+      : t('problemDetail.turnResultProcessingSubtitleExploration')
+  }
+  return learningMode.value === 'socratic'
+    ? t('problemDetail.turnResultSubtitleSocratic')
+    : t('problemDetail.turnResultSubtitleExploration')
+})
+const turnProcessingTitle = computed(() => {
+  if (learningMode.value === 'socratic') {
+    return streamingSocraticStatus.value || t('problemDetail.turnResultProcessingTitleSocratic')
+  }
+  return t('problemDetail.turnResultProcessingTitleExploration')
+})
+const truncateInline = (value: unknown, max = 160) => {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim()
+  if (normalized.length <= max) return normalized
+  return `${normalized.slice(0, max - 1).trimEnd()}…`
+}
+const turnProcessingDescription = computed(() => {
+  if (learningMode.value === 'socratic') {
+    return t('problemDetail.turnResultProcessingDescriptionSocratic')
+  }
+  return t('problemDetail.turnResultProcessingDescriptionExploration')
+})
+const turnProcessingSupport = computed(() => {
+  if (learningMode.value === 'socratic') {
+    if (streamingSocraticPreview.value) return truncateInline(streamingSocraticPreview.value)
+    if (responseText.value.trim()) return truncateInline(responseText.value)
+    return ''
+  }
+  if (streamingExplorationAnswer.value) return truncateInline(streamingExplorationAnswer.value)
+  if (learningQuestion.value.trim()) return truncateInline(learningQuestion.value)
+  return ''
+})
 const activeConceptTurnId = computed(() => (
   currentInteractionMatchesContext.value ? currentInteractionTurnId.value : null
 ))
@@ -1423,6 +1477,25 @@ onMounted(loadWorkspace)
 
 .workspace-current-output-empty p {
   color: var(--text-muted);
+}
+
+.turn-result-processing {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.turn-result-processing p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.turn-processing-support {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .workspace-artifacts-actions {

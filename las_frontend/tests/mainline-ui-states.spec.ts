@@ -197,6 +197,28 @@ test('problem creation requires choosing a learning protocol before submit', asy
   await expect(modal.getByRole('button', { name: /^Add$/i })).toBeEnabled()
 })
 
+test('problem creation shows progress feedback before the workspace opens', async ({ page, request }) => {
+  const title = `Progress ${randomUUID().slice(0, 6)}`
+  await authenticate(page, request)
+  await page.goto('/problems')
+
+  await page.route('**/api/problems/', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue()
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    await route.continue()
+  })
+
+  const modal = await openCreateProblemModal(page, title, 'socratic')
+  await modal.getByRole('button', { name: /^Add$/i }).click()
+
+  await expect(page.getByTestId('problems-create-status')).toContainText(/Creating the problem/i)
+  await expect(modal.getByRole('button', { name: /Creating/i })).toBeDisabled()
+  await expect(page).toHaveURL(/\/problems\/.+/)
+})
+
 test('problem creation can enter the workspace directly in exploration mode', async ({ page, request }) => {
   // Contract Assertions:
   // - Critical Path: problem creation must support choosing the exploration protocol before workspace entry.

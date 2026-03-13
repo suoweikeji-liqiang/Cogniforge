@@ -1,0 +1,141 @@
+{
+  "baseUrl": "http://192.163.174.17",
+  "startedAt": "2026-03-12T02:54:48.981Z",
+  "outputDir": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z",
+  "account": {
+    "username": "prodreg2_mmmvk8m9230c",
+    "email": "prodreg2_mmmvk8m9230c@example.com"
+  },
+  "artifacts": {
+    "problemId": "de076637-1e19-42e9-a676-c2f794e5a474",
+    "problemTitle": "Prod Regression Postfix mmmvk8m9230c",
+    "modelCardId": "79477892-7854-4797-acfc-95216200988e",
+    "modelCardTitle": "Prod Regression Card mmmvk8m9230c",
+    "scheduleId": "55448a9b-f7d7-4978-af13-d437bb67ce3a"
+  },
+  "steps": [
+    {
+      "name": "01-register",
+      "startedAt": "2026-03-12T02:54:49.762Z",
+      "status": "passed",
+      "details": {
+        "url": "http://192.163.174.17/login"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/01-register.png",
+      "finishedAt": "2026-03-12T02:54:53.840Z"
+    },
+    {
+      "name": "02-login",
+      "startedAt": "2026-03-12T02:54:53.840Z",
+      "status": "passed",
+      "details": {
+        "url": "http://192.163.174.17/dashboard"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/02-login.png",
+      "finishedAt": "2026-03-12T02:54:57.298Z"
+    },
+    {
+      "name": "03-dashboard",
+      "startedAt": "2026-03-12T02:54:57.299Z",
+      "status": "passed",
+      "details": {
+        "home": "Continue Learning",
+        "focus": "Top PriorityStart from one concrete problemIf the next move is unclear, push one concrete problem forward first.New Problem"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/03-dashboard.png",
+      "finishedAt": "2026-03-12T02:54:58.964Z"
+    },
+    {
+      "name": "04-create-problem-and-start-exploration",
+      "startedAt": "2026-03-12T02:54:58.964Z",
+      "status": "passed",
+      "details": {
+        "problemId": "de076637-1e19-42e9-a676-c2f794e5a474"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/04-problem-created.png",
+      "finishedAt": "2026-03-12T02:55:13.390Z"
+    },
+    {
+      "name": "05-english-exploration-answer-language",
+      "startedAt": "2026-03-12T02:55:13.391Z",
+      "status": "passed",
+      "details": {
+        "turnOutcome": "Answer Type: ComparisonAnswer1. **Concise definition**:  \n   - **Precision** measures the accuracy of positive predictions: it is the ratio of true positives (correctly identified relevant items) to all predicted positives (all items labeled as relevant).  \n   - **Recall** measures the coverage of actual positives: it is the ratio of true positives to all actual positives (all truly relevant items in the dataset).\n\n2. **Key distinction**:  \n   Precision focuses on minimizing false positives (irrelevant items incorrectly marked as relevant), while recall focuses on minimizing false negatives (r",
+        "cjkCount": 0
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/05-english-exploration.png",
+      "finishedAt": "2026-03-12T02:55:39.756Z"
+    },
+    {
+      "name": "06-concept-candidate-cleanup",
+      "startedAt": "2026-03-12T02:55:39.756Z",
+      "status": "passed",
+      "details": {
+        "count": 0,
+        "candidates": []
+      },
+      "warnings": [],
+      "finishedAt": "2026-03-12T02:55:40.468Z"
+    },
+    {
+      "name": "07-model-card-ui",
+      "startedAt": "2026-03-12T02:55:40.469Z",
+      "status": "passed",
+      "details": {
+        "modelCardId": "79477892-7854-4797-acfc-95216200988e",
+        "lifecycle": "Active"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/07-model-card-detail.png",
+      "finishedAt": "2026-03-12T02:56:13.019Z"
+    },
+    {
+      "name": "08-reviews-and-srs",
+      "startedAt": "2026-03-12T02:56:13.021Z",
+      "status": "passed",
+      "details": {
+        "focusHref": "/model-cards/79477892-7854-4797-acfc-95216200988e",
+        "modelCardsPanel": "Model Card LifecycleCards to evolveProd Regression Card mmmvk8m9230cSource: No linked learning origin yet.Current state: Scheduled and waiting for its next recall.Suggested action: Open the card and inspect its current recall status.Scheduled",
+        "srsText": "Review SubflowUse this page as a focused review session inside the broader review loopThis page handles the active recall session itself. The broader planning, scheduling, and evolution loop still lives in Reviews and Model Cards.ReviewsOpen Model CardsRecall SessionDue Today0Total Scheduled1All rev"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/08-reviews.png",
+      "finishedAt": "2026-03-12T02:56:15.436Z"
+    },
+    {
+      "name": "09-zh-exploration-still-localized",
+      "startedAt": "2026-03-12T02:56:15.438Z",
+      "status": "passed",
+      "details": {
+        "homeLabel": "继续学习",
+        "turnOutcome": "回答类型: 对比解释回答1. **简洁定义**  \n   - **精确率**：在所有被模型预测为“正类”的样本中，实际为正类的比例。关注“预测的准确性”，即“宁缺毋滥”。  \n   - **召回率**：在所有实际为正类的样本中，被模型正确预测为正类的比例。关注“覆盖的全面性”，即“宁错杀不放过”。  \n\n2. **关键区别**  \n   精确率衡量**预测结果的置信度**（减少误报），召回率衡量**对真实正类的发现能力**（减少漏报）。两者通常此消彼长：提高阈值（如仅当置信度>0.9时判定为正类）会提升精确率但降低召回率；降低阈值则相反。  \n\n3. **具体例子（阈值变化）**  \n   **场景**：垃圾邮件检测模型，输出概率值。  \n   - **阈值=0.8**：仅概率>0.8的邮件判为垃圾邮件。  \n     - 预测为垃圾的100封邮件中，95封实际是垃圾 → **精确率=95%**。  \n     - 实际200封垃圾邮件中，仅60封被正确检测 → **召回率=30%**。  \n   - **阈值=0.4**：概率>0.4即判为垃圾邮件。  \n     - 预测为垃圾的300封邮件中，180封实际是垃圾 → **精确率=60%**。  \n     - 实际200封垃圾邮件中，150封被正确检测 → **召回率=75%**。  \n   **结论**：降低阈值后，召回率从"
+      },
+      "warnings": [],
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-regression-192.163.174.17-postfix/2026-03-12T02-54-48-981Z/09-zh-exploration.png",
+      "finishedAt": "2026-03-12T02:56:37.218Z"
+    },
+    {
+      "name": "10-api-schedule-sanity",
+      "startedAt": "2026-03-12T02:56:37.220Z",
+      "status": "passed",
+      "details": {
+        "match": {
+          "scheduleId": "55448a9b-f7d7-4978-af13-d437bb67ce3a",
+          "nextReviewAt": "2026-03-13T02:56:13.166074",
+          "recallState": "scheduled"
+        }
+      },
+      "warnings": [],
+      "finishedAt": "2026-03-12T02:56:37.575Z"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "warnings": [],
+  "finishedAt": "2026-03-12T02:56:37.575Z"
+}

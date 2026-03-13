@@ -7,8 +7,8 @@
       :message="t('cogTest.secondaryMessage')"
       :primary-label="t('cogTest.openReviewHub')"
       primary-to="/reviews"
-      :secondary-label="t('graph.openModelCards')"
-      secondary-to="/model-cards"
+      :secondary-label="t('nav.problems')"
+      secondary-to="/problems"
     />
     <div class="header-actions">
       <h1>{{ t('cogTest.history') }}</h1>

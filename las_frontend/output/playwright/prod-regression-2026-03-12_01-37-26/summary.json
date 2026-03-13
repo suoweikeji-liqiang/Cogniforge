@@ -1,0 +1,113 @@
+{
+  "target": "http://192.163.174.17",
+  "account": {
+    "email": "prod_regress_45bc37b4@example.com",
+    "username": "prod_regress_45bc37b4",
+    "fullName": "Production Regression Bot",
+    "password": "ProdRegression#123"
+  },
+  "createdProblemTitle": "Prod Regression Precision vs Recall 45bc37b4",
+  "createdCardTitle": "Why it appeared:",
+  "passed": 15,
+  "failed": 1,
+  "warnings": 0,
+  "results": [
+    {
+      "step": "open register",
+      "status": "passed",
+      "details": "Register page loaded."
+    },
+    {
+      "step": "register account",
+      "status": "passed",
+      "details": "Registered temp account prod_regress_45bc37b4."
+    },
+    {
+      "step": "login account",
+      "status": "passed",
+      "details": "Logged in and loaded dashboard."
+    },
+    {
+      "step": "dashboard shell",
+      "status": "passed",
+      "details": "Primary navigation and dashboard focus card are visible."
+    },
+    {
+      "step": "open problems",
+      "status": "passed",
+      "details": "Problems page loaded."
+    },
+    {
+      "step": "create problem via ui",
+      "status": "passed",
+      "details": "Problem created and start-mode chooser appeared."
+    },
+    {
+      "step": "choose exploration start mode",
+      "status": "passed",
+      "details": "Entered ProblemDetail in exploration mode."
+    },
+    {
+      "step": "exploration turn",
+      "status": "passed",
+      "details": "Exploration completed. Artifact count summary: Derived Concepts2Current-turn concept candidates stay visible first."
+    },
+    {
+      "step": "accept promote and schedule first derived concept",
+      "status": "passed",
+      "details": "Accepted first concept, promoted it to a model card, and scheduled review."
+    },
+    {
+      "step": "branch path flow",
+      "status": "passed",
+      "details": "Activated a branch path. Current path: Current Path: Main pathProd Regression Precision vs Recall 45bc37b4"
+    },
+    {
+      "step": "switch to socratic and answer once",
+      "status": "passed",
+      "details": "Socratic question loaded and one response was saved into history."
+    },
+    {
+      "step": "reviews page",
+      "status": "failed",
+      "details": "locator.waitFor: Error: strict mode violation: getByRole('heading', { name: /reviews/i }) resolved to 2 elements:\n    1) <h1 data-v-e9922f9f=\"\">Reviews</h1> aka getByRole('heading', { name: 'Reviews', exact: true })\n    2) <h2 data-v-e9922f9f=\"\">Saved learning reviews</h2> aka getByRole('heading', { name: 'Saved learning reviews' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: /reviews/i }) to be visible\u001b[22m\n"
+    },
+    {
+      "step": "model cards page",
+      "status": "passed",
+      "details": "Model cards page loaded."
+    },
+    {
+      "step": "srs review page",
+      "status": "passed",
+      "details": "SRS review page loaded with a recognizable state."
+    },
+    {
+      "step": "switch to zh and verify shell",
+      "status": "passed",
+      "details": "Language switch to zh succeeded on dashboard."
+    },
+    {
+      "step": "zh problem detail shell",
+      "status": "passed",
+      "details": "ProblemDetail shell renders zh labels."
+    }
+  ],
+  "screenshots": {
+    "register": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/register.png",
+    "register-complete": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/register-complete.png",
+    "dashboard-en": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/dashboard-en.png",
+    "problems": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problems.png",
+    "problem-start-mode-chooser": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-start-mode-chooser.png",
+    "problem-detail-exploration": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-detail-exploration.png",
+    "problem-detail-exploration-artifacts": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-detail-exploration-artifacts.png",
+    "problem-detail-governance": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-detail-governance.png",
+    "problem-detail-branch": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-detail-branch.png",
+    "problem-detail-socratic": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-detail-socratic.png",
+    "failure-reviews-page": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/failure-reviews-page.png",
+    "model-cards-en": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/model-cards-en.png",
+    "srs-review-en": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/srs-review-en.png",
+    "dashboard-zh": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/dashboard-zh.png",
+    "problem-detail-zh": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/prod-regression-2026-03-12_01-37-26/problem-detail-zh.png"
+  }
+}

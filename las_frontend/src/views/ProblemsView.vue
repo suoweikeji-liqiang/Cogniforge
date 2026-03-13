@@ -153,12 +153,19 @@
             </div>
           </div>
           <p v-if="error" class="error">{{ error }}</p>
+          <p
+            v-if="creating"
+            class="create-status"
+            data-testid="problems-create-status"
+          >
+            {{ createStatusMessage }}
+          </p>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" @click="closeCreateModal">
               {{ t('common.cancel') }}
             </button>
             <button type="submit" class="btn btn-primary" :disabled="creating || !newProblem.learning_mode">
-              {{ creating ? t('common.loading') : t('common.add') }}
+              {{ createButtonLabel }}
             </button>
           </div>
         </form>
@@ -185,6 +192,7 @@ const loadingMore = ref(false)
 const hasMoreProblems = ref(false)
 const showCreateModal = ref(false)
 const creating = ref(false)
+const createPhase = ref<'idle' | 'creating' | 'opening'>('idle')
 const error = ref('')
 const pageState = ref<AsyncPageState>('loading')
 const pageError = ref('')
@@ -212,6 +220,17 @@ const activeFilterCount = computed(() => (
 const emptyProblemsMessage = computed(() => (
   hasActiveFilters.value ? t('problems.noProblems') : t('problems.createFirst')
 ))
+const createStatusMessage = computed(() => (
+  createPhase.value === 'opening'
+    ? t('problems.openingWorkspace')
+    : t('problems.creatingProgress')
+))
+const createButtonLabel = computed(() => {
+  if (!creating.value) return t('common.add')
+  return createPhase.value === 'opening'
+    ? t('problems.openingWorkspaceButton')
+    : t('problems.creatingButton')
+})
 let latestFetchId = 0
 let searchDebounceId: number | null = null
 
@@ -245,6 +264,7 @@ const closeCreateModal = () => {
   if (creating.value) return
   showCreateModal.value = false
   error.value = ''
+  createPhase.value = 'idle'
   resetNewProblem()
 }
 
@@ -319,6 +339,7 @@ const createProblem = async () => {
 
   error.value = ''
   creating.value = true
+  createPhase.value = 'creating'
 
   try {
     const concepts = newProblem.value.concepts
@@ -337,10 +358,11 @@ const createProblem = async () => {
     const createdProblem = response.data
     problems.value = [createdProblem, ...problems.value.filter((item) => item.id !== createdProblem.id)]
     pageState.value = 'ready'
-    showCreateModal.value = false
+    createPhase.value = 'opening'
     const destination = `/problems/${createdProblem.id}`
-    resetNewProblem()
     await router.push(destination)
+    showCreateModal.value = false
+    resetNewProblem()
   } catch (e: any) {
     if (e.code === 'ECONNABORTED') {
       error.value = t('problems.createTimeout')
@@ -348,6 +370,7 @@ const createProblem = async () => {
       error.value = e.response?.data?.detail || t('problems.createFailed')
     }
   } finally {
+    createPhase.value = 'idle'
     creating.value = false
   }
 }
@@ -619,6 +642,12 @@ watch([trimmedSearchQuery, learningModeFilter, statusFilter, sortBy], () => {
   gap: 1rem;
   justify-content: flex-end;
   margin-top: 1.5rem;
+}
+
+.create-status {
+  margin-top: 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 .loading,

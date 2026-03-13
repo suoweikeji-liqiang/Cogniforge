@@ -88,8 +88,11 @@ async function waitForSocraticTurnToSettle(page: Page) {
   await expect
     .poll(
       async () => {
-        const result = ((await page.getByTestId('problem-turn-result').textContent()) || '').trim()
-        if (/Mastery Score|Suggestions|Misconceptions/i.test(result)) return result
+        const processing = await page.getByTestId('turn-result-processing').count()
+        if (!processing && await page.getByTestId('turn-result-status-card').count()) {
+          const result = ((await page.getByTestId('problem-turn-result').textContent()) || '').trim()
+          if (result.length > 0) return result
+        }
         const preview = page.getByTestId('socratic-response-stream-preview')
         if (await preview.count()) {
           const text = ((await preview.first().textContent()) || '').trim()
@@ -106,8 +109,12 @@ async function waitForExplorationTurnToSettle(page: Page) {
   await expect
     .poll(
       async () => {
-        const result = ((await page.getByTestId('problem-turn-result').textContent()) || '').trim()
-        if (/Answer Type|Path Suggestions|Suggested Next Actions|precision|recall/i.test(result)) return result
+        const processing = await page.getByTestId('turn-result-processing').count()
+        const stillEmpty = await page.getByTestId('workspace-current-output-empty').count()
+        if (!processing && !stillEmpty && await page.getByTestId('turn-result-status-card').count()) {
+          const result = ((await page.getByTestId('problem-turn-result').textContent()) || '').trim()
+          if (result.length > 0) return result
+        }
         const preview = page.getByTestId('exploration-stream-preview')
         if (await preview.count()) {
           const text = ((await preview.first().textContent()) || '').trim()
@@ -120,6 +127,11 @@ async function waitForExplorationTurnToSettle(page: Page) {
     .not.toBe('')
 }
 
+async function delayRoute(route: any, ms = 700) {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+  await route.continue()
+}
+
 test.describe('ProblemDetail main workflow', () => {
   test('Scenario 1: Socratic flow keeps contract, action, and result in one rail', async ({ page, request }) => {
     // Contract Assertions:
@@ -128,6 +140,7 @@ test.describe('ProblemDetail main workflow', () => {
     // - Disabled State: async submit controls must remain stable while requests are in flight.
     const session = await prepareAuthenticatedProblem(page, request)
     await openWorkspace(page, session.problemId)
+    await page.route(`**/api/problems/${session.problemId}/responses*`, (route) => delayRoute(route))
 
     await page.getByTestId('mode-switch-exploration').click()
     await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
@@ -140,16 +153,25 @@ test.describe('ProblemDetail main workflow', () => {
       'First probe answer: precision matters when false positives are expensive, but I still need to sharpen the threshold tradeoff.',
     )
     await page.getByTestId('submit-socratic-response').click()
+    await expect(page.getByTestId('turn-result-processing')).toBeVisible()
     await waitForSocraticTurnToSettle(page)
-    await expect(page.getByTestId('problem-turn-result')).toContainText(/Mastery Score/i)
+    await expect(page.getByTestId('turn-result-status-card')).toBeVisible()
+    await expect(page.getByTestId('turn-result-gap-card')).toBeVisible()
+    await expect(page.getByTestId('turn-result-next-card')).toBeVisible()
     await expect(page.getByTestId('problem-postturn-decisions')).toContainText(/concept|path|review/i)
 
     await page.getByTestId('socratic-response-input').fill(
       'Checkpoint answer: lowering the threshold improves recall, raising it improves precision, and the choice depends on the cost of missing positives.',
     )
     await page.getByTestId('submit-socratic-response').click()
+    await expect(page.getByTestId('turn-result-processing')).toBeVisible()
     await waitForSocraticTurnToSettle(page)
-    await expect(page.getByTestId('problem-turn-result')).toContainText(/Mastery Score/i)
+    const undoAutoAdvance = page.getByRole('button', { name: /Undo Auto-Advance/i })
+    if (await undoAutoAdvance.count()) {
+      await expect(undoAutoAdvance).toBeVisible()
+    } else {
+      await expect(page.getByTestId('turn-result-status-card')).toBeVisible()
+    }
 
     const history = page.getByTestId('problem-secondary-tools')
     await history.getByText(/History \(/i).click()
@@ -162,15 +184,19 @@ test.describe('ProblemDetail main workflow', () => {
     // - Base Button (.btn): exploration submit and post-turn decision buttons remain operable.
     const session = await prepareAuthenticatedProblem(page, request)
     await openWorkspace(page, session.problemId)
+    await page.route(`**/api/problems/${session.problemId}/ask*`, (route) => delayRoute(route))
 
     await page.getByTestId('mode-switch-exploration').click()
     await expect(page.getByTestId('workspace-current-output-empty')).toBeVisible()
     await page.getByTestId('exploration-question-input').fill('What is the difference between precision and recall?')
     await page.getByTestId('submit-exploration-question').click()
 
+    await expect(page.getByTestId('turn-result-processing')).toBeVisible()
     await waitForExplorationTurnToSettle(page)
     await expect(page.getByTestId('workspace-current-output-empty')).toHaveCount(0)
-    await expect(page.getByTestId('problem-turn-result')).toContainText(/Answer Type|Path Suggestions|precision|recall/i)
+    await expect(page.getByTestId('turn-result-status-card')).toBeVisible()
+    await expect(page.getByTestId('turn-result-gap-card')).toBeVisible()
+    await expect(page.getByTestId('turn-result-next-card')).toBeVisible()
     await expect(page.getByTestId('problem-postturn-decisions')).toBeVisible()
 
     const conceptDetails = page.getByTestId('problem-postturn-decisions').locator('details').nth(0)

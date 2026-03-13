@@ -1,0 +1,72 @@
+{
+  "baseUrl": "http://192.163.174.17",
+  "outputDir": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-50-02-532Z",
+  "startedAt": "2026-03-13T02:50:02.534Z",
+  "checks": [
+    {
+      "name": "login",
+      "ok": true,
+      "url": "http://192.163.174.17/login",
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-50-02-532Z/01-login-result.png"
+    },
+    {
+      "name": "dashboard-shell",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-50-02-532Z/02-dashboard.png",
+      "primaryNavTexts": [],
+      "hasContinue": false,
+      "hasProblems": false,
+      "hasReviews": false,
+      "hasModelCardsPrimary": false
+    },
+    {
+      "name": "problems-create-flow",
+      "ok": false,
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /New Problem|新建问题/i })\u001b[22m\n"
+    },
+    {
+      "name": "problem-detail-mainline",
+      "ok": false,
+      "error": "Problem was not created; skipping ProblemDetail checks."
+    },
+    {
+      "name": "problem-detail-turn",
+      "ok": false,
+      "error": "Problem was not created; skipping learning turn."
+    },
+    {
+      "name": "reviews-mainline",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-50-02-532Z/07-reviews.png",
+      "testIds": {
+        "focus": 0,
+        "dueQueue": 0,
+        "reinforcement": 0,
+        "archive": 0
+      },
+      "hasGenerator": false,
+      "excerpt": "EN\n中文\nLogin\nUsername\nPassword\nRemember username\nRemember password\n\nUse \"Remember password\" only on your private device.\n\nLogin\n\nDon't have an account? Register\n\nForgot Password?"
+    },
+    {
+      "name": "srs-subflow",
+      "ok": true,
+      "screenshot": "/Users/asteroida/work/Cogniforge/las_frontend/output/playwright/production-mainline-regression-192.163.174.17/2026-03-13T02-50-02-532Z/08-srs-review.png",
+      "excerpt": "EN\n中文\nLogin\nUsername\nPassword\nRemember username\nRemember password\n\nUse \"Remember password\" only on your private device.\n\nLogin\n\nDon't have an account? Register\n\nForgot Password?"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "P1",
+      "area": "Dashboard/Nav",
+      "message": "Primary mainline navigation is not fully present on production."
+    },
+    {
+      "severity": "P0",
+      "area": "Reviews",
+      "message": "Production Reviews page does not expose the rebuilt focus / due queue / reinforcement structure."
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "finishedAt": "2026-03-13T02:50:39.504Z"
+}

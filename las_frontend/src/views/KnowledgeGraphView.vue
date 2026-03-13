@@ -5,10 +5,10 @@
       :eyebrow="t('graph.secondaryTitle')"
       :title="t('graph.secondaryHeading')"
       :message="t('graph.secondaryMessage')"
-      :primary-label="t('graph.openModelCards')"
-      primary-to="/model-cards"
-      :secondary-label="t('nav.problems')"
-      secondary-to="/problems"
+      :primary-label="t('nav.problems')"
+      primary-to="/problems"
+      :secondary-label="t('nav.reviews')"
+      secondary-to="/reviews"
     />
     <h1>{{ t('graph.title') }}</h1>
 

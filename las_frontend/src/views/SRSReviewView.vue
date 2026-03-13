@@ -7,8 +7,8 @@
       :message="t('srs.secondaryMessage')"
       :primary-label="t('nav.reviews')"
       primary-to="/reviews"
-      :secondary-label="t('graph.openModelCards')"
-      secondary-to="/model-cards"
+      :secondary-label="t('nav.problems')"
+      secondary-to="/problems"
     />
     <h1>{{ t('srs.title') }}</h1>
 
